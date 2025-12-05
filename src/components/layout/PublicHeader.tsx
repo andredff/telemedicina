@@ -34,9 +34,6 @@ const PublicHeader = () => {
               <h1 className="text-2xl font-heading font-bold text-foreground tracking-tight">
                 Novità
               </h1>
-              <p className="text-xs font-medium text-primary -mt-0.5">
-                Telemedicina
-              </p>
             </div>
           </Link>
 
