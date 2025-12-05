@@ -9,6 +9,7 @@ import HowItWorks from "./pages/HowItWorks";
 import Medications from "./pages/Medications";
 import Blog from "./pages/Blog";
 import Auth from "./pages/Auth";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Cart from "./pages/Cart";
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/medicamentos" element={<Medications />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />
