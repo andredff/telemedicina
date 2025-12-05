@@ -51,13 +51,13 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-        medical: {
-          teal: "hsl(var(--medical-teal))",
-          blue: "hsl(var(--medical-blue))",
-          lightBlue: "hsl(var(--medical-light-blue))",
-          green: "hsl(var(--medical-green))",
-          orange: "hsl(var(--medical-orange))",
-          purple: "hsl(var(--medical-purple))",
+        novita: {
+          gold: "hsl(var(--novita-gold))",
+          goldLight: "hsl(var(--novita-gold-light))",
+          goldDark: "hsl(var(--novita-gold-dark))",
+          gray: "hsl(var(--novita-gray))",
+          grayLight: "hsl(var(--novita-gray-light))",
+          warmWhite: "hsl(var(--novita-warm-white))",
         },
       },
       borderRadius: {
