@@ -29,6 +29,23 @@ const forgotPasswordSchema = z.object({
   email: z.string().trim().email({ message: "Email inválido" }).max(255),
 });
 
+// Mask formatting functions
+const formatCPF = (value: string): string => {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+  if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+};
+
+const formatPhone = (value: string): string => {
+  const digits = value.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+  if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
+  return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
+};
+
 const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -39,6 +56,8 @@ const Auth = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
+  const [cpfValue, setCpfValue] = useState("");
+  const [phoneValue, setPhoneValue] = useState("");
 
   const selectedPlan = searchParams.get("plan");
   const consultationType = searchParams.get("type");
@@ -500,6 +519,8 @@ const Auth = () => {
                           type="text"
                           placeholder="000.000.000-00"
                           required
+                          value={cpfValue}
+                          onChange={(e) => setCpfValue(formatCPF(e.target.value))}
                         />
                       </div>
                       <div className="space-y-2">
@@ -508,8 +529,10 @@ const Auth = () => {
                           id="phone"
                           name="phone"
                           type="tel"
-                          placeholder="(61) 99999-9999"
+                          placeholder="(00) 00000-0000"
                           required
+                          value={phoneValue}
+                          onChange={(e) => setPhoneValue(formatPhone(e.target.value))}
                         />
                       </div>
                       <div className="space-y-2">
