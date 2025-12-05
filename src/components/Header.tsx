@@ -1,6 +1,14 @@
-import { ShoppingCart, User, LogOut, Heart, Settings } from "lucide-react";
+import { ShoppingCart, User, LogOut, Heart, Settings, CreditCard, HelpCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
@@ -52,9 +60,30 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                   </span>
                 )}
               </Button>
-              <Button variant="ghost" size="icon">
-                <Settings className="h-5 w-5" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <Settings className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuLabel>Configurações</DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/dashboard")}>
+                    <User className="mr-2 h-4 w-4" />
+                    Meu Perfil
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/plans")}>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Meu Plano
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => navigate("/how-it-works")}>
+                    <HelpCircle className="mr-2 h-4 w-4" />
+                    Ajuda
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
               <Button
                 variant="ghost"
                 size="sm"
