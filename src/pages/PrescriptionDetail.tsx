@@ -8,30 +8,69 @@ import Header from "@/components/Header";
 import { mockPrescriptions } from "@/data/mockPrescriptions";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
-import { ShoppingCart, FileText, User, Calendar, AlertCircle } from "lucide-react";
+import { ShoppingCart, FileText, User, Calendar, AlertCircle, ArrowLeft } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
+import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 const PrescriptionDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [selectedMeds, setSelectedMeds] = useState<Set<string>>(new Set());
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
   
-  const isAuthenticated = localStorage.getItem("isAuthenticated") === "true";
   const prescription = mockPrescriptions.find((p) => p.id === id);
 
   useEffect(() => {
-    if (!isAuthenticated) {
-      navigate("/auth");
-    }
-  }, [isAuthenticated, navigate]);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (!session) {
+          navigate("/auth");
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   if (!prescription) {
     return (
       <div className="min-h-screen bg-background">
-        <Header isAuthenticated onLogout={() => navigate("/auth")} />
+        <Header isAuthenticated onLogout={handleLogout} />
         <div className="container mx-auto px-4 py-8 text-center">
           <p className="text-muted-foreground">Receituário não encontrado</p>
+          <Button onClick={() => navigate("/dashboard")} className="mt-4">
+            Voltar ao dashboard
+          </Button>
         </div>
       </div>
     );
@@ -92,24 +131,25 @@ const PrescriptionDetail = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header isAuthenticated onLogout={() => navigate("/auth")} />
+      <Header isAuthenticated onLogout={handleLogout} />
       
       <main className="container mx-auto px-4 py-8">
         <Button
           variant="ghost"
           onClick={() => navigate("/dashboard")}
-          className="mb-6"
+          className="mb-6 gap-2"
         >
-          ← Voltar aos receituários
+          <ArrowLeft className="h-4 w-4" />
+          Voltar aos receituários
         </Button>
 
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
-            <Card>
+            <Card className="border-border/50">
               <CardHeader>
                 <div className="flex items-center gap-2 mb-2">
                   <FileText className="h-6 w-6 text-primary" />
-                  <CardTitle className="text-2xl">{prescription.id}</CardTitle>
+                  <CardTitle className="text-2xl font-heading">{prescription.id}</CardTitle>
                 </div>
                 <CardDescription className="space-y-2">
                   <div className="flex items-center gap-2">
@@ -131,10 +171,10 @@ const PrescriptionDetail = () => {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card className="border-border/50">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle>Medicamentos Prescritos</CardTitle>
+                  <CardTitle className="font-heading">Medicamentos Prescritos</CardTitle>
                   <Button variant="outline" size="sm" onClick={handleSelectAll}>
                     {selectedMeds.size === prescription.medications.length
                       ? "Desmarcar todos"
@@ -146,7 +186,7 @@ const PrescriptionDetail = () => {
                 {prescription.medications.map((medication) => (
                   <div
                     key={medication.id}
-                    className="flex items-start gap-4 p-4 border rounded-lg hover:bg-accent/50 transition-colors"
+                    className="flex items-start gap-4 p-4 border border-border/50 rounded-xl hover:bg-muted/50 transition-colors"
                   >
                     <Checkbox
                       checked={selectedMeds.has(medication.id)}
@@ -160,11 +200,11 @@ const PrescriptionDetail = () => {
                           <p className="text-sm text-muted-foreground">{medication.dosage}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-bold text-primary text-lg">
+                          <p className="font-heading font-bold text-primary text-lg">
                             R$ {medication.price.toFixed(2)}
                           </p>
                           {medication.inStock ? (
-                            <Badge variant="outline" className="text-medical-green border-medical-green">
+                            <Badge variant="outline" className="text-accent border-accent">
                               Em estoque
                             </Badge>
                           ) : (
@@ -184,9 +224,9 @@ const PrescriptionDetail = () => {
           </div>
 
           <div className="lg:col-span-1">
-            <Card className="sticky top-20">
+            <Card className="sticky top-20 border-border/50 shadow-card">
               <CardHeader>
-                <CardTitle>Resumo do Pedido</CardTitle>
+                <CardTitle className="font-heading">Resumo do Pedido</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
@@ -200,10 +240,10 @@ const PrescriptionDetail = () => {
                   </div>
                 </div>
 
-                <div className="border-t pt-4">
+                <div className="border-t border-border/50 pt-4">
                   <div className="flex justify-between items-center mb-4">
                     <span className="text-lg font-semibold">Total:</span>
-                    <span className="text-2xl font-bold text-primary">
+                    <span className="text-2xl font-heading font-bold text-primary">
                       R$ {calculateTotal().toFixed(2)}
                     </span>
                   </div>
@@ -218,7 +258,7 @@ const PrescriptionDetail = () => {
                   )}
 
                   <Button
-                    className="w-full gap-2"
+                    className="w-full gap-2 gradient-hero text-primary-foreground"
                     onClick={handleAddToCart}
                     disabled={selectedMeds.size === 0}
                   >
