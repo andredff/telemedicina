@@ -63,6 +63,44 @@ export type Database = {
           },
         ]
       }
+      dependents: {
+        Row: {
+          birth_date: string
+          cpf: string
+          created_at: string
+          full_name: string
+          id: string
+          relationship: string | null
+          subscription_id: string
+        }
+        Insert: {
+          birth_date: string
+          cpf: string
+          created_at?: string
+          full_name: string
+          id?: string
+          relationship?: string | null
+          subscription_id: string
+        }
+        Update: {
+          birth_date?: string
+          cpf?: string
+          created_at?: string
+          full_name?: string
+          id?: string
+          relationship?: string | null
+          subscription_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dependents_subscription_id_fkey"
+            columns: ["subscription_id"]
+            isOneToOne: false
+            referencedRelation: "user_subscriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medications: {
         Row: {
           created_at: string
@@ -178,6 +216,111 @@ export type Database = {
         }
         Relationships: []
       }
+      subscription_plans: {
+        Row: {
+          created_at: string
+          description: string | null
+          features: Json | null
+          id: string
+          includes_checkup: boolean | null
+          is_active: boolean | null
+          max_dependents: number | null
+          name: string
+          price_monthly: number
+          price_yearly: number | null
+          specialist_consultations_per_year: number | null
+          type: Database["public"]["Enums"]["subscription_plan_type"]
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          includes_checkup?: boolean | null
+          is_active?: boolean | null
+          max_dependents?: number | null
+          name: string
+          price_monthly: number
+          price_yearly?: number | null
+          specialist_consultations_per_year?: number | null
+          type: Database["public"]["Enums"]["subscription_plan_type"]
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          features?: Json | null
+          id?: string
+          includes_checkup?: boolean | null
+          is_active?: boolean | null
+          max_dependents?: number | null
+          name?: string
+          price_monthly?: number
+          price_yearly?: number | null
+          specialist_consultations_per_year?: number | null
+          type?: Database["public"]["Enums"]["subscription_plan_type"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      user_subscriptions: {
+        Row: {
+          billing_cycle: string | null
+          cancelled_at: string | null
+          created_at: string
+          expires_at: string | null
+          id: string
+          plan_id: string
+          specialist_consultations_used: number | null
+          started_at: string | null
+          status: Database["public"]["Enums"]["subscription_status"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billing_cycle?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          plan_id: string
+          specialist_consultations_used?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billing_cycle?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          plan_id?: string
+          specialist_consultations_used?: number | null
+          started_at?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -186,7 +329,13 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      subscription_plan_type:
+        | "bronze"
+        | "prata"
+        | "ouro"
+        | "platina"
+        | "coletivo"
+      subscription_status: "active" | "inactive" | "cancelled" | "pending"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -313,6 +462,15 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      subscription_plan_type: [
+        "bronze",
+        "prata",
+        "ouro",
+        "platina",
+        "coletivo",
+      ],
+      subscription_status: ["active", "inactive", "cancelled", "pending"],
+    },
   },
 } as const
