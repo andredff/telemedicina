@@ -14,12 +14,16 @@ const Footer = () => {
               </div>
               <div>
                 <h2 className="text-xl font-heading font-bold">Novità</h2>
-                <p className="text-xs text-primary">Telemedicina</p>
               </div>
             </div>
             <p className="text-background/70 text-sm leading-relaxed">
-              Cuidamos da sua saúde com excelência há 15 anos. Agora, levamos essa dedicação para o mundo digital com nossa plataforma de telemedicina.
+              Cuidamos da sua saúde com excelência há 15 anos. Oferecemos serviços de Home Care e 
+              Telemedicina com a dedicação e qualidade que sua família merece.
             </p>
+            <div className="flex gap-2 text-xs">
+              <span className="bg-primary/20 text-primary px-3 py-1 rounded-full">Home Care</span>
+              <span className="bg-primary/20 text-primary px-3 py-1 rounded-full">Telemedicina</span>
+            </div>
             <div className="flex gap-4">
               <a href="#" className="p-2 rounded-lg bg-background/10 hover:bg-background/20 transition-colors">
                 <Instagram className="h-5 w-5" />
@@ -108,7 +112,7 @@ const Footer = () => {
         <div className="border-t border-background/10 mt-12 pt-8">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-sm text-background/60">
-              © {new Date().getFullYear()} Novità Telemedicina. Todos os direitos reservados.
+              © {new Date().getFullYear()} Novità Home Care & Telemedicina. Todos os direitos reservados.
             </p>
             <div className="flex gap-6 text-sm text-background/60">
               <Link to="/termos" className="hover:text-background transition-colors">

@@ -118,19 +118,24 @@ const Index = () => {
         <div className="container mx-auto px-4 py-20 lg:py-32 relative">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8 animate-slide-up">
-              <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium">
-                <HeartPulse className="h-4 w-4" />
-                <span>Novità Telemedicina</span>
+              <div className="flex items-center gap-3">
+                <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium">
+                  <HeartPulse className="h-4 w-4" />
+                  <span>Telemedicina</span>
+                </div>
+                <div className="inline-flex items-center gap-2 bg-muted text-muted-foreground px-4 py-2 rounded-full text-sm font-medium">
+                  <span>Home Care</span>
+                </div>
               </div>
               
               <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-tight">
-                Sua saúde ao alcance de{" "}
-                <span className="gradient-text">um clique</span>
+                Sejam bem-vindos à{" "}
+                <span className="gradient-text">NOVITÀ!</span>
               </h1>
               
               <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                Consultas médicas online 24 horas, receitas digitais e medicamentos entregues em casa. 
-                Tudo isso com a qualidade e dedicação que você já conhece da Novità.
+                O cuidado de excelência no conforto do lar. Reunimos uma equipe multidisciplinar 
+                altamente qualificada para oferecer o melhor atendimento em Home Care e Telemedicina.
               </p>
               
               <div className="flex flex-col sm:flex-row gap-4">
@@ -139,7 +144,7 @@ const Index = () => {
                   className="gradient-hero text-primary-foreground shadow-glow hover:shadow-elevated transition-all text-base px-8"
                   onClick={() => navigate("/planos")}
                 >
-                  Ver Planos
+                  Fale Conosco
                   <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
                 <Button 
@@ -148,7 +153,7 @@ const Index = () => {
                   className="text-base px-8"
                   onClick={() => navigate("/como-funciona")}
                 >
-                  Como Funciona
+                  Conheça Nossos Serviços
                 </Button>
               </div>
 
