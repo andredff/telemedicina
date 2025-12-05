@@ -123,7 +123,7 @@ const Dashboard = () => {
             </div>
             <div>
               <h1 className="text-lg font-heading font-bold text-foreground">Novità</h1>
-              <p className="text-xs text-primary -mt-0.5">Telemedicina</p>
+              <p className="text-xs text-primary -mt-0.5">Home Care & Telemedicina</p>
             </div>
           </div>
 

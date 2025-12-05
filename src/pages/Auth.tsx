@@ -9,6 +9,21 @@ import { useToast } from "@/hooks/use-toast";
 import { Heart, ArrowLeft, Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { z } from "zod";
+
+// Validation schemas
+const loginSchema = z.object({
+  email: z.string().trim().email({ message: "Email inválido" }).max(255),
+  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+});
+
+const signupSchema = z.object({
+  name: z.string().trim().min(2, { message: "Nome deve ter pelo menos 2 caracteres" }).max(100),
+  email: z.string().trim().email({ message: "Email inválido" }).max(255),
+  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+  cpf: z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "CPF inválido" }),
+  phone: z.string().min(10, { message: "Telefone inválido" }).max(20),
+});
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -57,10 +72,22 @@ const Auth = () => {
     const email = formData.get("email") as string;
     const password = formData.get("password") as string;
 
+    // Validate input
+    const result = loginSchema.safeParse({ email, password });
+    if (!result.success) {
+      toast({
+        title: "Dados inválidos",
+        description: result.error.issues[0].message,
+        variant: "destructive",
+      });
+      setIsLoading(false);
+      return;
+    }
+
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: result.data.email,
+        password: result.data.password,
       });
 
       if (error) {
@@ -83,7 +110,7 @@ const Auth = () => {
 
       toast({
         title: "Login realizado com sucesso!",
-        description: "Bem-vindo à Novità Telemedicina",
+        description: "Bem-vindo à Novità",
       });
       
       navigate("/dashboard");
@@ -108,10 +135,12 @@ const Auth = () => {
     const cpf = formData.get("cpf") as string;
     const phone = formData.get("phone") as string;
 
-    if (password.length < 6) {
+    // Validate input
+    const result = signupSchema.safeParse({ name, email, password, cpf, phone });
+    if (!result.success) {
       toast({
-        title: "Senha muito curta",
-        description: "A senha deve ter pelo menos 6 caracteres.",
+        title: "Dados inválidos",
+        description: result.error.issues[0].message,
         variant: "destructive",
       });
       setIsLoading(false);
@@ -122,14 +151,14 @@ const Auth = () => {
       const redirectUrl = `${window.location.origin}/`;
       
       const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
+        email: result.data.email,
+        password: result.data.password,
         options: {
           emailRedirectTo: redirectUrl,
           data: {
-            full_name: name,
-            cpf: cpf,
-            phone: phone,
+            full_name: result.data.name,
+            cpf: result.data.cpf,
+            phone: result.data.phone,
           }
         }
       });
@@ -154,7 +183,7 @@ const Auth = () => {
 
       toast({
         title: "Cadastro realizado com sucesso!",
-        description: "Você já pode fazer login.",
+        description: "Bem-vindo à Novità!",
       });
       
       // Auto-login after signup (since auto-confirm is enabled)
@@ -190,7 +219,7 @@ const Auth = () => {
             </div>
             <div>
               <h1 className="text-3xl font-heading font-bold text-background">Novità</h1>
-              <p className="text-sm text-primary">Telemedicina</p>
+              <p className="text-sm text-primary">Home Care & Telemedicina</p>
             </div>
           </div>
           <h2 className="text-3xl font-heading font-bold text-background mb-2">
@@ -223,7 +252,7 @@ const Auth = () => {
               </div>
               <div>
                 <h1 className="text-2xl font-heading font-bold text-foreground">Novità</h1>
-                <p className="text-xs text-primary">Telemedicina</p>
+                <p className="text-xs text-primary">Home Care & Telemedicina</p>
               </div>
             </div>
 
