@@ -1,6 +1,7 @@
-import { ShoppingCart, User, LogOut, Pill } from "lucide-react";
+import { ShoppingCart, User, LogOut, Heart, Settings } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 
 interface HeaderProps {
   isAuthenticated?: boolean;
@@ -11,25 +12,31 @@ interface HeaderProps {
 const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: HeaderProps) => {
   const navigate = useNavigate();
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    if (onLogout) {
+      onLogout();
+    }
+    navigate("/auth");
+  };
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b bg-card shadow-sm">
+    <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <div 
-          className="flex items-center gap-2 cursor-pointer"
+          className="flex items-center gap-3 cursor-pointer"
           onClick={() => navigate(isAuthenticated ? "/dashboard" : "/")}
         >
-          <div className="flex items-center gap-2">
-            <div className="bg-primary rounded-lg p-2">
-              <Pill className="h-6 w-6 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-primary">Novità</h1>
-              <p className="text-xs text-muted-foreground -mt-1">Medicamentos</p>
-            </div>
+          <div className="gradient-hero rounded-xl p-2">
+            <Heart className="h-5 w-5 text-primary-foreground" fill="currentColor" />
+          </div>
+          <div>
+            <h1 className="text-lg font-heading font-bold text-foreground">Novità</h1>
+            <p className="text-xs text-primary -mt-0.5">Telemedicina</p>
           </div>
         </div>
 
-        <nav className="flex items-center gap-4">
+        <nav className="flex items-center gap-2">
           {isAuthenticated ? (
             <>
               <Button
@@ -45,21 +52,17 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                   </span>
                 )}
               </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => navigate("/profile")}
-              >
-                <User className="h-5 w-5" />
+              <Button variant="ghost" size="icon">
+                <Settings className="h-5 w-5" />
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={onLogout}
+                onClick={handleLogout}
                 className="gap-2"
               >
                 <LogOut className="h-4 w-4" />
-                Sair
+                <span className="hidden sm:inline">Sair</span>
               </Button>
             </>
           ) : null}
