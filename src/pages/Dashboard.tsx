@@ -16,7 +16,8 @@ import {
   Heart,
   LogOut,
   ShoppingCart,
-  Settings
+  Settings,
+  Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
@@ -191,14 +192,14 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group">
+          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/orders")}>
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-medical-orange/10 flex items-center justify-center group-hover:bg-medical-orange/20 transition-colors">
-                <CreditCard className="h-6 w-6 text-medical-orange" />
+                <Package className="h-6 w-6 text-medical-orange" />
               </div>
               <div>
-                <p className="font-medium text-foreground">Meu Plano</p>
-                <p className="text-xs text-muted-foreground">Gerenciar</p>
+                <p className="font-medium text-foreground">Meus Pedidos</p>
+                <p className="text-xs text-muted-foreground">Acompanhe entregas</p>
               </div>
             </CardContent>
           </Card>
@@ -230,7 +231,12 @@ const Dashboard = () => {
             <h2 className="text-xl font-heading font-semibold text-foreground">
               Meus Receituários
             </h2>
-            <Button variant="ghost" size="sm" className="text-primary">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-primary"
+              onClick={() => navigate("/prescriptions")}
+            >
               Ver todos
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>

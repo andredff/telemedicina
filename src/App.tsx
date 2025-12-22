@@ -12,8 +12,20 @@ import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
+import Prescriptions from "./pages/Prescriptions";
+import Orders from "./pages/Orders";
+import BlogPost from "./pages/BlogPost";
 import Cart from "./pages/Cart";
 import NotFound from "./pages/NotFound";
+import AdminLayout from "./pages/admin/AdminLayout";
+import AdminDashboard from "./pages/admin/Dashboard";
+import AdminUsers from "./pages/admin/Users";
+import AdminOrders from "./pages/admin/Orders";
+import AdminPrescriptions from "./pages/admin/Prescriptions";
+import AdminContent from "./pages/admin/Content";
+import AdminReports from "./pages/admin/Reports";
+import AdminSettings from "./pages/admin/Settings";
+import AdminSupport from "./pages/admin/Support";
 
 const queryClient = new QueryClient();
 
@@ -32,8 +44,24 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/prescriptions" element={<Prescriptions />} />
+          <Route path="/orders" element={<Orders />} />
+          <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />
+          
+          {/* Admin Routes */}
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<AdminDashboard />} />
+            <Route path="usuarios" element={<AdminUsers />} />
+            <Route path="pedidos" element={<AdminOrders />} />
+            <Route path="receitas" element={<AdminPrescriptions />} />
+            <Route path="conteudo" element={<AdminContent />} />
+            <Route path="relatorios" element={<AdminReports />} />
+            <Route path="configuracoes" element={<AdminSettings />} />
+            <Route path="suporte" element={<AdminSupport />} />
+          </Route>
+          
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
