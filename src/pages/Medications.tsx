@@ -19,6 +19,7 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { mockPrescriptions } from "@/data/mockPrescriptions";
 
 const Medications = () => {
   const navigate = useNavigate();
@@ -37,13 +38,24 @@ const Medications = () => {
     }
 
     setIsSearching(true);
-    // Simulating search - in production this would verify the prescription
+    
+    // Search for prescription in mock data
     setTimeout(() => {
       setIsSearching(false);
-      toast({
-        title: "Receita não encontrada",
-        description: "Verifique o código ou faça login para acessar suas receitas.",
-      });
+      
+      const foundPrescription = mockPrescriptions.find(
+        (prescription) => prescription.id === prescriptionCode.toUpperCase()
+      );
+      
+      if (foundPrescription) {
+        // Navigate to prescription detail page with the found prescription
+        navigate(`/prescription/${foundPrescription.id}`);
+      } else {
+        toast({
+          title: "Receita não encontrada",
+          description: "Verifique o código ou faça login para acessar suas receitas.",
+        });
+      }
     }, 1500);
   };
 

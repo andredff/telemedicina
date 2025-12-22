@@ -25,24 +25,18 @@ const PrescriptionDetail = () => {
   const prescription = mockPrescriptions.find((p) => p.id === id);
 
   useEffect(() => {
+    // For testing purposes, allow public access to prescription details
+    // In production, this should require authentication
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
-        if (!session) {
-          navigate("/auth");
-        }
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
-      if (!session) {
-        navigate("/auth");
-      }
       setLoading(false);
     });
 
