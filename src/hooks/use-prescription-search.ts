@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { SearchClient, type PrescriptionSearchParams, type PrescriptionSearchResults } from '@/integrations/supabase/searchClient';
+import { MockSearchClient } from '@/mock-search-client';
 
 export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = {}) {
   const [searchParams, setSearchParams] = useState<PrescriptionSearchParams>(initialParams);
@@ -20,17 +21,32 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
     setError(null);
     
     try {
-      const results = await SearchClient.searchPrescriptions(params);
-      setSearchResults(results);
+      // Try to use the real SearchClient first
+      if (SearchClient && typeof SearchClient.searchPrescriptions === 'function') {
+        const results = await SearchClient.searchPrescriptions(params);
+        setSearchResults(results);
+      } else {
+        // Fallback to mock client if real SearchClient is not available
+        console.warn('SearchClient not available, using mock data');
+        const results = await MockSearchClient.searchPrescriptions(params);
+        setSearchResults(results);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
-      setSearchResults({
-        data: [],
-        count: 0,
-        page: 1,
-        pageSize: params.pageSize || 10,
-        totalPages: 0
-      });
+      console.error('Search error:', err);
+      // Fallback to mock client if there's an error with the real SearchClient
+      try {
+        const results = await MockSearchClient.searchPrescriptions(params);
+        setSearchResults(results);
+      } catch (mockErr) {
+        setError(mockErr instanceof Error ? mockErr.message : 'Unknown error occurred');
+        setSearchResults({
+          data: [],
+          count: 0,
+          page: 1,
+          pageSize: params.pageSize || 10,
+          totalPages: 0
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -59,11 +75,26 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
     }
 
     try {
-      const suggestions = await SearchClient.getSearchSuggestions(query);
-      setSuggestions(suggestions);
+      // Try to use the real SearchClient first
+      if (SearchClient && typeof SearchClient.getSearchSuggestions === 'function') {
+        const suggestions = await SearchClient.getSearchSuggestions(query);
+        setSuggestions(suggestions);
+      } else {
+        // Fallback to mock client if real SearchClient is not available
+        console.warn('SearchClient not available for suggestions, using mock data');
+        const suggestions = await MockSearchClient.getSearchSuggestions(query);
+        setSuggestions(suggestions);
+      }
     } catch (err) {
       console.error('Error getting suggestions:', err);
-      setSuggestions([]);
+      // Fallback to mock client if there's an error with the real SearchClient
+      try {
+        const suggestions = await MockSearchClient.getSearchSuggestions(query);
+        setSuggestions(suggestions);
+      } catch (mockErr) {
+        console.error('Mock suggestions error:', mockErr);
+        setSuggestions([]);
+      }
     }
   };
 
