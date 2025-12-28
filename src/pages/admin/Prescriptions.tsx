@@ -17,11 +17,30 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
 import { Search, FileText, CheckCircle2, Clock, AlertCircle, Eye, Edit } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
+interface Prescription {
+  id: string;
+  patient: string;
+  patient_id?: string;
+  doctor: string;
+  doctor_name?: string;
+  date: string;
+  status: string;
+  medications: number;
+  expires_at?: string;
+  created_at?: string;
+}
+
 export default function AdminPrescriptions() {
-  const [prescriptions, setPrescriptions] = useState<{ id: string; patient: string; doctor: string; date: string; status: string; medications: number }[]>([]);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -37,14 +56,21 @@ export default function AdminPrescriptions() {
       
       if (error) throw error;
       
-      // Use real status from database (remove mock status generation)
-      const prescriptionsWithStatus = data.map(prescription => ({
-        ...prescription,
-        // Status should come from the database, not be randomly generated
-        status: prescription.status || 'pending' // Default to 'pending' if no status exists
+      // Format prescriptions data to match expected interface
+      const formattedPrescriptions = (data || []).map((prescription: any) => ({
+        id: prescription.id,
+        patient: prescription.patient || 'Paciente Desconhecido',
+        patient_id: prescription.patient_id,
+        doctor: prescription.doctor_name || prescription.doctor || 'Médico Desconhecido',
+        doctor_name: prescription.doctor_name,
+        date: prescription.date || prescription.created_at,
+        status: prescription.status || 'pending',
+        medications: prescription.medications || 1,
+        expires_at: prescription.expires_at,
+        created_at: prescription.created_at
       }));
       
-      setPrescriptions(prescriptionsWithStatus);
+      setPrescriptions(formattedPrescriptions);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching prescriptions:', error);
@@ -58,9 +84,9 @@ export default function AdminPrescriptions() {
   };
 
   const filteredPrescriptions = prescriptions.filter(prescription => {
-    const matchesSearch = prescription.id.includes(searchTerm) || 
-                         prescription.patient_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         prescription.doctor_name?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = prescription.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         prescription.patient.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         prescription.doctor.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === 'all' || prescription.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -172,10 +198,10 @@ export default function AdminPrescriptions() {
               filteredPrescriptions.map((prescription) => (
                 <TableRow key={prescription.id}>
                   <TableCell className="font-mono text-sm">#{prescription.id.slice(0, 8)}...</TableCell>
-                  <TableCell>{prescription.patient_name}</TableCell>
+                  <TableCell>{prescription.patient}</TableCell>
                   <TableCell>
-                    <div>{prescription.doctor_name}</div>
-                    <div className="text-sm text-gray-500">CRM: {prescription.doctor_crm}</div>
+                    <div>{prescription.doctor}</div>
+                    <div className="text-sm text-gray-500">CRM:</div>
                   </TableCell>
                   <TableCell>
                     {new Date(prescription.date).toLocaleDateString('pt-BR', {

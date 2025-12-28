@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { 
   Table, 
   TableBody, 
@@ -23,7 +24,14 @@ import {
   TabsList, 
   TabsTrigger 
 } from '@/components/ui/tabs';
-import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail, Save, BookOpen } from 'lucide-react';
+import { toast } from '@/components/ui/use-toast';
 
 export default function AdminSupport() {
   const [tickets, setTickets] = useState([
@@ -485,58 +493,5 @@ function SelectItem({ value, children }: { value: string; children: React.ReactN
 function SelectValue({ placeholder }: { placeholder: string }) {
   return (
     <span className="text-gray-500">{placeholder}</span>
-  );
-}
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`border rounded-lg p-4 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
-}
-
-function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
-}
-
-function CardTitle({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <h3 className={`font-medium ${className}`}>
-      {children}
-    </h3>
-  );
-}
-
-function Save({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-      <polyline points="17 21 17 13 7 13 7 21" />
-      <polyline points="7 3 7 8 15 8" />
-    </svg>
   );
 }

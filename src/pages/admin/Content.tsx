@@ -17,11 +17,35 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
-import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen } from 'lucide-react';
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
+interface BlogPost {
+  id: string;
+  title: string;
+  category: string;
+  status: string;
+  author: string;
+  date: string;
+  views: number;
+  content?: string;
+}
+
 export default function AdminContent() {
-  const [blogPosts, setBlogPosts] = useState([
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([
     {
       id: '1',
       title: 'Como cuidar da saúde mental durante a pandemia',
@@ -29,7 +53,8 @@ export default function AdminContent() {
       status: 'published',
       author: 'Dr. Carlos Silva',
       date: '2023-05-15',
-      views: 1245
+      views: 1245,
+      content: 'Conteúdo do artigo sobre saúde mental...'
     },
     {
       id: '2',
@@ -38,7 +63,8 @@ export default function AdminContent() {
       status: 'draft',
       author: 'Dra. Ana Souza',
       date: '2023-06-22',
-      views: 872
+      views: 872,
+      content: 'Conteúdo do artigo sobre telemedicina...'
     },
     {
       id: '3',
@@ -47,13 +73,14 @@ export default function AdminContent() {
       status: 'published',
       author: 'Nut. Maria Oliveira',
       date: '2023-07-10',
-      views: 1563
+      views: 1563,
+      content: 'Conteúdo do artigo sobre nutrição...'
     }
   ]);
 
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [editingPost, setEditingPost] = useState<{ id: number; title: string; author: string; date: string; content: string; status: string; views: number } | null>(null);
+  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   const filteredPosts = blogPosts.filter(post => {
@@ -64,7 +91,7 @@ export default function AdminContent() {
     return matchesSearch && matchesStatus;
   });
 
-  const handleEditPost = (post: { id: number; title: string; author: string; date: string; content: string; status: string; views: number }) => {
+  const handleEditPost = (post: BlogPost) => {
     setEditingPost(post);
     setIsDialogOpen(true);
   };
@@ -172,7 +199,7 @@ export default function AdminContent() {
                 <label className="block text-sm font-medium mb-2">Título</label>
                 <Input
                   value={editingPost?.title || ''}
-                  onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
+                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, title: e.target.value } : null)}
                   placeholder="Título do post"
                 />
               </div>
@@ -181,7 +208,7 @@ export default function AdminContent() {
                 <label className="block text-sm font-medium mb-2">Categoria</label>
                 <Select
                   value={editingPost?.category || ''}
-                  onValueChange={(value) => setEditingPost({ ...editingPost, category: value })}
+                  onValueChange={(value) => setEditingPost(editingPost ? { ...editingPost, category: value } : null)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione uma categoria" />
@@ -201,7 +228,7 @@ export default function AdminContent() {
                 <label className="block text-sm font-medium mb-2">Status</label>
                 <Select
                   value={editingPost?.status || 'draft'}
-                  onValueChange={(value) => setEditingPost({ ...editingPost, status: value })}
+                  onValueChange={(value) => setEditingPost(editingPost ? { ...editingPost, status: value } : null)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione um status" />
@@ -218,7 +245,7 @@ export default function AdminContent() {
                 <label className="block text-sm font-medium mb-2">Autor</label>
                 <Input
                   value={editingPost?.author || ''}
-                  onChange={(e) => setEditingPost({ ...editingPost, author: e.target.value })}
+                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, author: e.target.value } : null)}
                   placeholder="Nome do autor"
                 />
               </div>
@@ -227,7 +254,7 @@ export default function AdminContent() {
                 <label className="block text-sm font-medium mb-2">Conteúdo</label>
                 <Textarea
                   value={editingPost?.content || ''}
-                  onChange={(e) => setEditingPost({ ...editingPost, content: e.target.value })}
+                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, content: e.target.value } : null)}
                   placeholder="Conteúdo do post..."
                   className="min-h-[200px]"
                 />
@@ -342,87 +369,5 @@ export default function AdminContent() {
         </Card>
       </div>
     </div>
-  );
-}
-
-// Helper components
-function Select({ children, value, onValueChange }: { children: React.ReactNode; value: string; onValueChange: (value: string) => void }) {
-  return (
-    <div className="relative">
-      <select
-        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
-function SelectTrigger({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-      {children}
-    </div>
-  );
-}
-
-function SelectContent({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border">
-      {children}
-    </div>
-  );
-}
-
-function SelectItem({ value, children }: { value: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-      onClick={() => {
-        // This would be handled by the parent select
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SelectValue({ placeholder }: { placeholder: string }) {
-  return (
-    <span className="text-gray-500">{placeholder}</span>
-  );
-}
-
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`border rounded-lg p-4 ${className}`}>
-      {children}
-    </div>
-  );
-}
-
-function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
-}
-
-function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={className}>
-      {children}
-    </div>
-  );
-}
-
-function CardTitle({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <h3 className={`font-medium ${className}`}>
-      {children}
-    </h3>
   );
 }

@@ -80,8 +80,9 @@ export default function AdminOrders() {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.includes(searchTerm) || 
-                         order.user_id.includes(searchTerm);
+    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         (order.customer_email && order.customer_email.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -168,9 +169,9 @@ export default function AdminOrders() {
           <TableHeader>
             <TableRow>
               <TableHead>ID do Pedido</TableHead>
-              <TableHead>Usuário</TableHead>
-              <TableHead>Medicamento</TableHead>
-              <TableHead>Quantidade</TableHead>
+              <TableHead>Cliente</TableHead>
+              <TableHead>Receita</TableHead>
+              <TableHead>Itens</TableHead>
               <TableHead>Data</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Ações</TableHead>
@@ -195,12 +196,19 @@ export default function AdminOrders() {
             ) : (
               filteredOrders.map((order) => (
                 <TableRow key={order.id}>
-                  <TableCell className="font-mono text-sm">#{order.id.slice(0, 8)}...</TableCell>
-                  <TableCell>{order.user_id.slice(0, 8)}...</TableCell>
-                  <TableCell>{order.medication_id}</TableCell>
-                  <TableCell>{order.quantity}</TableCell>
+                  <TableCell className="font-mono text-sm">#{order.id}</TableCell>
                   <TableCell>
-                    {new Date(order.created_at).toLocaleDateString('pt-BR', {
+                    <div>
+                      <div className="font-medium">{order.customer}</div>
+                      {order.customer_email && (
+                        <div className="text-sm text-muted-foreground">{order.customer_email}</div>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>{order.prescription_id || 'N/A'}</TableCell>
+                  <TableCell>{order.items} {order.items === 1 ? 'item' : 'itens'}</TableCell>
+                  <TableCell>
+                    {new Date(order.date).toLocaleDateString('pt-BR', {
                       day: '2-digit',
                       month: '2-digit',
                       year: 'numeric'
