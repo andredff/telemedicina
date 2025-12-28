@@ -125,6 +125,10 @@
   .animate-pulse-soft {
     animation: pulse-soft 3s ease-in-out infinite;
   }
+
+  .animate-fade-in {
+    animation: fade-in 0.3s ease-out forwards;
+  }
 }
 
 @layer utilities {
@@ -159,5 +163,14 @@
   
   .animate-slide-up {
     animation: slide-up 0.6s ease-out forwards;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
   }
 }
