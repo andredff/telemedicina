@@ -165,22 +165,46 @@ const mockUsers = [
 
 const mockOrders = [
   {
-    id: '1',
+    id: 'ORD-001',
     user_id: '2',
+    customer: 'Maria Santos',
+    customer_email: 'maria.santos@example.com',
     prescription_id: 'RX-2024-001',
     medication_id: '1',
     quantity: 2,
+    items: 2,
+    total: 156.80,
     status: 'delivered',
+    date: '2024-12-20T10:00:00Z',
     created_at: '2024-12-20T10:00:00Z'
   },
   {
-    id: '2',
+    id: 'ORD-002',
     user_id: '2',
+    customer: 'Maria Santos',
+    customer_email: 'maria.santos@example.com',
     prescription_id: 'RX-2024-002',
     medication_id: '2',
     quantity: 1,
+    items: 1,
+    total: 89.90,
     status: 'processing',
+    date: '2024-12-27T14:30:00Z',
     created_at: '2024-12-27T14:30:00Z'
+  },
+  {
+    id: 'ORD-003',
+    user_id: '1',
+    customer: 'João Silva Teste',
+    customer_email: 'joao.teste@example.com',
+    prescription_id: 'RX-2024-003',
+    medication_id: '3',
+    quantity: 3,
+    items: 3,
+    total: 234.50,
+    status: 'shipped',
+    date: '2024-12-26T09:15:00Z',
+    created_at: '2024-12-26T09:15:00Z'
   }
 ];
 

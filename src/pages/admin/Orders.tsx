@@ -17,11 +17,28 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
 import { Search, Package, Truck, CheckCircle2, Clock, XCircle, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
+interface Order {
+  id: string;
+  customer: string;
+  customer_email?: string;
+  date: string;
+  status: string;
+  total: number;
+  items: number;
+  prescription_id?: string;
+}
+
 export default function AdminOrders() {
-  const [orders, setOrders] = useState<{ id: string; customer: string; date: string; status: string; total: number; items: number }[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -37,13 +54,19 @@ export default function AdminOrders() {
       
       if (error) throw error;
       
-      // Add mock status to orders (in a real app, this would come from the database)
-      const ordersWithStatus = data.map(order => ({
-        ...order,
-        status: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'][Math.floor(Math.random() * 5)]
+      // Mock data already has all fields, just ensure proper typing
+      const formattedOrders = (data || []).map((order: any) => ({
+        id: order.id,
+        customer: order.customer || 'Cliente Desconhecido',
+        customer_email: order.customer_email,
+        date: order.date || order.created_at,
+        status: order.status || 'pending',
+        total: order.total || 0,
+        items: order.items || order.quantity || 1,
+        prescription_id: order.prescription_id
       }));
       
-      setOrders(ordersWithStatus);
+      setOrders(formattedOrders);
       setLoading(false);
     } catch (error) {
       console.error('Error fetching orders:', error);

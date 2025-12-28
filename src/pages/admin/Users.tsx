@@ -25,15 +25,30 @@ import {
   DialogTitle, 
   DialogTrigger 
 } from '@/components/ui/dialog';
-import { Search, Plus, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart } from 'lucide-react';
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle
+} from '@/components/ui/card';
+import { Search, Plus, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
+interface User {
+  id: string;
+  email: string;
+  full_name: string;
+  role: string;
+  created_at: string;
+  last_login?: string;
+}
+
 export default function AdminUsers() {
-  const [users, setUsers] = useState<{ id: string; name: string; email: string; role: string; lastLogin: string }[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [editingUser, setEditingUser] = useState<{ id: string; name: string; email: string; role: string; lastLogin: string } | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -47,10 +62,17 @@ export default function AdminUsers() {
       
       if (error) throw error;
       
-      // Add role information to each user
-      const usersWithRoles = await Promise.all(data.map(async (user) => {
-        const role = await RBAC.getUserRole(user.id);
-        return { ...user, role: role || 'patient' };
+      // Mock data already includes role, but for real Supabase data we need to fetch it
+      const usersWithRoles = await Promise.all((data || []).map(async (user: any) => {
+        const role = user.role || await RBAC.getUserRole(user.id) || 'patient';
+        return { 
+          id: user.id,
+          email: user.email,
+          full_name: user.full_name || user.email,
+          role: role,
+          created_at: user.created_at,
+          last_login: user.last_login
+        };
       }));
       
       setUsers(usersWithRoles);
@@ -73,7 +95,7 @@ export default function AdminUsers() {
     return matchesSearch && matchesRole;
   });
 
-  const handleEditUser = (user: { id: string; name: string; email: string; role: string; lastLogin: string }) => {
+  const handleEditUser = (user: User) => {
     setEditingUser({ ...user });
     setIsDialogOpen(true);
   };
