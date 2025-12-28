@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { logger } from "@/lib/logger";
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Users, ShoppingCart, FileText, CreditCard, Activity, DollarSign } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -44,7 +45,7 @@ export default function AdminDashboard() {
         
         setLoading(false);
       } catch (error) {
-        console.error('Error fetching dashboard data:', error);
+        logger.error('Error fetching dashboard data:', error);
         setLoading(false);
       }
     };

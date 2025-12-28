@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries, RBAC } from '@/integrations/supabase/adminClient';
+import { logger } from "@/lib/logger";
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -78,7 +80,7 @@ export default function AdminUsers() {
       setUsers(usersWithRoles);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      logger.error('Error fetching users:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao buscar usuários',
@@ -126,7 +128,7 @@ export default function AdminUsers() {
         });
       }
     } catch (error) {
-      console.error('Error updating user:', error);
+      logger.error('Error updating user:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao atualizar usuário',

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -69,7 +70,7 @@ export default function AdminOrders() {
       setOrders(formattedOrders);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      logger.error('Error fetching orders:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao buscar pedidos',
@@ -120,7 +121,7 @@ export default function AdminOrders() {
         description: 'Status do pedido atualizado'
       });
     } catch (error) {
-      console.error('Error updating order status:', error);
+      logger.error('Error updating order status:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao atualizar status do pedido',

@@ -20,6 +20,7 @@ import {
   Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { mockPrescriptions } from "@/data/mockPrescriptions";
 
@@ -74,7 +75,7 @@ const Dashboard = () => {
         setProfile(data);
       }
     } catch (error) {
-      console.error("Error fetching profile:", error);
+      logger.error("Error fetching profile:", error);
     }
   };
 

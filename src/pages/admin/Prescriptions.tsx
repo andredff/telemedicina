@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
@@ -73,7 +74,7 @@ export default function AdminPrescriptions() {
       setPrescriptions(formattedPrescriptions);
       setLoading(false);
     } catch (error) {
-      console.error('Error fetching prescriptions:', error);
+      logger.error('Error fetching prescriptions:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao buscar receitas',
@@ -123,7 +124,7 @@ export default function AdminPrescriptions() {
         description: 'Status da receita atualizado'
       });
     } catch (error) {
-      console.error('Error updating prescription status:', error);
+      logger.error('Error updating prescription status:', error);
       toast({
         title: 'Erro',
         description: 'Falha ao atualizar status da receita',

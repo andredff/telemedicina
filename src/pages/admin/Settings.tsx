@@ -37,7 +37,7 @@ export default function AdminSettings() {
 
   const handleSaveSettings = () => {
     // In a real app, this would save settings to the database
-    console.log('Settings saved:', settings);
+    logger.log('Settings saved:', settings);
     toast({
       title: 'Sucesso',
       description: 'Configurações salvas com sucesso'

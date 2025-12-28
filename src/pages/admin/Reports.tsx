@@ -60,7 +60,7 @@ export default function AdminReports() {
 
   const generateReport = () => {
     // In a real app, this would generate and download a report
-    console.log('Generating report...');
+    logger.log('Generating report...');
   };
 
   return (
