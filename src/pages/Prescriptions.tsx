@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, Calendar, User, FileText, ChevronRight, Loader2, Filter, X, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
+import { Search, User, FileText, ChevronRight, Loader2, Filter, X, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
 import { usePrescriptionSearch } from "@/hooks/use-prescription-search";
 import { useToast } from "@/hooks/use-toast";
 import {
