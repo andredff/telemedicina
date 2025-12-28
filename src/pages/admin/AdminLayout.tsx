@@ -17,7 +17,7 @@ import {
 
 export default function AdminLayout() {
   const navigate = useNavigate();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<{ id: string; email: string; role: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeMenu, setActiveMenu] = useState<string>('dashboard');

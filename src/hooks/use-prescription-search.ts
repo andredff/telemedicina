@@ -66,7 +66,7 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [searchParams]);
+  }, [searchParams, debounceTimer]);
 
   const getSuggestions = async (query: string) => {
     if (query.length < 2) {
@@ -147,7 +147,7 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
 }
 
 export function useRecentPrescriptions(limit: number = 5) {
-  const [recentPrescriptions, setRecentPrescriptions] = useState<any[]>([]);
+  const [recentPrescriptions, setRecentPrescriptions] = useState<PrescriptionWithMedications[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -170,7 +170,7 @@ export function useRecentPrescriptions(limit: number = 5) {
 }
 
 export function usePrescriptionById(prescriptionId: string | null) {
-  const [prescription, setPrescription] = useState<any | null>(null);
+  const [prescription, setPrescription] = useState<PrescriptionWithMedications | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

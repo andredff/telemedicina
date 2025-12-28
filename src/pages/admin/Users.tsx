@@ -29,11 +29,11 @@ import { Search, Plus, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart } fro
 import { toast } from '@/components/ui/use-toast';
 
 export default function AdminUsers() {
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<{ id: string; name: string; email: string; role: string; lastLogin: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<{ id: string; name: string; email: string; role: string; lastLogin: string } | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
   useEffect(() => {
@@ -73,7 +73,7 @@ export default function AdminUsers() {
     return matchesSearch && matchesRole;
   });
 
-  const handleEditUser = (user: any) => {
+  const handleEditUser = (user: { id: string; name: string; email: string; role: string; lastLogin: string }) => {
     setEditingUser({ ...user });
     setIsDialogOpen(true);
   };

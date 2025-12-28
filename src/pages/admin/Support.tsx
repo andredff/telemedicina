@@ -438,7 +438,7 @@ export default function AdminSupport() {
 }
 
 // Helper components
-function Select({ children, value, onValueChange, defaultValue }: any) {
+function Select({ children, value, onValueChange, defaultValue }: { children: React.ReactNode; value: string; onValueChange: (value: string) => void; defaultValue?: string }) {
   return (
     <div className="relative">
       <select
@@ -453,7 +453,7 @@ function Select({ children, value, onValueChange, defaultValue }: any) {
   );
 }
 
-function SelectTrigger({ children }: any) {
+function SelectTrigger({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
       {children}
@@ -461,7 +461,7 @@ function SelectTrigger({ children }: any) {
   );
 }
 
-function SelectContent({ children }: any) {
+function SelectContent({ children }: { children: React.ReactNode }) {
   return (
     <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border">
       {children}
@@ -469,7 +469,7 @@ function SelectContent({ children }: any) {
   );
 }
 
-function SelectItem({ value, children }: any) {
+function SelectItem({ value, children }: { value: string; children: React.ReactNode }) {
   return (
     <div
       className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
@@ -482,7 +482,7 @@ function SelectItem({ value, children }: any) {
   );
 }
 
-function SelectValue({ placeholder }: any) {
+function SelectValue({ placeholder }: { placeholder: string }) {
   return (
     <span className="text-gray-500">{placeholder}</span>
   );
@@ -496,7 +496,7 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
   );
 }
 
-function CardHeader({ children, className }: any) {
+function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
       {children}
@@ -504,7 +504,7 @@ function CardHeader({ children, className }: any) {
   );
 }
 
-function CardContent({ children, className }: any) {
+function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={className}>
       {children}
@@ -512,7 +512,7 @@ function CardContent({ children, className }: any) {
   );
 }
 
-function CardTitle({ children, className }: any) {
+function CardTitle({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <h3 className={`font-medium ${className}`}>
       {children}
@@ -520,7 +520,7 @@ function CardTitle({ children, className }: any) {
   );
 }
 
-function Save({ className }: any) {
+function Save({ className }: { className?: string }) {
   return (
     <svg
       className={className}

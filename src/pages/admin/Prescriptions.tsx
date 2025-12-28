@@ -21,7 +21,7 @@ import { Search, FileText, CheckCircle2, Clock, AlertCircle, Eye, Edit } from 'l
 import { toast } from '@/components/ui/use-toast';
 
 export default function AdminPrescriptions() {
-  const [prescriptions, setPrescriptions] = useState<any[]>([]);
+  const [prescriptions, setPrescriptions] = useState<{ id: string; patient: string; doctor: string; date: string; status: string; medications: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -37,10 +37,11 @@ export default function AdminPrescriptions() {
       
       if (error) throw error;
       
-      // Add mock status to prescriptions (in a real app, this would come from the database)
+      // Use real status from database (remove mock status generation)
       const prescriptionsWithStatus = data.map(prescription => ({
         ...prescription,
-        status: ['pending', 'approved', 'rejected', 'expired'][Math.floor(Math.random() * 4)]
+        // Status should come from the database, not be randomly generated
+        status: prescription.status || 'pending' // Default to 'pending' if no status exists
       }));
       
       setPrescriptions(prescriptionsWithStatus);

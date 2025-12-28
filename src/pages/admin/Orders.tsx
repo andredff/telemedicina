@@ -21,7 +21,7 @@ import { Search, Package, Truck, CheckCircle2, Clock, XCircle, Eye } from 'lucid
 import { toast } from '@/components/ui/use-toast';
 
 export default function AdminOrders() {
-  const [orders, setOrders] = useState<any[]>([]);
+  const [orders, setOrders] = useState<{ id: string; customer: string; date: string; status: string; total: number; items: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
