@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { AdminQueries, RBAC } from '@/integrations/supabase/adminClient';
 import { logger } from "@/lib/logger";
 import { supabase } from '@/integrations/supabase/client';
-import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
