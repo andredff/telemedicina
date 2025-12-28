@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { SearchClient, type PrescriptionSearchParams, type PrescriptionSearchResults } from '@/integrations/supabase/searchClient';
+import { SearchClient, type PrescriptionSearchParams, type PrescriptionSearchResults, type PrescriptionWithMedications } from '@/integrations/supabase/searchClient';
 import { MockSearchClient } from '@/mock-search-client';
 
 export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = {}) {
@@ -175,17 +175,23 @@ export function usePrescriptionById(prescriptionId: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    console.log('[usePrescriptionById] Effect triggered with ID:', prescriptionId);
+    
     if (!prescriptionId) {
+      console.log('[usePrescriptionById] No prescription ID provided');
       setPrescription(null);
       setLoading(false);
       return;
     }
 
     const fetchPrescription = async () => {
+      console.log('[usePrescriptionById] Fetching prescription:', prescriptionId);
       try {
         const result = await SearchClient.getPrescriptionById(prescriptionId);
+        console.log('[usePrescriptionById] Received result:', result);
         setPrescription(result);
       } catch (err) {
+        console.error('[usePrescriptionById] Error:', err);
         setError(err instanceof Error ? err.message : 'Unknown error occurred');
       } finally {
         setLoading(false);
@@ -195,5 +201,6 @@ export function usePrescriptionById(prescriptionId: string | null) {
     fetchPrescription();
   }, [prescriptionId]);
 
+  console.log('[usePrescriptionById] Current state:', { prescription, loading, error });
   return { prescription, loading, error };
 }

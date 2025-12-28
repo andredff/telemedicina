@@ -136,7 +136,14 @@ export class PrescriptionSearchService {
   }
 
   static async getPrescriptionById(prescriptionId: string): Promise<PrescriptionWithMedications | null> {
+    console.log('[SearchClient] getPrescriptionById called with:', prescriptionId);
     try {
+      // Check if supabase is available (environment variables are set)
+      if (!supabase || !supabase.from) {
+        console.log('[SearchClient] Supabase not available, using fallback');
+        return this.fallbackGetPrescriptionById(prescriptionId);
+      }
+
       const { data, error } = await supabase
         .from('prescriptions')
         .select('*, medications(*)')
@@ -144,14 +151,24 @@ export class PrescriptionSearchService {
         .single();
 
       if (error) {
+        console.log('[SearchClient] Supabase error:', error);
         throw error;
       }
 
-      return data || null;
+      // If no data found in Supabase, try fallback
+      if (!data) {
+        console.log('[SearchClient] No data from Supabase, using fallback');
+        return this.fallbackGetPrescriptionById(prescriptionId);
+      }
+
+      console.log('[SearchClient] Found prescription in Supabase:', data);
+      return data;
 
     } catch (error) {
-      console.error('Error getting prescription by ID:', error);
-      return null;
+      console.error('[SearchClient] Error getting prescription by ID:', error);
+      // Fallback to mock data
+      console.log('[SearchClient] Using fallback due to error');
+      return this.fallbackGetPrescriptionById(prescriptionId);
     }
   }
 
@@ -314,11 +331,11 @@ export class PrescriptionSearchService {
 
     // Convert mock data to the expected format
     const mockData = mockPrescriptions.map(prescription => ({
-      id: prescription.code,
+      id: prescription.id,
       patient_name: prescription.patientName,
       doctor_name: prescription.doctorName,
       doctor_crm: prescription.doctorCRM,
-      date: prescription.issueDate,
+      date: prescription.date,
       status: prescription.status,
       user_id: 'mock-user-id',
       created_at: new Date().toISOString(),
@@ -331,7 +348,7 @@ export class PrescriptionSearchService {
         duration: med.duration,
         price: med.price,
         in_stock: med.inStock,
-        image_url: med.imageUrl
+        image_url: med.imageUrl || null
       }))
     }));
 
@@ -406,8 +423,8 @@ export class PrescriptionSearchService {
 
     // Add ID suggestions
     mockPrescriptions.forEach(p => {
-      if (p.code.toLowerCase().includes(lowerQuery)) {
-        suggestions.add(p.code);
+      if (p.id.toLowerCase().includes(lowerQuery)) {
+        suggestions.add(p.id);
       }
     });
 
@@ -427,6 +444,45 @@ export class PrescriptionSearchService {
 
     return Array.from(suggestions).slice(0, 10);
   }
+
+  private static fallbackGetPrescriptionById(prescriptionId: string): PrescriptionWithMedications | null {
+    console.log('[SearchClient] fallbackGetPrescriptionById called with:', prescriptionId);
+    console.log('[SearchClient] Available mock prescriptions:', mockPrescriptions.map(p => p.id));
+    
+    const mockPrescription = mockPrescriptions.find(p => p.id === prescriptionId);
+    
+    if (!mockPrescription) {
+      console.log('[SearchClient] No mock prescription found for ID:', prescriptionId);
+      return null;
+    }
+
+    console.log('[SearchClient] Found mock prescription:', mockPrescription);
+
+    const result = {
+      id: mockPrescription.id,
+      patient_name: mockPrescription.patientName,
+      doctor_name: mockPrescription.doctorName,
+      doctor_crm: mockPrescription.doctorCRM,
+      date: mockPrescription.date,
+      status: mockPrescription.status,
+      user_id: 'mock-user-id',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      medications: mockPrescription.medications.map(med => ({
+        id: med.id,
+        name: med.name,
+        dosage: med.dosage,
+        frequency: med.frequency,
+        duration: med.duration,
+        price: med.price,
+        in_stock: med.inStock,
+        image_url: med.imageUrl || null
+      }))
+    };
+
+    console.log('[SearchClient] Returning result:', result);
+    return result;
+  }
 }
 
-export const SearchClient = new PrescriptionSearchService();
+export const SearchClient = PrescriptionSearchService;

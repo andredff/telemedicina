@@ -58,12 +58,16 @@ const PrescriptionDetail = () => {
     );
   }
 
-  if (prescriptionError || !prescription) {
+  if (prescriptionError || !prescription || !prescription.medications || prescription.medications.length === 0) {
     return (
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
         <div className="container mx-auto px-4 py-8 text-center">
-          <p className="text-muted-foreground">Receituário não encontrado</p>
+          <p className="text-muted-foreground">
+            {prescriptionError ? `Erro: ${prescriptionError}` : 
+             !prescription ? "Receituário não encontrado" :
+             "Receituário sem medicamentos"}
+          </p>
           <Button onClick={() => navigate("/dashboard")} className="mt-4">
             Voltar ao dashboard
           </Button>
