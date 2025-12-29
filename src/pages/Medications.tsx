@@ -19,7 +19,8 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { mockPrescriptions } from "@/data/mockPrescriptions";
+import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 const Medications = () => {
   const navigate = useNavigate();
@@ -27,7 +28,7 @@ const Medications = () => {
   const [prescriptionCode, setPrescriptionCode] = useState("");
   const [isSearching, setIsSearching] = useState(false);
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     if (!prescriptionCode.trim()) {
       toast({
         title: "Código obrigatório",
@@ -39,24 +40,44 @@ const Medications = () => {
 
     setIsSearching(true);
     
-    // Search for prescription in mock data
-    setTimeout(() => {
+    try {
+      // Search for prescription in Supabase
+      const { data, error } = await supabase
+        .from("prescriptions")
+        .select("id")
+        .eq("id", prescriptionCode.toUpperCase())
+        .maybeSingle();
+      
       setIsSearching(false);
       
-      const foundPrescription = mockPrescriptions.find(
-        (prescription) => prescription.id === prescriptionCode.toUpperCase()
-      );
+      if (error) {
+        logger.error("Error searching prescription:", error);
+        toast({
+          title: "Erro na busca",
+          description: "Ocorreu um erro ao buscar a receita. Tente novamente.",
+          variant: "destructive",
+        });
+        return;
+      }
       
-      if (foundPrescription) {
+      if (data) {
         // Navigate to prescription detail page with the found prescription
-        navigate(`/prescription/${foundPrescription.id}`);
+        navigate(`/prescription/${data.id}`);
       } else {
         toast({
           title: "Receita não encontrada",
           description: "Verifique o código ou faça login para acessar suas receitas.",
         });
       }
-    }, 1500);
+    } catch (error) {
+      logger.error("Error searching prescription:", error);
+      setIsSearching(false);
+      toast({
+        title: "Erro na busca",
+        description: "Ocorreu um erro ao buscar a receita. Tente novamente.",
+        variant: "destructive",
+      });
+    }
   };
 
   const benefits = [

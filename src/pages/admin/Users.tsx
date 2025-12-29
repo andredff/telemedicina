@@ -64,14 +64,14 @@ export default function AdminUsers() {
       if (error) throw error;
       
       // Mock data already includes role, but for real Supabase data we need to fetch it
-      const usersWithRoles = await Promise.all((data || []).map(async (user: any) => {
-        const role = user.role || await RBAC.getUserRole(user.id) || 'patient';
+      const usersWithRoles = await Promise.all((data || []).map(async (user: Record<string, unknown>) => {
+        const role = (user.role as string) || await RBAC.getUserRole(user.id as string) || 'patient';
         return { 
-          id: user.id,
-          email: user.email,
-          full_name: user.full_name || user.email,
+          id: user.id as string,
+          email: user.email as string,
+          full_name: (user.full_name as string) || (user.email as string),
           role: role,
-          created_at: user.created_at,
+          created_at: user.created_at as string,
           last_login: user.last_login
         };
       }));

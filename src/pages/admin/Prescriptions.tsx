@@ -58,14 +58,14 @@ export default function AdminPrescriptions() {
       if (error) throw error;
       
       // Format prescriptions data to match expected interface
-      const formattedPrescriptions = (data || []).map((prescription: any) => ({
-        id: prescription.id,
-        patient: prescription.patient || 'Paciente Desconhecido',
-        patient_id: prescription.patient_id,
-        doctor: prescription.doctor_name || prescription.doctor || 'Médico Desconhecido',
-        doctor_name: prescription.doctor_name,
-        date: prescription.date || prescription.created_at,
-        status: prescription.status || 'pending',
+      const formattedPrescriptions = (data || []).map((prescription: Record<string, unknown>) => ({
+        id: prescription.id as string,
+        patient: (prescription.patient as string) || 'Paciente Desconhecido',
+        patient_id: prescription.patient_id as string,
+        doctor: (prescription.doctor_name as string) || (prescription.doctor as string) || 'Médico Desconhecido',
+        doctor_name: prescription.doctor_name as string,
+        date: (prescription.date as string) || (prescription.created_at as string),
+        status: (prescription.status as string) || 'pending',
         medications: prescription.medications || 1,
         expires_at: prescription.expires_at,
         created_at: prescription.created_at

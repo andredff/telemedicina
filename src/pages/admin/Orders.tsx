@@ -56,13 +56,13 @@ export default function AdminOrders() {
       if (error) throw error;
       
       // Mock data already has all fields, just ensure proper typing
-      const formattedOrders = (data || []).map((order: any) => ({
-        id: order.id,
-        customer: order.customer || 'Cliente Desconhecido',
-        customer_email: order.customer_email,
-        date: order.date || order.created_at,
-        status: order.status || 'pending',
-        total: order.total || 0,
+      const formattedOrders = (data || []).map((order: Record<string, unknown>) => ({
+        id: order.id as string,
+        customer: (order.customer as string) || 'Cliente Desconhecido',
+        customer_email: order.customer_email as string,
+        date: (order.date as string) || (order.created_at as string),
+        status: (order.status as string) || 'pending',
+        total: (order.total as number) || 0,
         items: order.items || order.quantity || 1,
         prescription_id: order.prescription_id
       }));

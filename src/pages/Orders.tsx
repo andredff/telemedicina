@@ -1,56 +1,93 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Package, Calendar, MapPin, CreditCard, ChevronRight, Truck, CheckCircle, Clock } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+import { User, Session } from "@supabase/supabase-js";
 
-// Mock orders data
-const mockOrders = [
-  {
-    id: "PED-2024-001",
-    date: "2024-12-20",
-    status: "delivered",
-    total: 75.40,
-    items: [
-      { name: "Losartana 50mg", quantity: 1, price: 25.90 },
-      { name: "Sinvastatina 20mg", quantity: 1, price: 18.50 },
-      { name: "Metformina 850mg", quantity: 1, price: 31.00 },
-    ],
-    deliveryAddress: "Rua das Flores, 123 - Asa Sul, Brasília - DF",
-    trackingCode: "BR123456789BR",
-  },
-  {
-    id: "PED-2024-002",
-    date: "2024-12-18",
-    status: "in_transit",
-    total: 24.80,
-    items: [
-      { name: "Omeprazol 20mg", quantity: 1, price: 15.90 },
-      { name: "Dipirona 500mg", quantity: 1, price: 8.90 },
-    ],
-    deliveryAddress: "Rua das Flores, 123 - Asa Sul, Brasília - DF",
-    trackingCode: "BR987654321BR",
-  },
-  {
-    id: "PED-2024-003",
-    date: "2024-12-15",
-    status: "processing",
-    total: 89.70,
-    items: [
-      { name: "Atorvastatina 10mg", quantity: 1, price: 22.50 },
-      { name: "Enalapril 10mg", quantity: 1, price: 19.90 },
-      { name: "Hidroclorotiazida 25mg", quantity: 1, price: 15.30 },
-      { name: "AAS 100mg", quantity: 1, price: 32.00 },
-    ],
-    deliveryAddress: "Rua das Flores, 123 - Asa Sul, Brasília - DF",
-    trackingCode: null,
-  },
-];
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
+interface Order {
+  id: string;
+  date: string;
+  status: string;
+  total: number;
+  items: OrderItem[];
+  delivery_address: string;
+  tracking_code: string | null;
+}
 
 const Orders = () => {
+  const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState("all");
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (!session) {
+          navigate("/auth");
+        } else {
+          fetchOrders(session.user.id);
+        }
+      }
+    );
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      
+      if (!session) {
+        navigate("/auth");
+      } else {
+        fetchOrders(session.user.id);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const fetchOrders = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("orders")
+        .select("*")
+        .eq("user_id", userId)
+        .order("date", { ascending: false });
+
+      if (error) {
+        logger.error("Error fetching orders:", error);
+        return;
+      }
+
+      if (data) {
+        setOrders(data);
+      }
+    } catch (error) {
+      logger.error("Error fetching orders:", error);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -96,12 +133,20 @@ const Orders = () => {
   };
 
   const filteredOrders = selectedTab === "all" 
-    ? mockOrders 
-    : mockOrders.filter(order => order.status === selectedTab);
+    ? orders 
+    : orders.filter(order => order.status === selectedTab);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header isAuthenticated onLogout={handleLogout} />
       
       <main className="container mx-auto px-4 py-8 mt-20">
         {/* Header Section */}
@@ -123,7 +168,7 @@ const Orders = () => {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{mockOrders.length}</div>
+              <div className="text-2xl font-bold">{orders.length}</div>
             </CardContent>
           </Card>
           
@@ -135,7 +180,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-yellow-600">
-                {mockOrders.filter(o => o.status === "processing").length}
+                {orders.filter(o => o.status === "processing").length}
               </div>
             </CardContent>
           </Card>
@@ -148,7 +193,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {mockOrders.filter(o => o.status === "in_transit").length}
+                {orders.filter(o => o.status === "in_transit").length}
               </div>
             </CardContent>
           </Card>
@@ -161,7 +206,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">
-                {mockOrders.filter(o => o.status === "delivered").length}
+                {orders.filter(o => o.status === "delivered").length}
               </div>
             </CardContent>
           </Card>
@@ -238,19 +283,19 @@ const Orders = () => {
                         <MapPin className="h-4 w-4 mt-0.5 text-muted-foreground" />
                         <div>
                           <p className="font-medium mb-1">Endereço de Entrega:</p>
-                          <p className="text-muted-foreground">{order.deliveryAddress}</p>
+                          <p className="text-muted-foreground">{order.delivery_address}</p>
                         </div>
                       </div>
                     </div>
 
                     {/* Tracking Code */}
-                    {order.trackingCode && (
+                    {order.tracking_code && (
                       <div className="pt-3 border-t">
                         <div className="flex items-center gap-2 text-sm">
                           <Truck className="h-4 w-4 text-muted-foreground" />
                           <div>
                             <p className="font-medium">Código de Rastreamento:</p>
-                            <p className="text-primary font-mono">{order.trackingCode}</p>
+                            <p className="text-primary font-mono">{order.tracking_code}</p>
                           </div>
                         </div>
                       </div>

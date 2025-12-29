@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
-import { mockPrescriptions } from "@/data/mockPrescriptions";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, FileText, User, Calendar, AlertCircle, ArrowLeft } from "lucide-react";
