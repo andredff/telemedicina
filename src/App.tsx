@@ -13,6 +13,8 @@ import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Cart from "./pages/Cart";
+import CheckoutSubscription from "./pages/CheckoutSubscription";
+import CheckoutMedication from "./pages/CheckoutMedication";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +36,8 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
+          <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
