@@ -27,6 +27,7 @@ import AdminContent from "./pages/admin/Content";
 import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminSupport from "./pages/admin/Support";
+import TestSupabase from "./pages/TestSupabase";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +52,7 @@ const App = () => (
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />
+          <Route path="/test-supabase" element={<TestSupabase />} />
           
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
