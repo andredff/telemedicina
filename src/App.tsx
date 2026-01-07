@@ -17,6 +17,8 @@ import Prescriptions from "./pages/Prescriptions";
 import Orders from "./pages/Orders";
 import BlogPost from "./pages/BlogPost";
 import Cart from "./pages/Cart";
+import CheckoutSubscription from "./pages/CheckoutSubscription";
+import CheckoutMedication from "./pages/CheckoutMedication";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -52,8 +54,10 @@ const App = () => (
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />
+          <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
+          <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="/test-supabase" element={<TestSupabase />} />
-          
+
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
@@ -65,7 +69,7 @@ const App = () => (
             <Route path="configuracoes" element={<AdminSettings />} />
             <Route path="suporte" element={<AdminSupport />} />
           </Route>
-          
+
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

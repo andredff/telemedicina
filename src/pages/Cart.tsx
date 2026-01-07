@@ -75,13 +75,7 @@ const Cart = () => {
   };
 
   const handleCheckout = () => {
-    toast({
-      title: "Pedido finalizado!",
-      description: "Seu pedido foi processado com sucesso. Entrega em até 24h.",
-    });
-    localStorage.removeItem("cart");
-    setCartItems([]);
-    navigate("/dashboard");
+    navigate("/checkout/medication");
   };
 
   const handleLogout = async () => {
