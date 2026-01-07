@@ -9,6 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Check, Star, Users, Sparkles, ArrowRight, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import {
   Accordion,
   AccordionContent,
@@ -55,7 +56,7 @@ const Plans = () => {
       
       setPlans(formattedPlans);
     } catch (error) {
-      console.error("Error fetching plans:", error);
+      logger.error("Error fetching plans:", error);
     } finally {
       setLoading(false);
     }

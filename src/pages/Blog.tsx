@@ -1,3 +1,4 @@
+import { useNavigate } from "react-router-dom";
 import PublicHeader from "@/components/layout/PublicHeader";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
@@ -5,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Calendar, ArrowRight } from "lucide-react";
 
 const Blog = () => {
+  const navigate = useNavigate();
   const posts = [
     {
       id: 1,
@@ -49,7 +51,11 @@ const Blog = () => {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
             {posts.map((post) => (
-              <Card key={post.id} className="bg-card border-border/50 hover:shadow-card transition-all cursor-pointer group overflow-hidden">
+              <Card 
+              key={post.id} 
+              className="bg-card border-border/50 hover:shadow-card transition-all cursor-pointer group overflow-hidden"
+              onClick={() => navigate(`/blog/${post.id}`)}
+            >
                 <div className="h-48 overflow-hidden">
                   <img src={post.image} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                 </div>

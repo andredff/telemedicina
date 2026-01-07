@@ -16,11 +16,30 @@ import {
   Heart,
   LogOut,
   ShoppingCart,
-  Settings
+  Settings,
+  Package
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
-import { mockPrescriptions } from "@/data/mockPrescriptions";
+
+interface Medication {
+  id: string;
+  name: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  price: number;
+}
+
+interface Prescription {
+  id: string;
+  patient_name: string;
+  doctor_name: string;
+  date: string;
+  status: string;
+  medications: Medication[];
+}
 
 const Dashboard = () => {
   const navigate = useNavigate();
@@ -28,6 +47,49 @@ const Dashboard = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{ full_name: string; email: string } | null>(null);
+  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+
+  const fetchProfile = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", userId)
+        .single();
+
+      if (error) {
+        logger.error("Error fetching profile:", error);
+        return;
+      }
+
+      if (data) {
+        setProfile(data);
+      }
+    } catch (error) {
+      logger.error("Error fetching profile:", error);
+    }
+  };
+
+  const fetchPrescriptions = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("prescriptions")
+        .select("*")
+        .eq("user_id", userId)
+        .order("date", { ascending: false });
+
+      if (error) {
+        logger.error("Error fetching prescriptions:", error);
+        return;
+      }
+
+      if (data) {
+        setPrescriptions(data);
+      }
+    } catch (error) {
+      logger.error("Error fetching prescriptions:", error);
+    }
+  };
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -38,10 +100,8 @@ const Dashboard = () => {
         if (!session) {
           navigate("/auth");
         } else if (session.user) {
-          // Defer profile fetch to avoid deadlock
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-          }, 0);
+          fetchProfile(session.user.id);
+          fetchPrescriptions(session.user.id);
         }
       }
     );
@@ -54,28 +114,13 @@ const Dashboard = () => {
         navigate("/auth");
       } else if (session.user) {
         fetchProfile(session.user.id);
+        fetchPrescriptions(session.user.id);
       }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
-
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (data) {
-        setProfile(data);
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -191,14 +236,14 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group">
+          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/orders")}>
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-medical-orange/10 flex items-center justify-center group-hover:bg-medical-orange/20 transition-colors">
-                <CreditCard className="h-6 w-6 text-medical-orange" />
+                <Package className="h-6 w-6 text-medical-orange" />
               </div>
               <div>
-                <p className="font-medium text-foreground">Meu Plano</p>
-                <p className="text-xs text-muted-foreground">Gerenciar</p>
+                <p className="font-medium text-foreground">Meus Pedidos</p>
+                <p className="text-xs text-muted-foreground">Acompanhe entregas</p>
               </div>
             </CardContent>
           </Card>
@@ -230,52 +275,71 @@ const Dashboard = () => {
             <h2 className="text-xl font-heading font-semibold text-foreground">
               Meus Receituários
             </h2>
-            <Button variant="ghost" size="sm" className="text-primary">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-primary"
+              onClick={() => navigate("/prescriptions")}
+            >
               Ver todos
               <ChevronRight className="ml-1 h-4 w-4" />
             </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {mockPrescriptions.slice(0, 3).map((prescription) => (
-              <Card 
-                key={prescription.id} 
-                className="bg-card border-border/50 cursor-pointer transition-all hover:shadow-card hover:border-primary/20"
-                onClick={() => navigate(`/prescription/${prescription.id}`)}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary" />
-                      <CardTitle className="text-base">{prescription.id}</CardTitle>
+            {prescriptions.length > 0 ? (
+              prescriptions.map((prescription) => (
+                <Card 
+                  key={prescription.id} 
+                  className="bg-card border-border/50 cursor-pointer transition-all hover:shadow-card hover:border-primary/20"
+                  onClick={() => navigate(`/prescription/${prescription.id}`)}
+                >
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-base">{prescription.id}</CardTitle>
+                      </div>
+                      {getStatusBadge(prescription.status)}
                     </div>
-                    {getStatusBadge(prescription.status)}
-                  </div>
-                  <CardDescription className="flex items-center gap-4 mt-2">
-                    <span className="flex items-center gap-1">
-                      <User className="h-3.5 w-3.5" />
-                      {prescription.patientName}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {new Date(prescription.date).toLocaleDateString("pt-BR")}
-                    </span>
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs text-muted-foreground">Médico</p>
-                      <p className="text-sm font-medium">{prescription.doctorName}</p>
+                    <CardDescription className="flex items-center gap-4 mt-2">
+                      <span className="flex items-center gap-1">
+                        <User className="h-3.5 w-3.5" />
+                        {prescription.patient_name}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {new Date(prescription.date).toLocaleDateString("pt-BR")}
+                      </span>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground">Médico</p>
+                        <p className="text-sm font-medium">{prescription.doctor_name}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-muted-foreground">Medicamentos</p>
+                        <p className="text-sm font-medium">{prescription.medications?.length || 0} itens</p>
+                      </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-xs text-muted-foreground">Medicamentos</p>
-                      <p className="text-sm font-medium">{prescription.medications.length} itens</p>
-                    </div>
-                  </div>
+                  </CardContent>
+                </Card>
+              ))
+            ) : (
+              <Card className="col-span-full bg-card border-border/50">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground text-center mb-4">
+                    Você ainda não possui receitas cadastradas
+                  </p>
+                  <Button onClick={() => navigate("/prescriptions")}>
+                    Buscar Receita
+                  </Button>
                 </CardContent>
               </Card>
-            ))}
+            )}
           </div>
         </div>
 

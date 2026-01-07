@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import PublicHeader from "@/components/layout/PublicHeader";
 import Footer from "@/components/layout/Footer";
@@ -19,14 +19,34 @@ import {
   AlertCircle
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SearchClient } from "@/integrations/supabase/searchClient";
+import { logger } from "@/lib/logger";
 
 const Medications = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const [prescriptionCode, setPrescriptionCode] = useState("");
   const [isSearching, setIsSearching] = useState(false);
+  const [suggestions, setSuggestions] = useState<string[]>([]);
 
-  const handleSearch = () => {
+  useEffect(() => {
+    if (prescriptionCode.length > 1) {
+      const getSuggestions = async () => {
+        try {
+          const suggestions = await SearchClient.getSearchSuggestions(prescriptionCode);
+          setSuggestions(suggestions);
+        } catch (error) {
+          logger.error("Error getting suggestions:", error);
+          setSuggestions([]);
+        }
+      };
+      getSuggestions();
+    } else {
+      setSuggestions([]);
+    }
+  }, [prescriptionCode]);
+
+  const handleSearch = async () => {
     if (!prescriptionCode.trim()) {
       toast({
         title: "Código obrigatório",
@@ -37,14 +57,31 @@ const Medications = () => {
     }
 
     setIsSearching(true);
-    // Simulating search - in production this would verify the prescription
-    setTimeout(() => {
+    
+    try {
+      // Search for prescription using SearchClient
+      const prescription = await SearchClient.getPrescriptionById(prescriptionCode.toUpperCase());
+      
+      setIsSearching(false);
+      
+      if (prescription) {
+        // Navigate to prescription detail page with the found prescription
+        navigate(`/prescription/${prescription.id}`);
+      } else {
+        toast({
+          title: "Receita não encontrada",
+          description: "Verifique o código ou faça login para acessar suas receitas.",
+        });
+      }
+    } catch (error) {
+      logger.error("Error searching prescription:", error);
       setIsSearching(false);
       toast({
-        title: "Receita não encontrada",
-        description: "Verifique o código ou faça login para acessar suas receitas.",
+        title: "Erro na busca",
+        description: "Ocorreu um erro ao buscar a receita. Tente novamente.",
+        variant: "destructive",
       });
-    }, 1500);
+    }
   };
 
   const benefits = [
@@ -139,14 +176,32 @@ const Medications = () => {
                     <Label htmlFor="code" className="text-sm text-muted-foreground">
                       Código da receita (recebido por SMS/e-mail)
                     </Label>
-                    <div className="flex gap-3">
-                      <Input
-                        id="code"
-                        placeholder="Ex: RX-2024-XXXXX"
-                        value={prescriptionCode}
-                        onChange={(e) => setPrescriptionCode(e.target.value)}
-                        className="flex-1"
-                      />
+                    <div className="flex gap-3 relative">
+                      <div className="flex-1 relative">
+                        <Input
+                          id="code"
+                          placeholder="Ex: RX-2024-XXXXX"
+                          value={prescriptionCode}
+                          onChange={(e) => setPrescriptionCode(e.target.value)}
+                          className="flex-1"
+                        />
+                        {suggestions.length > 0 && (
+                          <div className="absolute z-10 w-full mt-1 bg-background border border-border rounded-md shadow-lg">
+                            {suggestions.map((suggestion, index) => (
+                              <div
+                                key={index}
+                                className="px-4 py-2 hover:bg-muted cursor-pointer text-sm"
+                                onClick={() => {
+                                  setPrescriptionCode(suggestion);
+                                  setSuggestions([]);
+                                }}
+                              >
+                                {suggestion}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                       <Button 
                         onClick={handleSearch}
                         disabled={isSearching}

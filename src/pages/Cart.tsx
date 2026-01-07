@@ -2,10 +2,11 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import Header from "@/components/Header";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag } from "lucide-react";
+import { Trash2, ShoppingBag, Plus, Minus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 
@@ -47,6 +48,16 @@ const Cart = () => {
   const loadCart = () => {
     const cart = JSON.parse(localStorage.getItem("cart") || "[]");
     setCartItems(cart);
+  };
+
+  const updateQuantity = (itemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    
+    const updatedCart = cartItems.map((item) =>
+      item.id === itemId ? { ...item, quantity: newQuantity } : item
+    );
+    localStorage.setItem("cart", JSON.stringify(updatedCart));
+    setCartItems(updatedCart);
   };
 
   const removeItem = (itemId: string) => {
@@ -129,11 +140,46 @@ const Cart = () => {
                         <p><span className="font-medium">Posologia:</span> {item.frequency}</p>
                         <p><span className="font-medium">Duração:</span> {item.duration}</p>
                       </div>
+                      <div className="flex items-center gap-2 mt-3">
+                        <span className="text-sm text-muted-foreground">Quantidade:</span>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          >
+                            <Minus className="h-3 w-3" />
+                          </Button>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                            className="w-16 h-7 text-center"
+                          />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          >
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                     <div className="text-right space-y-2">
-                      <p className="text-2xl font-heading font-bold text-primary">
-                        R$ {(item.price * item.quantity).toFixed(2)}
-                      </p>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Preço unitário</p>
+                        <p className="text-sm">R$ {item.price.toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Total</p>
+                        <p className="text-2xl font-heading font-bold text-primary">
+                          R$ {(item.price * item.quantity).toFixed(2)}
+                        </p>
+                      </div>
                       <Button
                         variant="destructive"
                         size="sm"

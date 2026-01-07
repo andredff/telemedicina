@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Arquivos temporários
+*.cjs
+analyze-implementation.cjs
+test-all-pages.js
