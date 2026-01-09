@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,54 +6,66 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 220 15% 25%;
+    /* Cores do Briefing Novità */
+    /* Primária: #EDAF00 = hsl(44, 100%, 46%) */
+    /* Secundária: #CC9B00 = hsl(46, 100%, 40%) */
+    /* Texto: #4B4B4B = hsl(0, 0%, 29%) */
+    /* Link: #A67705 = hsl(43, 93%, 34%) */
+    /* Destaque: #CAB772 = hsl(49, 44%, 62%) */
+    /* Cinza: #B1B1B1 = hsl(0, 0%, 69%) */
+    /* Fundo claro: #F9F9F9 = hsl(0, 0%, 98%) */
+    /* Branco: #FFFFFF */
+
+    --background: 0 0% 98%;
+    --foreground: 0 0% 29%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 25%;
+    --card-foreground: 0 0% 29%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 25%;
+    --popover-foreground: 0 0% 29%;
 
-    --primary: 43 96% 56%;
-    --primary-foreground: 220 15% 20%;
+    --primary: 44 100% 46%;
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 45 30% 96%;
-    --secondary-foreground: 220 15% 25%;
+    --secondary: 46 100% 40%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 45 20% 96%;
-    --muted-foreground: 220 10% 46%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
 
-    --accent: 43 96% 56%;
-    --accent-foreground: 220 15% 20%;
+    --accent: 49 44% 62%;
+    --accent-foreground: 0 0% 29%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 45 20% 90%;
-    --input: 45 20% 90%;
-    --ring: 43 96% 56%;
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 44 100% 46%;
 
     --radius: 0.5rem;
 
-    /* Custom Novità Colors */
-    --novita-gold: 43 96% 56%;
-    --novita-gold-light: 45 100% 95%;
-    --novita-gold-dark: 40 90% 45%;
-    --novita-gray: 220 15% 25%;
-    --novita-gray-light: 220 10% 60%;
-    --novita-warm-white: 45 30% 98%;
-    
+    /* Custom Novità Colors - Briefing */
+    --novita-primary: 44 100% 46%;        /* #EDAF00 */
+    --novita-secondary: 46 100% 40%;      /* #CC9B00 */
+    --novita-text: 0 0% 29%;              /* #4B4B4B */
+    --novita-link: 43 93% 34%;            /* #A67705 */
+    --novita-highlight: 49 44% 62%;       /* #CAB772 */
+    --novita-gray: 0 0% 69%;              /* #B1B1B1 */
+    --novita-bg-light: 0 0% 98%;          /* #F9F9F9 */
+    --novita-white: 0 0% 100%;            /* #FFFFFF */
+
     /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(43 96% 56%), hsl(40 90% 45%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(45 30% 98%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(43 96% 56%), hsl(45 100% 65%));
-    
+    --gradient-hero: linear-gradient(135deg, hsl(44 100% 46%), hsl(46 100% 40%));
+    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
+    --gradient-accent: linear-gradient(135deg, hsl(44 100% 46%), hsl(49 44% 62%));
+
     /* Shadows */
-    --shadow-soft: 0 2px 8px hsl(220 15% 25% / 0.06);
-    --shadow-card: 0 4px 20px hsl(220 15% 25% / 0.08);
-    --shadow-elevated: 0 12px 40px hsl(220 15% 25% / 0.12);
-    --shadow-glow: 0 0 40px hsl(43 96% 56% / 0.3);
+    --shadow-soft: 0 2px 8px hsl(0 0% 29% / 0.06);
+    --shadow-card: 0 4px 20px hsl(0 0% 29% / 0.08);
+    --shadow-elevated: 0 12px 40px hsl(0 0% 29% / 0.12);
+    --shadow-glow: 0 0 40px hsl(44 100% 46% / 0.3);
   }
 
   .dark {
@@ -66,16 +78,16 @@
     --popover: 220 20% 14%;
     --popover-foreground: 45 30% 95%;
 
-    --primary: 43 96% 56%;
+    --primary: 44 100% 46%;
     --primary-foreground: 220 15% 15%;
 
-    --secondary: 220 20% 18%;
+    --secondary: 46 100% 40%;
     --secondary-foreground: 45 30% 95%;
 
     --muted: 220 20% 18%;
     --muted-foreground: 220 10% 60%;
 
-    --accent: 43 96% 56%;
+    --accent: 49 44% 62%;
     --accent-foreground: 220 15% 15%;
 
     --destructive: 0 63% 31%;
@@ -83,7 +95,7 @@
 
     --border: 220 20% 20%;
     --input: 220 20% 20%;
-    --ring: 43 96% 56%;
+    --ring: 44 100% 46%;
   }
 }
 
@@ -94,11 +106,35 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Inter', sans-serif;
+    font-family: 'Poppins', sans-serif;
+    font-size: 14px;
+    font-weight: 400;
   }
-  
+
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-family: 'Roboto', sans-serif;
+    font-weight: 800;
+  }
+
+  h1 {
+    font-size: 35px;
+  }
+
+  h2 {
+    font-size: 26px;
+  }
+
+  h3 {
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  a {
+    color: hsl(var(--novita-link));
+  }
+
+  a:hover {
+    color: hsl(var(--novita-primary));
   }
 }
 

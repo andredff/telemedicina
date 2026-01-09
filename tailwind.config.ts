@@ -14,8 +14,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'sans-serif'],
-        heading: ['Plus Jakarta Sans', 'sans-serif'],
+        sans: ['Poppins', 'sans-serif'],
+        heading: ['Roboto', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -52,12 +52,14 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         novita: {
-          gold: "hsl(var(--novita-gold))",
-          goldLight: "hsl(var(--novita-gold-light))",
-          goldDark: "hsl(var(--novita-gold-dark))",
+          primary: "hsl(var(--novita-primary))",
+          secondary: "hsl(var(--novita-secondary))",
+          text: "hsl(var(--novita-text))",
+          link: "hsl(var(--novita-link))",
+          highlight: "hsl(var(--novita-highlight))",
           gray: "hsl(var(--novita-gray))",
-          grayLight: "hsl(var(--novita-gray-light))",
-          warmWhite: "hsl(var(--novita-warm-white))",
+          bgLight: "hsl(var(--novita-bg-light))",
+          white: "hsl(var(--novita-white))",
         },
       },
       borderRadius: {

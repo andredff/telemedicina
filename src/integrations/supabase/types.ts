@@ -336,8 +336,11 @@ export type Database = {
         | "bronze"
         | "prata"
         | "ouro"
-        | "platina"
-        | "coletivo"
+        | "diamante"
+        | "bronze-coletivo"
+        | "prata-coletivo"
+        | "ouro-coletivo"
+        | "diamante-coletivo"
       subscription_status: "active" | "inactive" | "cancelled" | "pending"
     }
     CompositeTypes: {
