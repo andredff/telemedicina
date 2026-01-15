@@ -19,6 +19,7 @@ import BlogPost from "./pages/BlogPost";
 import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
 import CheckoutMedication from "./pages/CheckoutMedication";
+import Telemedicine from "./pages/Telemedicine";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -56,6 +57,7 @@ const App = () => (
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
+          <Route path="/telemedicina" element={<Telemedicine />} />
           <Route path="/test-supabase" element={<TestSupabase />} />
 
           {/* Admin Routes */}
