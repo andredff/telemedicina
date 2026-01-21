@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,15 @@ const Prescriptions = () => {
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
 
+  // Memoize search params to prevent recreating the object on every render
+  const searchParams = useMemo(() => ({
+    query: searchTerm,
+    status: statusFilter,
+    dateFrom: dateFrom ? format(dateFrom, "yyyy-MM-dd") : undefined,
+    dateTo: dateTo ? format(dateTo, "yyyy-MM-dd") : undefined,
+    pageSize: 6,
+  }), [searchTerm, statusFilter, dateFrom, dateTo]);
+
   const {
     searchResults,
     loading,
@@ -38,19 +47,18 @@ const Prescriptions = () => {
     updateSearchParams,
     getSuggestions,
     goToPage,
-  } = usePrescriptionSearch({
-    query: searchTerm,
-    status: statusFilter,
-    dateFrom: dateFrom ? format(dateFrom, "yyyy-MM-dd") : undefined,
-    dateTo: dateTo ? format(dateTo, "yyyy-MM-dd") : undefined,
-    pageSize: 6,
-  });
+  } = usePrescriptionSearch(searchParams);
 
+  // Debounced suggestions - only call when searchTerm changes
   useEffect(() => {
     if (searchTerm.length > 0) {
-      getSuggestions(searchTerm);
+      const timer = setTimeout(() => {
+        getSuggestions(searchTerm);
+      }, 300);
+      
+      return () => clearTimeout(timer);
     }
-  }, [searchTerm, getSuggestions]);
+  }, [searchTerm]);
 
   useEffect(() => {
     if (error) {

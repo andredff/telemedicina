@@ -17,7 +17,8 @@ import {
   LogOut,
   ShoppingCart,
   Settings,
-  Package
+  Package,
+  Crown
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -38,7 +39,18 @@ interface Prescription {
   doctor_name: string;
   date: string;
   status: string;
-  medications: Medication[];
+  medications?: Medication[];
+}
+
+interface UserSubscription {
+  id: string;
+  status: string;
+  expires_at: string | null;
+  plan: {
+    name: string;
+    type: string;
+    description: string;
+  } | null;
 }
 
 const Dashboard = () => {
@@ -48,6 +60,7 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<{ full_name: string; email: string } | null>(null);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
+  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -91,6 +104,44 @@ const Dashboard = () => {
     }
   };
 
+  const fetchSubscription = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("user_subscriptions")
+        .select(`
+          id,
+          status,
+          expires_at,
+          plan:subscription_plans (
+            name,
+            type,
+            description
+          )
+        `)
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (error) {
+        logger.error("Error fetching subscription:", error);
+        return;
+      }
+
+      if (data) {
+        // Handle the nested plan object
+        const subscriptionData: UserSubscription = {
+          id: data.id,
+          status: data.status,
+          expires_at: data.expires_at,
+          plan: Array.isArray(data.plan) ? data.plan[0] : data.plan
+        };
+        setSubscription(subscriptionData);
+      }
+    } catch (error) {
+      logger.error("Error fetching subscription:", error);
+    }
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -102,6 +153,7 @@ const Dashboard = () => {
         } else if (session.user) {
           fetchProfile(session.user.id);
           fetchPrescriptions(session.user.id);
+          fetchSubscription(session.user.id);
         }
       }
     );
@@ -115,6 +167,7 @@ const Dashboard = () => {
       } else if (session.user) {
         fetchProfile(session.user.id);
         fetchPrescriptions(session.user.id);
+        fetchSubscription(session.user.id);
       }
       setLoading(false);
     });
@@ -156,6 +209,18 @@ const Dashboard = () => {
   }
 
   const userName = profile?.full_name || user?.user_metadata?.full_name || "Paciente";
+
+  // Helper para formatar data de expiração
+  const formatExpirationDate = (dateStr: string | null) => {
+    if (!dateStr) return "Sem data definida";
+    return new Date(dateStr).toLocaleDateString("pt-BR");
+  };
+
+  // Helper para obter descrição do plano
+  const getPlanDescription = () => {
+    if (!subscription?.plan) return "Você ainda não possui um plano ativo";
+    return subscription.plan.description || "Consultas ilimitadas com clínico geral";
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -250,24 +315,54 @@ const Dashboard = () => {
         </div>
 
         {/* Subscription Card */}
-        <Card className="mb-8 gradient-hero border-0 text-primary-foreground">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-              <div>
-                <p className="text-sm text-primary-foreground/80">Seu plano atual</p>
-                <h3 className="text-2xl font-heading font-bold">Plano Bronze</h3>
-                <p className="text-sm text-primary-foreground/80 mt-1">
-                  Consultas ilimitadas com clínico geral • Válido até 15/01/2025
-                </p>
+        {subscription?.plan ? (
+          <Card className="mb-8 gradient-hero border-0 text-primary-foreground">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div>
+                  <p className="text-sm text-primary-foreground/80">Seu plano atual</p>
+                  <h3 className="text-2xl font-heading font-bold">Plano {subscription.plan.name}</h3>
+                  <p className="text-sm text-primary-foreground/80 mt-1">
+                    {getPlanDescription()} • Válido até {formatExpirationDate(subscription.expires_at)}
+                  </p>
+                </div>
+                <div className="flex gap-3">
+                  <Button 
+                    variant="secondary" 
+                    className="bg-card text-foreground hover:bg-card/90"
+                    onClick={() => navigate("/planos")}
+                  >
+                    Fazer upgrade
+                  </Button>
+                </div>
               </div>
-              <div className="flex gap-3">
-                <Button variant="secondary" className="bg-card text-foreground hover:bg-card/90">
-                  Fazer upgrade
+            </CardContent>
+          </Card>
+        ) : (
+          <Card className="mb-8 border-dashed border-2 border-primary/30 bg-primary/5">
+            <CardContent className="p-6">
+              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
+                    <Crown className="h-6 w-6 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-heading font-bold text-foreground">Você ainda não tem um plano</h3>
+                    <p className="text-sm text-muted-foreground">
+                      Assine agora e tenha acesso à telemedicina e muito mais!
+                    </p>
+                  </div>
+                </div>
+                <Button 
+                  className="gradient-hero"
+                  onClick={() => navigate("/planos")}
+                >
+                  Ver planos
                 </Button>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Prescriptions */}
         <div className="mb-8">

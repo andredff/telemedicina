@@ -1,12 +1,29 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Heart, Phone } from "lucide-react";
+import { Menu, X, Heart, Phone, User, LogOut } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const PublicHeader = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Verifica se o usuário está autenticado
+  useEffect(() => {
+    // Checa sessão inicial
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+
+    // Escuta mudanças na autenticação
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   const navLinks = [
     { href: "/", label: "Início" },
@@ -17,6 +34,12 @@ const PublicHeader = () => {
   ];
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/");
+    setIsMenuOpen(false);
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
@@ -63,15 +86,39 @@ const PublicHeader = () => {
               <Phone className="h-4 w-4" />
               <span>(61) 3333-3333</span>
             </a>
-            <Button variant="ghost" onClick={() => navigate("/auth")}>
-              Entrar
-            </Button>
-            <Button 
-              className="gradient-hero text-primary-foreground shadow-glow hover:shadow-elevated transition-all"
-              onClick={() => navigate("/planos")}
-            >
-              Assine Agora
-            </Button>
+            
+            {isAuthenticated ? (
+              <>
+                <Button 
+                  variant="ghost" 
+                  onClick={() => navigate("/dashboard")}
+                  className="gap-2"
+                >
+                  <User className="h-4 w-4" />
+                  Minha Conta
+                </Button>
+                <Button 
+                  variant="outline"
+                  onClick={handleLogout}
+                  className="gap-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                  Sair
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={() => navigate("/auth")}>
+                  Entrar
+                </Button>
+                <Button 
+                  className="gradient-hero text-primary-foreground shadow-glow hover:shadow-elevated transition-all"
+                  onClick={() => navigate("/planos")}
+                >
+                  Assine Agora
+                </Button>
+              </>
+            )}
           </div>
 
           {/* Mobile Menu Button */}
@@ -107,16 +154,53 @@ const PublicHeader = () => {
                 </Link>
               ))}
             </nav>
+            
             <div className="flex flex-col gap-3 px-4 pt-4 border-t border-border/50">
-              <Button variant="outline" className="w-full" onClick={() => navigate("/auth")}>
-                Entrar
-              </Button>
-              <Button 
-                className="w-full gradient-hero text-primary-foreground"
-                onClick={() => navigate("/planos")}
-              >
-                Assine Agora
-              </Button>
+              {isAuthenticated ? (
+                <>
+                  <Button 
+                    variant="outline" 
+                    className="w-full gap-2" 
+                    onClick={() => {
+                      navigate("/dashboard");
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    <User className="h-4 w-4" />
+                    Minha Conta
+                  </Button>
+                  <Button 
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handleLogout}
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Sair
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <Button 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={() => {
+                      navigate("/auth");
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    Entrar
+                  </Button>
+                  <Button 
+                    className="w-full gradient-hero text-primary-foreground"
+                    onClick={() => {
+                      navigate("/planos");
+                      setIsMenuOpen(false);
+                    }}
+                  >
+                    Assine Agora
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         )}

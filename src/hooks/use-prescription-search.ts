@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SearchClient, type PrescriptionSearchParams, type PrescriptionSearchResults, type PrescriptionWithMedications } from '@/integrations/supabase/searchClient';
 import { MockSearchClient } from '@/mock-search-client';
 
@@ -66,9 +66,9 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [searchParams, debounceTimer]);
+  }, [searchParams]);
 
-  const getSuggestions = async (query: string) => {
+  const getSuggestions = useCallback(async (query: string) => {
     if (query.length < 2) {
       setSuggestions([]);
       return;
@@ -96,7 +96,7 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
         setSuggestions([]);
       }
     }
-  };
+  }, []);
 
   const updateSearchParams = (newParams: Partial<PrescriptionSearchParams>) => {
     setSearchParams(prev => ({ ...prev, ...newParams, page: 1 }));

@@ -60,14 +60,15 @@ export async function checkSubscriptionStatus(
         subscription_plans (
           name,
           type,
-          consultations_per_month
+          specialist_consultations_per_year
         )
       `)
       .eq("user_id", userId)
       .eq("status", "active")
-      .single();
+      .maybeSingle();
 
     if (error || !subscription) {
+      console.log("[Telemedicine] Nenhuma assinatura encontrada para o usuário:", userId);
       return {
         isActive: false,
         planType: null,
@@ -77,15 +78,30 @@ export async function checkSubscriptionStatus(
     }
 
     // Verifica se a assinatura está dentro do período de vigência
+    // Usa expires_at (campo correto da tabela)
     const now = new Date();
-    const endDate = subscription.end_date ? new Date(subscription.end_date) : null;
+    const endDate = subscription.expires_at ? new Date(subscription.expires_at) : null;
     const isWithinPeriod = !endDate || endDate > now;
+
+    // Acessa os dados do plano de forma segura
+    const planData = subscription.subscription_plans as { 
+      name: string; 
+      type: string; 
+      specialist_consultations_per_year: number | null 
+    } | null;
+
+    console.log("[Telemedicine] Assinatura encontrada:", {
+      status: subscription.status,
+      expires_at: subscription.expires_at,
+      isWithinPeriod,
+      planType: planData?.type
+    });
 
     return {
       isActive: isWithinPeriod,
-      planType: subscription.subscription_plans?.type || null,
-      expiresAt: subscription.end_date,
-      consultationsRemaining: subscription.subscription_plans?.consultations_per_month || null,
+      planType: planData?.type || null,
+      expiresAt: subscription.expires_at,
+      consultationsRemaining: planData?.specialist_consultations_per_year || null,
     };
   } catch (error) {
     console.error("[Telemedicine] Erro ao verificar assinatura:", error);

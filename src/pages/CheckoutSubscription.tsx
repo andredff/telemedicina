@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { ArrowLeft, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,59 @@ const CheckoutSubscription = () => {
   const [plan, setPlan] = useState<Plan | null>(null);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
 
+  const fetchProfile = useCallback(async (userId: string) => {
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, email")
+        .eq("id", userId)
+        .maybeSingle();
+
+      if (data) {
+        // Get CPF from user metadata
+        const userData = await supabase.auth.getUser();
+        const cpf = userData.data.user?.user_metadata?.cpf;
+        setProfile({ ...data, cpf });
+      }
+    } catch (error) {
+      console.error("Error fetching profile:", error);
+    }
+  }, []);
+
+  const fetchPlan = useCallback(async () => {
+    if (!planType) {
+      navigate("/planos");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("subscription_plans")
+        .select("*")
+        .eq("type", planType as "bronze" | "prata" | "ouro" | "diamante" | "bronze-coletivo" | "prata-coletivo" | "ouro-coletivo" | "diamante-coletivo")
+        .single();
+
+      if (error || !data) {
+        navigate("/planos");
+        return;
+      }
+
+      const formattedPlan = {
+        ...data,
+        features: Array.isArray(data.features)
+          ? data.features
+          : JSON.parse(data.features as string || "[]"),
+      };
+
+      setPlan(formattedPlan);
+    } catch (error) {
+      console.error("Error fetching plan:", error);
+      navigate("/planos");
+    } finally {
+      setLoading(false);
+    }
+  }, [planType, navigate]);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -56,60 +109,7 @@ const CheckoutSubscription = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, planType]);
-
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, email")
-        .eq("id", userId)
-        .maybeSingle();
-
-      if (data) {
-        // Get CPF from user metadata
-        const userData = await supabase.auth.getUser();
-        const cpf = userData.data.user?.user_metadata?.cpf;
-        setProfile({ ...data, cpf });
-      }
-    } catch (error) {
-      console.error("Error fetching profile:", error);
-    }
-  };
-
-  const fetchPlan = async () => {
-    if (!planType) {
-      navigate("/planos");
-      return;
-    }
-
-    try {
-      const { data, error } = await supabase
-        .from("subscription_plans")
-        .select("*")
-        .eq("type", planType)
-        .single();
-
-      if (error || !data) {
-        navigate("/planos");
-        return;
-      }
-
-      const formattedPlan = {
-        ...data,
-        features: Array.isArray(data.features)
-          ? data.features
-          : JSON.parse(data.features as string || "[]"),
-      };
-
-      setPlan(formattedPlan);
-    } catch (error) {
-      console.error("Error fetching plan:", error);
-      navigate("/planos");
-    } finally {
-      setLoading(false);
-    }
-  };
+  }, [navigate, planType, fetchProfile, fetchPlan]);
 
   const handleSuccess = async (recurrentPaymentId: string) => {
     // Salvar a assinatura no banco de dados
@@ -117,14 +117,50 @@ const CheckoutSubscription = () => {
       const expiresAt = new Date();
       expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-      await supabase.from("user_subscriptions").upsert({
-        user_id: user.id,
-        plan_id: plan.id,
-        status: "active",
-        started_at: new Date().toISOString(),
-        expires_at: expiresAt.toISOString(),
-        billing_cycle: "monthly",
-      });
+      // Primeiro, verificar se já existe uma assinatura ativa para o usuário
+      const { data: existingSubscription } = await supabase
+        .from("user_subscriptions")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (existingSubscription) {
+        // Atualizar a assinatura existente (upgrade/downgrade)
+        const { error } = await supabase
+          .from("user_subscriptions")
+          .update({
+            plan_id: plan.id,
+            started_at: new Date().toISOString(),
+            expires_at: expiresAt.toISOString(),
+            billing_cycle: "monthly",
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingSubscription.id);
+
+        if (error) {
+          console.error("Error updating subscription:", error);
+        }
+      } else {
+        // Criar nova assinatura
+        const { error } = await supabase
+          .from("user_subscriptions")
+          .insert({
+            user_id: user.id,
+            plan_id: plan.id,
+            status: "active",
+            started_at: new Date().toISOString(),
+            expires_at: expiresAt.toISOString(),
+            billing_cycle: "monthly",
+          });
+
+        if (error) {
+          console.error("Error creating subscription:", error);
+        }
+      }
+
+      // Redirecionar para o dashboard após sucesso
+      navigate("/dashboard");
     }
   };
 
