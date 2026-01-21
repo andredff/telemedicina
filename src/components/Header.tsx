@@ -73,12 +73,12 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                     <User className="mr-2 h-4 w-4" />
                     Meu Perfil
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => navigate("/plans")}>
+                  <DropdownMenuItem onClick={() => navigate("/planos")}>
                     <CreditCard className="mr-2 h-4 w-4" />
                     Meu Plano
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => navigate("/how-it-works")}>
+                  <DropdownMenuItem onClick={() => navigate("/como-funciona")}>
                     <HelpCircle className="mr-2 h-4 w-4" />
                     Ajuda
                   </DropdownMenuItem>

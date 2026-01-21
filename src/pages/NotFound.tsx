@@ -70,21 +70,21 @@ const NotFound = () => {
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => navigate("/medications")}
+                onClick={() => navigate("/medicamentos")}
               >
                 Medicamentos
               </Button>
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => navigate("/plans")}
+                onClick={() => navigate("/planos")}
               >
                 Planos
               </Button>
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => navigate("/how-it-works")}
+                onClick={() => navigate("/como-funciona")}
               >
                 Como Funciona
               </Button>

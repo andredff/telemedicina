@@ -4,7 +4,7 @@ import Footer from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, ArrowLeft, Clock, User, Share2 } from "lucide-react";
+import { Calendar, ArrowLeft, ArrowRight, Clock, User, Share2 } from "lucide-react";
 
 const BlogPost = () => {
   const { id } = useParams<{ id: string }>();

@@ -31,6 +31,9 @@ import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminSupport from "./pages/admin/Support";
 import TestSupabase from "./pages/TestSupabase";
+import Terms from "./pages/Terms";
+import Privacy from "./pages/Privacy";
+import Cancellation from "./pages/Cancellation";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +61,9 @@ const App = () => (
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="/telemedicina" element={<Telemedicine />} />
+          <Route path="/termos" element={<Terms />} />
+          <Route path="/privacidade" element={<Privacy />} />
+          <Route path="/cancelamento" element={<Cancellation />} />
           <Route path="/test-supabase" element={<TestSupabase />} />
 
           {/* Admin Routes */}
