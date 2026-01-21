@@ -1,22 +1,28 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import {
+  sendOrderStatusNotification,
+  sendLogisticsServiceOrder,
+  getOrderNotificationHistory,
+  type OrderStatus
+} from '@/services/notificationService';
 import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import {
   Card,
@@ -24,18 +30,49 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Package, Truck, CheckCircle2, Clock, XCircle, Eye } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Search,
+  Package,
+  Truck,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  Eye,
+  Bell,
+  Mail,
+  History
+} from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 
 interface Order {
   id: string;
   customer: string;
   customer_email?: string;
+  customer_phone?: string;
+  delivery_address?: string;
   date: string;
   status: string;
   total: number;
   items: number;
   prescription_id?: string;
+  tracking_code?: string;
+}
+
+interface NotificationHistory {
+  id: string;
+  status: string;
+  sentAt: string;
+  subject: string;
 }
 
 export default function AdminOrders() {
@@ -43,6 +80,13 @@ export default function AdminOrders() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [showDetailsDialog, setShowDetailsDialog] = useState(false);
+  const [showNotificationDialog, setShowNotificationDialog] = useState(false);
+  const [trackingCode, setTrackingCode] = useState('');
+  const [estimatedDelivery, setEstimatedDelivery] = useState('');
+  const [notificationHistory, setNotificationHistory] = useState<NotificationHistory[]>([]);
+  const [sendingNotification, setSendingNotification] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -52,21 +96,23 @@ export default function AdminOrders() {
     try {
       setLoading(true);
       const { data, error } = await AdminQueries.getAllOrders();
-      
+
       if (error) throw error;
-      
-      // Mock data already has all fields, just ensure proper typing
+
       const formattedOrders = (data || []).map((order: Record<string, unknown>) => ({
         id: order.id as string,
         customer: (order.customer as string) || 'Cliente Desconhecido',
-        customer_email: order.customer_email as string,
+        customer_email: (order.customer_email as string) || 'email@exemplo.com',
+        customer_phone: (order.customer_phone as string) || '',
+        delivery_address: (order.delivery_address as string) || '',
         date: (order.date as string) || (order.created_at as string),
         status: (order.status as string) || 'pending',
         total: (order.total as number) || 0,
-        items: order.items || order.quantity || 1,
-        prescription_id: order.prescription_id
+        items: (order.items as number) || (order.quantity as number) || 1,
+        prescription_id: order.prescription_id as string,
+        tracking_code: order.tracking_code as string,
       }));
-      
+
       setOrders(formattedOrders);
       setLoading(false);
     } catch (error) {
@@ -81,9 +127,9 @@ export default function AdminOrders() {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (order.customer_email && order.customer_email.toLowerCase().includes(searchTerm.toLowerCase()));
+    const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      order.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (order.customer_email && order.customer_email.toLowerCase().includes(searchTerm.toLowerCase()));
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -96,10 +142,10 @@ export default function AdminOrders() {
       delivered: { text: 'Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
       cancelled: { text: 'Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
     };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || 
-                   statusConfig.pending;
-    
+
+    const config = statusConfig[status as keyof typeof statusConfig] ||
+      statusConfig.pending;
+
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
         {config.icon}
@@ -110,15 +156,42 @@ export default function AdminOrders() {
 
   const handleStatusChange = async (orderId: string, newStatus: string) => {
     try {
-      // In a real app, this would update the order status in the database
-      // For now, we'll just update locally
-      setOrders(orders.map(order => 
-        order.id === orderId ? { ...order, status: newStatus } : order
+      const order = orders.find(o => o.id === orderId);
+      if (!order) return;
+
+      // Atualiza status localmente
+      setOrders(orders.map(o =>
+        o.id === orderId ? { ...o, status: newStatus } : o
       ));
-      
+
+      // Envia notificação por e-mail
+      const notificationResult = await sendOrderStatusNotification({
+        orderId,
+        customerEmail: order.customer_email || 'email@exemplo.com',
+        customerName: order.customer,
+        status: newStatus as OrderStatus,
+        trackingCode: order.tracking_code,
+      });
+
+      // Se o pedido está sendo processado, cria ordem de serviço para logística
+      if (newStatus === 'processing') {
+        await sendLogisticsServiceOrder(
+          orderId,
+          {
+            name: order.customer,
+            email: order.customer_email || '',
+            phone: order.customer_phone || '',
+            address: order.delivery_address || 'Endereço não informado',
+          },
+          [{ name: 'Medicamentos', quantity: order.items }]
+        );
+      }
+
       toast({
-        title: 'Sucesso',
-        description: 'Status do pedido atualizado'
+        title: 'Status atualizado',
+        description: notificationResult.success
+          ? `Status alterado e notificação enviada para ${order.customer_email}`
+          : 'Status alterado (notificação não enviada)',
       });
     } catch (error) {
       logger.error('Error updating order status:', error);
@@ -130,11 +203,73 @@ export default function AdminOrders() {
     }
   };
 
+  const handleViewDetails = async (order: Order) => {
+    setSelectedOrder(order);
+    setShowDetailsDialog(true);
+
+    // Busca histórico de notificações
+    const history = await getOrderNotificationHistory(order.id);
+    setNotificationHistory(history);
+  };
+
+  const handleSendNotification = async () => {
+    if (!selectedOrder) return;
+
+    setSendingNotification(true);
+
+    try {
+      const result = await sendOrderStatusNotification({
+        orderId: selectedOrder.id,
+        customerEmail: selectedOrder.customer_email || 'email@exemplo.com',
+        customerName: selectedOrder.customer,
+        status: selectedOrder.status as OrderStatus,
+        trackingCode: trackingCode || selectedOrder.tracking_code,
+        estimatedDelivery: estimatedDelivery,
+      });
+
+      if (result.success) {
+        toast({
+          title: 'Notificação enviada',
+          description: `E-mail enviado para ${selectedOrder.customer_email}`,
+        });
+
+        // Atualiza histórico
+        const history = await getOrderNotificationHistory(selectedOrder.id);
+        setNotificationHistory(history);
+
+        // Atualiza tracking code no pedido se informado
+        if (trackingCode) {
+          setOrders(orders.map(o =>
+            o.id === selectedOrder.id ? { ...o, tracking_code: trackingCode } : o
+          ));
+        }
+      } else {
+        toast({
+          title: 'Erro',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      logger.error('Error sending notification:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao enviar notificação',
+        variant: 'destructive',
+      });
+    } finally {
+      setSendingNotification(false);
+      setShowNotificationDialog(false);
+      setTrackingCode('');
+      setEstimatedDelivery('');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Gerenciamento de Pedidos</h1>
-        <p className="text-gray-600">Gerencie todos os pedidos de medicamentos</p>
+        <p className="text-gray-600">Gerencie todos os pedidos de medicamentos e notifique clientes</p>
       </div>
 
       {/* Controls */}
@@ -148,7 +283,7 @@ export default function AdminOrders() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[200px]">
             <SelectValue placeholder="Filtrar por status" />
@@ -235,7 +370,12 @@ export default function AdminOrders() {
                           <SelectItem value="cancelled">Cancelado</SelectItem>
                         </SelectContent>
                       </Select>
-                      <Button variant="outline" size="sm">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleViewDetails(order)}
+                        title="Ver detalhes"
+                      >
                         <Eye className="h-4 w-4" />
                       </Button>
                     </div>
@@ -247,9 +387,9 @@ export default function AdminOrders() {
         </Table>
       </div>
 
-      {/* Summary */}
+      {/* Summary Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card className="flex-1 min-w-[200px]">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Pedidos</CardTitle>
             <Package className="h-4 w-4 text-muted-foreground" />
@@ -258,46 +398,200 @@ export default function AdminOrders() {
             <div className="text-2xl font-bold">{orders.length}</div>
           </CardContent>
         </Card>
-        
-        <Card className="flex-1 min-w-[200px]">
+
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
+            <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{orders.filter(o => o.status === 'pending').length}</div>
+            <div className="text-2xl font-bold text-yellow-600">
+              {orders.filter(o => o.status === 'pending').length}
+            </div>
           </CardContent>
         </Card>
-        
-        <Card className="flex-1 min-w-[200px]">
+
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Processando</CardTitle>
-            <Package className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Em Trânsito</CardTitle>
+            <Truck className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{orders.filter(o => o.status === 'processing').length}</div>
+            <div className="text-2xl font-bold text-purple-600">
+              {orders.filter(o => o.status === 'shipped').length}
+            </div>
           </CardContent>
         </Card>
-        
-        <Card className="flex-1 min-w-[200px]">
+
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Entregues</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{orders.filter(o => o.status === 'delivered').length}</div>
+            <div className="text-2xl font-bold text-green-600">
+              {orders.filter(o => o.status === 'delivered').length}
+            </div>
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
 
-// Helper Card component for the summary section
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`border rounded-lg p-4 ${className}`}>
-      {children}
+      {/* Order Details Dialog */}
+      <Dialog open={showDetailsDialog} onOpenChange={setShowDetailsDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Detalhes do Pedido #{selectedOrder?.id}</DialogTitle>
+            <DialogDescription>
+              Informações completas e histórico de notificações
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedOrder && (
+            <div className="space-y-4">
+              {/* Order Info */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-muted-foreground">Cliente</Label>
+                  <p className="font-medium">{selectedOrder.customer}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">E-mail</Label>
+                  <p className="font-medium">{selectedOrder.customer_email}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Status</Label>
+                  <div className="mt-1">{getStatusBadge(selectedOrder.status)}</div>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Data do Pedido</Label>
+                  <p className="font-medium">
+                    {new Date(selectedOrder.date).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+                {selectedOrder.tracking_code && (
+                  <div className="col-span-2">
+                    <Label className="text-muted-foreground">Código de Rastreio</Label>
+                    <p className="font-mono font-medium">{selectedOrder.tracking_code}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Notification History */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <Label className="flex items-center gap-2">
+                    <History className="h-4 w-4" />
+                    Histórico de Notificações
+                  </Label>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowNotificationDialog(true)}
+                  >
+                    <Bell className="h-4 w-4 mr-2" />
+                    Enviar Notificação
+                  </Button>
+                </div>
+
+                {notificationHistory.length > 0 ? (
+                  <div className="border rounded-lg divide-y">
+                    {notificationHistory.map((notification) => (
+                      <div key={notification.id} className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-medium">{notification.subject}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(notification.sentAt).toLocaleString('pt-BR')}
+                          </p>
+                        </div>
+                        <Badge variant="secondary">{notification.status}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg">
+                    Nenhuma notificação enviada ainda
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Send Notification Dialog */}
+      <Dialog open={showNotificationDialog} onOpenChange={setShowNotificationDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Notificação</DialogTitle>
+            <DialogDescription>
+              Envie uma atualização por e-mail para o cliente
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label>Destinatário</Label>
+              <p className="text-sm text-muted-foreground">
+                {selectedOrder?.customer} ({selectedOrder?.customer_email})
+              </p>
+            </div>
+
+            <div>
+              <Label>Status Atual</Label>
+              <div className="mt-1">{selectedOrder && getStatusBadge(selectedOrder.status)}</div>
+            </div>
+
+            {selectedOrder?.status === 'shipped' && (
+              <>
+                <div>
+                  <Label htmlFor="tracking">Código de Rastreio</Label>
+                  <Input
+                    id="tracking"
+                    placeholder="Ex: BR123456789"
+                    value={trackingCode}
+                    onChange={(e) => setTrackingCode(e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="delivery">Previsão de Entrega</Label>
+                  <Input
+                    id="delivery"
+                    placeholder="Ex: 3 a 5 dias úteis"
+                    value={estimatedDelivery}
+                    onChange={(e) => setEstimatedDelivery(e.target.value)}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowNotificationDialog(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSendNotification} disabled={sendingNotification}>
+              {sendingNotification ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar Notificação
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
