@@ -1,27 +1,12 @@
--- Migration: Update subscription plans to match Novità Briefing v.1
--- Changes:
--- 1. Add 'diamante' to subscription_plan_type enum
--- 2. Update plan data to match briefing pricing and features
--- 3. Add coletivo plans (bronze-coletivo, prata-coletivo, ouro-coletivo, diamante-coletivo)
+-- Migration: Update plan data (Step 2 of 2)
+-- This runs after the enum values have been added
 
--- Add 'diamante' to the enum (PostgreSQL allows adding values)
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'diamante';
-
--- Add coletivo variants to the enum
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'bronze-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'prata-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'ouro-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'diamante-coletivo';
-
--- Remove UNIQUE constraint on type column to allow multiple plan variants
-ALTER TABLE public.subscription_plans DROP CONSTRAINT IF EXISTS subscription_plans_type_key;
-
--- Update existing Individual plans to match briefing
+-- Update existing plans
 UPDATE public.subscription_plans
 SET
   description = 'Consultas médicas ilimitadas',
   price_monthly = 29.90,
-  price_yearly = 322.92, -- 29.90 * 12 * 0.9 (10% discount)
+  price_yearly = 322.92,
   specialist_consultations_per_year = 0,
   includes_checkup = false,
   max_dependents = 0,
@@ -32,7 +17,7 @@ UPDATE public.subscription_plans
 SET
   description = 'Consulta garantida com especialista',
   price_monthly = 49.90,
-  price_yearly = 538.92, -- 49.90 * 12 * 0.9
+  price_yearly = 538.92,
   specialist_consultations_per_year = 1,
   includes_checkup = false,
   max_dependents = 0,
@@ -43,7 +28,7 @@ UPDATE public.subscription_plans
 SET
   description = 'Maiores cuidados em saúde',
   price_monthly = 79.90,
-  price_yearly = 862.92, -- 79.90 * 12 * 0.9
+  price_yearly = 862.92,
   specialist_consultations_per_year = 2,
   includes_checkup = true,
   max_dependents = 0,
@@ -57,7 +42,7 @@ SET
   type = 'diamante',
   description = 'Melhor e mais avançado controle da saúde',
   price_monthly = 99.90,
-  price_yearly = 1078.92, -- 99.90 * 12 * 0.9
+  price_yearly = 1078.92,
   specialist_consultations_per_year = 4,
   includes_checkup = true,
   max_dependents = 0,
