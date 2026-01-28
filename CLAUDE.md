@@ -51,7 +51,7 @@ Use `@/` to import from `src/` directory (configured in tsconfig.json and vite.c
 ### Database Schema (Supabase)
 Key tables: `profiles`, `prescriptions`, `medications`, `cart_items`, `subscription_plans`, `user_subscriptions`, `dependents`
 
-Subscription plan types: bronze, prata, ouro, platina, coletivo
+Subscription plan types: bronze, prata, ouro, platina, coletivo, diamante
 
 ## Cielo Payment Integration
 
