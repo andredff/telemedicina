@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useToast } from "@/hooks/use-toast";
 import {
   TelemedicineIframe,
   AccessBlockedModal,
@@ -40,6 +41,7 @@ interface UserProfile {
 
 const Telemedicine = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -52,6 +54,8 @@ const Telemedicine = () => {
     subscription,
     isSubscriptionLoading,
     canAccessTelemedicine,
+    accessDenialReason,
+    accessDenialMessage,
     specialties,
     isSpecialtiesLoading,
     consultations,
@@ -73,12 +77,23 @@ const Telemedicine = () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, cpf, email, phone, birth_date, gender")
+        .select("full_name, email")
         .eq("id", userId)
         .single();
 
       if (!error && data) {
-        setProfile(data as UserProfile);
+        // Buscar CPF e outros dados do user_metadata
+        const { data: userData } = await supabase.auth.getUser();
+        const metadata = userData.user?.user_metadata;
+
+        setProfile({
+          full_name: data.full_name,
+          email: data.email,
+          cpf: metadata?.cpf || "",
+          phone: metadata?.phone || "",
+          birth_date: metadata?.birth_date || "",
+          gender: metadata?.gender || "M",
+        });
       }
     } catch (error) {
       console.error("Erro ao buscar perfil:", error);
@@ -146,8 +161,12 @@ const Telemedicine = () => {
     );
 
     if (!result.success) {
-      // Mostrar erro via toast ou alert
-      console.error("Erro ao iniciar consulta:", result.error);
+      // Mostra mensagem de erro específica
+      toast({
+        title: "Não foi possível iniciar a consulta",
+        description: result.error || "Ocorreu um erro ao tentar iniciar a consulta.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -216,20 +235,29 @@ const Telemedicine = () => {
               {subscription?.consultationsRemaining
                 ? ` ${subscription.consultationsRemaining} consultas disponíveis`
                 : " Consultas ilimitadas"}
+              {subscription?.expiresAt && (
+                <> • Válido até {new Date(subscription.expiresAt).toLocaleDateString("pt-BR")}</>
+              )}
             </AlertDescription>
           </Alert>
         ) : (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Acesso Restrito</AlertTitle>
+            <AlertTitle>
+              {accessDenialReason === "expired" 
+                ? "Assinatura Expirada" 
+                : accessDenialReason === "inactive"
+                ? "Assinatura Inativa"
+                : "Acesso Restrito"}
+            </AlertTitle>
             <AlertDescription>
-              Você precisa de uma assinatura ativa para acessar a telemedicina.
+              {accessDenialMessage || "Você precisa de uma assinatura ativa para acessar a telemedicina."}
               <Button
                 variant="link"
                 className="p-0 h-auto ml-2"
                 onClick={() => navigate("/planos")}
               >
-                Ver planos
+                {accessDenialReason === "no_subscription" ? "Ver planos" : "Renovar assinatura"}
               </Button>
             </AlertDescription>
           </Alert>
@@ -441,7 +469,7 @@ const Telemedicine = () => {
       <AccessBlockedModal
         open={showBlockedModal}
         onOpenChange={setShowBlockedModal}
-        reason={subscription?.isActive === false ? "no_subscription" : "no_subscription"}
+        reason={(accessDenialReason === "inactive" ? "payment_pending" : accessDenialReason) || "no_subscription"}
       />
     </div>
   );

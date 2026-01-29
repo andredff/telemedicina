@@ -47,7 +47,7 @@ export interface StartConsultationResult {
 // ==========================================
 
 /**
- * Verifica se o usuário está adimplente (tem assinatura ativa)
+ * Verifica se o usuário está adimplente (tem assinatura ativa e dentro da validade)
  */
 export async function checkSubscriptionStatus(
   userId: string
@@ -78,10 +78,14 @@ export async function checkSubscriptionStatus(
     }
 
     // Verifica se a assinatura está dentro do período de vigência
-    // Usa expires_at (campo correto da tabela)
     const now = new Date();
-    const endDate = subscription.expires_at ? new Date(subscription.expires_at) : null;
-    const isWithinPeriod = !endDate || endDate > now;
+    const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
+    
+    // Considera inadimplente se:
+    // 1. Não tem data de expiração (inconsistência)
+    // 2. Data de expiração já passou
+    const isExpired = !expiresAt || expiresAt <= now;
+    const isWithinPeriod = !isExpired;
 
     // Acessa os dados do plano de forma segura
     const planData = subscription.subscription_plans as { 
@@ -90,15 +94,19 @@ export async function checkSubscriptionStatus(
       specialist_consultations_per_year: number | null 
     } | null;
 
-    console.log("[Telemedicine] Assinatura encontrada:", {
+    console.log("[Telemedicine] Status da assinatura:", {
+      userId,
       status: subscription.status,
       expires_at: subscription.expires_at,
+      isExpired,
       isWithinPeriod,
-      planType: planData?.type
+      planType: planData?.type,
+      now: now.toISOString(),
     });
 
+    // Retorna status de adimplência
     return {
-      isActive: isWithinPeriod,
+      isActive: isWithinPeriod && subscription.status === "active",
       planType: planData?.type || null,
       expiresAt: subscription.expires_at,
       consultationsRemaining: planData?.specialist_consultations_per_year || null,
@@ -112,6 +120,49 @@ export async function checkSubscriptionStatus(
       consultationsRemaining: null,
     };
   }
+}
+
+/**
+ * Verifica se o usuário pode acessar a telemedicina
+ * Retorna objeto com status detalhado para feedback ao usuário
+ */
+export async function canAccessTelemedicine(userId: string): Promise<{
+  canAccess: boolean;
+  reason?: "no_subscription" | "expired" | "inactive";
+  message?: string;
+  subscription?: SubscriptionStatus;
+}> {
+  const subscription = await checkSubscriptionStatus(userId);
+
+  if (!subscription.planType) {
+    return {
+      canAccess: false,
+      reason: "no_subscription",
+      message: "Você não possui uma assinatura ativa. Por favor, assine um plano para acessar a telemedicina.",
+      subscription,
+    };
+  }
+
+  if (!subscription.isActive) {
+    // Verifica se expirou ou está inativa
+    const now = new Date();
+    const expiresAt = subscription.expiresAt ? new Date(subscription.expiresAt) : null;
+    const isExpired = expiresAt && expiresAt <= now;
+
+    return {
+      canAccess: false,
+      reason: isExpired ? "expired" : "inactive",
+      message: isExpired
+        ? "Sua assinatura expirou. Por favor, regularize seu pagamento para continuar acessando a telemedicina."
+        : "Sua assinatura não está ativa. Entre em contato com o suporte para mais informações.",
+      subscription,
+    };
+  }
+
+  return {
+    canAccess: true,
+    subscription,
+  };
 }
 
 // ==========================================

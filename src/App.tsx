@@ -12,6 +12,7 @@ import Blog from "./pages/Blog";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import ProfileSettings from "./pages/ProfileSettings";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Prescriptions from "./pages/Prescriptions";
 import Orders from "./pages/Orders";
@@ -53,6 +54,7 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/perfil" element={<ProfileSettings />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/blog/:id" element={<BlogPost />} />

@@ -6,6 +6,7 @@ import { SubscriptionCheckout } from "@/components/checkout";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import type { CustomerData } from "@/services/paymentService";
+import { useToast } from "@/hooks/use-toast";
 
 interface Plan {
   id: string;
@@ -24,12 +25,14 @@ const CheckoutSubscription = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const planType = searchParams.get("plan");
+  const { toast } = useToast();
 
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [plan, setPlan] = useState<Plan | null>(null);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
+  const [currentSubscription, setCurrentSubscription] = useState<{ plan_id: string; plan_type: string } | null>(null);
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -47,6 +50,36 @@ const CheckoutSubscription = () => {
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
+    }
+  }, []);
+
+  const fetchCurrentSubscription = useCallback(async (userId: string) => {
+    try {
+      const { data: subscription } = await supabase
+        .from("user_subscriptions")
+        .select(`
+          id,
+          plan_id,
+          status,
+          subscription_plans (
+            type
+          )
+        `)
+        .eq("user_id", userId)
+        .eq("status", "active")
+        .maybeSingle();
+
+      if (subscription && subscription.subscription_plans) {
+        const plans = subscription.subscription_plans as { type: string } | { type: string }[];
+        const planType = Array.isArray(plans) ? plans[0]?.type : plans.type;
+        
+        setCurrentSubscription({
+          plan_id: subscription.plan_id,
+          plan_type: planType,
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching current subscription:", error);
     }
   }, []);
 
@@ -104,12 +137,25 @@ const CheckoutSubscription = () => {
         navigate(`/auth?plan=${planType}`);
       } else if (session.user) {
         fetchProfile(session.user.id);
+        fetchCurrentSubscription(session.user.id);
         fetchPlan();
       }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, planType, fetchProfile, fetchPlan]);
+  }, [navigate, planType, fetchProfile, fetchCurrentSubscription, fetchPlan]);
+
+  // Verificar se o usuário está tentando assinar o mesmo plano
+  useEffect(() => {
+    if (currentSubscription && plan && currentSubscription.plan_type === plan.type) {
+      toast({
+        title: "Plano já contratado",
+        description: `Você já possui o plano ${plan.name} ativo. Escolha outro plano para fazer upgrade ou downgrade.`,
+        variant: "destructive",
+      });
+      navigate("/planos");
+    }
+  }, [currentSubscription, plan, navigate, toast]);
 
   const handleSuccess = async (recurrentPaymentId: string) => {
     // Salvar a assinatura no banco de dados
@@ -117,15 +163,26 @@ const CheckoutSubscription = () => {
       const expiresAt = new Date();
       expiresAt.setMonth(expiresAt.getMonth() + 1);
 
-      // Primeiro, verificar se já existe uma assinatura ativa para o usuário
+      // Verificar se já existe uma assinatura ativa para o usuário
       const { data: existingSubscription } = await supabase
         .from("user_subscriptions")
-        .select("id")
+        .select("id, plan_id")
         .eq("user_id", user.id)
         .eq("status", "active")
         .maybeSingle();
 
       if (existingSubscription) {
+        // Verificar se não é o mesmo plano (validação adicional)
+        if (existingSubscription.plan_id === plan.id) {
+          toast({
+            title: "Erro",
+            description: "Você já possui este plano ativo.",
+            variant: "destructive",
+          });
+          navigate("/dashboard");
+          return;
+        }
+
         // Atualizar a assinatura existente (upgrade/downgrade)
         const { error } = await supabase
           .from("user_subscriptions")
@@ -140,7 +197,18 @@ const CheckoutSubscription = () => {
 
         if (error) {
           console.error("Error updating subscription:", error);
+          toast({
+            title: "Erro",
+            description: "Não foi possível atualizar sua assinatura.",
+            variant: "destructive",
+          });
+          return;
         }
+
+        toast({
+          title: "Plano atualizado!",
+          description: `Seu plano foi alterado para ${plan.name} com sucesso.`,
+        });
       } else {
         // Criar nova assinatura
         const { error } = await supabase
@@ -156,7 +224,18 @@ const CheckoutSubscription = () => {
 
         if (error) {
           console.error("Error creating subscription:", error);
+          toast({
+            title: "Erro",
+            description: "Não foi possível criar sua assinatura.",
+            variant: "destructive",
+          });
+          return;
         }
+
+        toast({
+          title: "Assinatura ativada!",
+          description: `Bem-vindo ao plano ${plan.name}!`,
+        });
       }
 
       // Redirecionar para o dashboard após sucesso

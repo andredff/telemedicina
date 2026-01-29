@@ -1,29 +1,5 @@
--- =================================================================
--- MIGRAÇÃO PARA ADICIONAR PLANO DIAMANTE AO SUPABASE REMOTO
--- =================================================================
--- Execute estes comandos no Supabase Dashboard SQL Editor
--- https://supabase.com/dashboard/project/wtedhqhqducvwadjjgii/sql/new
--- =================================================================
-
--- =================================================================
--- PASSO 1: Adicionar valores ao enum type (deve ser executado primeiro)
--- =================================================================
-
--- Add 'diamante' to the enum
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'diamante';
-
--- Add coletivo variants to the enum
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'bronze-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'prata-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'ouro-coletivo';
-ALTER TYPE public.subscription_plan_type ADD VALUE IF NOT EXISTS 'diamante-coletivo';
-
--- Remove UNIQUE constraint on type column to allow multiple plan variants
-ALTER TABLE public.subscription_plans DROP CONSTRAINT IF EXISTS subscription_plans_type_key;
-
--- =================================================================
--- PASSO 2: Atualizar dados dos planos (execute após o PASSO 1)
--- =================================================================
+-- Migration: Update plan data (Step 2 of 2)
+-- Run this on Supabase remote (after step 1)
 
 -- Update existing plans
 UPDATE public.subscription_plans
