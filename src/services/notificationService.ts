@@ -275,7 +275,7 @@ export async function sendLogisticsServiceOrder(
         customer_email: customerData.email,
         customer_phone: customerData.phone,
         delivery_address: customerData.address,
-        items: JSON.stringify(items),
+        items: items,
         status: "pending",
         created_at: serviceOrder.createdAt,
       });

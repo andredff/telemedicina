@@ -248,6 +248,8 @@ const mockPrescriptions = [
 ];
 
 // Admin-specific queries
+type OrderStatus = Database["public"]["Enums"]["order_status"];
+
 export const AdminQueries = {
   // Get all users
   async getAllUsers() {
@@ -284,8 +286,23 @@ export const AdminQueries = {
     
     try {
       const result = await supabaseAdmin
-        .from('cart_items')
-        .select('*')
+        .from('orders')
+        .select(`
+          id,
+          user_id,
+          customer_name,
+          customer_email,
+          customer_phone,
+          delivery_address,
+          status,
+          total,
+          created_at,
+          tracking_code,
+          order_items (
+            name,
+            quantity
+          )
+        `)
         .order('created_at', { ascending: false });
       
       // If database is empty or table doesn't exist, use mock data
@@ -347,7 +364,7 @@ export const AdminQueries = {
       
       // Get order count
       const ordersPromise = supabaseAdmin
-        .from('cart_items')
+        .from('orders')
         .select('*', { count: 'exact', head: true });
       
       // Get prescription count
@@ -382,6 +399,35 @@ export const AdminQueries = {
         totalPrescriptions: mockPrescriptions.length,
         activeSubscriptions: 1
       };
+    }
+  }
+  ,
+  async updateOrderStatus(orderId: string, status: OrderStatus, trackingCode?: string | null) {
+    if (!supabaseAdmin) {
+      console.log('[AdminQueries] Supabase not configured, mock update order status');
+      return { data: null, error: null };
+    }
+
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .update({
+          status,
+          tracking_code: trackingCode || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId)
+        .select()
+        .maybeSingle();
+
+      if (error) {
+        console.error('Error updating order status:', error);
+      }
+
+      return { data, error };
+    } catch (error) {
+      console.error('Error updating order status:', error);
+      return { data: null, error };
     }
   }
 };

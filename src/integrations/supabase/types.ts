@@ -101,6 +101,53 @@ export type Database = {
           },
         ]
       }
+      logistics_service_orders: {
+        Row: {
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          id: string
+          items: Json | null
+          order_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id?: string
+          items?: Json | null
+          order_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id?: string
+          items?: Json | null
+          order_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "logistics_service_orders_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       medications: {
         Row: {
           created_at: string
@@ -144,6 +191,174 @@ export type Database = {
             columns: ["prescription_id"]
             isOneToOne: false
             referencedRelation: "prescriptions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_items: {
+        Row: {
+          created_at: string
+          dosage: string | null
+          id: string
+          medication_id: string | null
+          name: string
+          order_id: string
+          prescription_id: string | null
+          price: number
+          quantity: number
+        }
+        Insert: {
+          created_at?: string
+          dosage?: string | null
+          id?: string
+          medication_id?: string | null
+          name: string
+          order_id: string
+          prescription_id?: string | null
+          price?: number
+          quantity?: number
+        }
+        Update: {
+          created_at?: string
+          dosage?: string | null
+          id?: string
+          medication_id?: string | null
+          name?: string
+          order_id?: string
+          prescription_id?: string | null
+          price?: number
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_items_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_notifications: {
+        Row: {
+          body: string | null
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          estimated_delivery: string | null
+          id: string
+          order_id: string
+          sent_at: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subject: string | null
+          tracking_code: string | null
+        }
+        Insert: {
+          body?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          estimated_delivery?: string | null
+          id?: string
+          order_id: string
+          sent_at?: string | null
+          status: Database["public"]["Enums"]["order_status"]
+          subject?: string | null
+          tracking_code?: string | null
+        }
+        Update: {
+          body?: string | null
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          estimated_delivery?: string | null
+          id?: string
+          order_id?: string
+          sent_at?: string | null
+          status?: Database["public"]["Enums"]["order_status"]
+          subject?: string | null
+          tracking_code?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "order_notifications_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      orders: {
+        Row: {
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          id: string
+          payment_id: string | null
+          payment_method: string | null
+          payment_status: string | null
+          pix_expires_at: string | null
+          pix_qr_code: string | null
+          pix_qr_code_url: string | null
+          shipping: number
+          status: Database["public"]["Enums"]["order_status"]
+          subtotal: number
+          total: number
+          tracking_code: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id: string
+          payment_id?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          pix_expires_at?: string | null
+          pix_qr_code?: string | null
+          pix_qr_code_url?: string | null
+          shipping?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          total?: number
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id?: string
+          payment_id?: string | null
+          payment_method?: string | null
+          payment_status?: string | null
+          pix_expires_at?: string | null
+          pix_qr_code?: string | null
+          pix_qr_code_url?: string | null
+          shipping?: number
+          status?: Database["public"]["Enums"]["order_status"]
+          subtotal?: number
+          total?: number
+          tracking_code?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -332,6 +547,7 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
+      order_status: "pending" | "processing" | "shipped" | "delivered" | "cancelled"
       subscription_plan_type:
         | "bronze"
         | "prata"
@@ -469,6 +685,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      order_status: ["pending", "processing", "shipped", "delivered", "cancelled"],
       subscription_plan_type: [
         "bronze",
         "prata",

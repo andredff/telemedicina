@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, Package, ArrowLeft } from "lucide-react";
+import { CheckCircle, XCircle, Package, ArrowLeft, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -14,6 +14,8 @@ import { Separator } from "@/components/ui/separator";
 import { CreditCardForm } from "./CreditCardForm";
 import {
   processMedicationPayment,
+  processMedicationPixPayment,
+  confirmPixPayment,
   toCents,
   type CardData,
   type CustomerData,
@@ -37,6 +39,13 @@ export function MedicationCheckout({
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [installments, setInstallments] = useState("1");
+  const [paymentMethod, setPaymentMethod] = useState<"card" | "pix">("card");
+  const [pixData, setPixData] = useState<{
+    paymentId: string;
+    qrCode: string;
+    qrCodeUrl: string;
+    expiresAt: string;
+  } | null>(null);
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     paymentId?: string;
@@ -90,6 +99,69 @@ export function MedicationCheckout({
       setIsLoading(false);
     }
   };
+
+  const handlePixPayment = async () => {
+    setIsLoading(true);
+
+    try {
+      const orderId = generateOrderId();
+      const result = await processMedicationPixPayment(
+        orderId,
+        customer,
+        toCents(total)
+      );
+
+      if (result.paymentId && result.pixQrCode && result.pixQrCodeUrl && result.pixExpiresAt) {
+        setPixData({
+          paymentId: result.paymentId,
+          qrCode: result.pixQrCode,
+          qrCodeUrl: result.pixQrCodeUrl,
+          expiresAt: result.pixExpiresAt,
+        });
+        toast.message("PIX gerado", {
+          description: "Finalize o pagamento para confirmar o pedido.",
+        });
+      } else {
+        toast.error(result.message || "Falha ao gerar PIX");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePixConfirmation = async () => {
+    if (!pixData?.paymentId) return;
+    setIsLoading(true);
+    try {
+      const result = await confirmPixPayment(pixData.paymentId);
+      setPaymentResult({
+        success: result.success,
+        paymentId: result.paymentId,
+        message: result.message,
+      });
+
+      if (result.success) {
+        toast.success("PIX confirmado com sucesso!");
+        onSuccess?.(result.paymentId!);
+      } else {
+        toast.error(result.message || "Pagamento PIX pendente");
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Erro desconhecido";
+      toast.error(message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (paymentMethod === "card") {
+      setPixData(null);
+    }
+  }, [paymentMethod]);
 
   const getInstallmentOptions = () => {
     const options = [];
@@ -237,24 +309,83 @@ export function MedicationCheckout({
               </SelectContent>
             </Select>
           </div>
+
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Forma de pagamento</label>
+            <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as "card" | "pix")}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="card">Cartão de crédito</SelectItem>
+                <SelectItem value="pix">PIX (pagamento instantâneo)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardContent>
       </Card>
 
       {/* Formulário de Pagamento */}
       <div className="space-y-4">
-        <CreditCardForm
-          onSubmit={(data) =>
-            handlePayment({
-              cardNumber: data.cardNumber,
-              holder: data.holder,
-              expirationDate: data.expirationDate,
-              securityCode: data.securityCode,
-              brand: data.brand,
-            })
-          }
-          isLoading={isLoading}
-          submitLabel={`Pagar R$ ${total.toFixed(2)}`}
-        />
+        {paymentMethod === "card" ? (
+          <CreditCardForm
+            onSubmit={(data) =>
+              handlePayment({
+                cardNumber: data.cardNumber,
+                holder: data.holder,
+                expirationDate: data.expirationDate,
+                securityCode: data.securityCode,
+                brand: data.brand,
+              })
+            }
+            isLoading={isLoading}
+            submitLabel={`Pagar R$ ${total.toFixed(2)}`}
+          />
+        ) : (
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <QrCode className="h-5 w-5" />
+                Pagamento via PIX
+              </CardTitle>
+              <CardDescription>
+                Gere o QR Code e confirme o pagamento para finalizar.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pixData ? (
+                <div className="space-y-4">
+                  <div className="flex flex-col items-center gap-3">
+                    <img
+                      src={pixData.qrCodeUrl}
+                      alt="QR Code PIX"
+                      className="h-40 w-40"
+                    />
+                    <p className="text-xs text-muted-foreground text-center">
+                      Expira em {new Date(pixData.expiresAt).toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                  <div className="rounded-lg bg-muted/50 p-3 text-xs break-all">
+                    {pixData.qrCode}
+                  </div>
+                  <Button className="w-full" onClick={handlePixConfirmation} disabled={isLoading}>
+                    {isLoading ? "Confirmando..." : "Já paguei"}
+                  </Button>
+                </div>
+              ) : (
+                <Button className="w-full" onClick={handlePixPayment} disabled={isLoading}>
+                  {isLoading ? "Gerando PIX..." : `Gerar PIX de R$ ${total.toFixed(2)}`}
+                </Button>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Pagamentos PIX podem levar alguns minutos para confirmação.
+              </p>
+            </CardContent>
+          </Card>
+        )}
 
         <Button
           variant="ghost"

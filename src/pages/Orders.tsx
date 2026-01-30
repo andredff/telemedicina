@@ -18,7 +18,7 @@ interface OrderItem {
 
 interface Order {
   id: string;
-  date: string;
+  created_at: string;
   status: string;
   total: number;
   items: OrderItem[];
@@ -67,9 +67,21 @@ const Orders = () => {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select("*")
+        .select(`
+          id,
+          created_at,
+          status,
+          total,
+          delivery_address,
+          tracking_code,
+          order_items (
+            name,
+            quantity,
+            price
+          )
+        `)
         .eq("user_id", userId)
-        .order("date", { ascending: false });
+        .order("created_at", { ascending: false });
 
       if (error) {
         logger.error("Error fetching orders:", error);
@@ -77,7 +89,21 @@ const Orders = () => {
       }
 
       if (data) {
-        setOrders(data);
+        const formatted = data.map((order) => ({
+          id: order.id,
+          created_at: order.created_at,
+          status: order.status,
+          total: order.total,
+          delivery_address: order.delivery_address,
+          tracking_code: order.tracking_code,
+          items: (order.order_items || []).map((item) => ({
+            name: item.name,
+            quantity: item.quantity,
+            price: item.price,
+          })),
+        }));
+
+        setOrders(formatted);
       }
     } catch (error) {
       logger.error("Error fetching orders:", error);
@@ -93,7 +119,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return "bg-green-500";
-      case "in_transit":
+      case "shipped":
         return "bg-blue-500";
       case "processing":
         return "bg-yellow-500";
@@ -108,7 +134,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return "Entregue";
-      case "in_transit":
+      case "shipped":
         return "Em Trânsito";
       case "processing":
         return "Processando";
@@ -123,7 +149,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return <CheckCircle className="h-5 w-5" />;
-      case "in_transit":
+      case "shipped":
         return <Truck className="h-5 w-5" />;
       case "processing":
         return <Clock className="h-5 w-5" />;
@@ -193,7 +219,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {orders.filter(o => o.status === "in_transit").length}
+                {orders.filter(o => o.status === "shipped").length}
               </div>
             </CardContent>
           </Card>
@@ -217,7 +243,7 @@ const Orders = () => {
           <TabsList>
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="processing">Processando</TabsTrigger>
-            <TabsTrigger value="in_transit">Em Trânsito</TabsTrigger>
+            <TabsTrigger value="shipped">Em Trânsito</TabsTrigger>
             <TabsTrigger value="delivered">Entregues</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -246,7 +272,7 @@ const Orders = () => {
                       <CardDescription>
                         <div className="flex items-center gap-2 mt-2">
                           <Calendar className="h-4 w-4" />
-                          <span>Pedido realizado em {new Date(order.date).toLocaleDateString('pt-BR')}</span>
+                  <span>Pedido realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
                         </div>
                       </CardDescription>
                     </div>
@@ -314,7 +340,7 @@ const Orders = () => {
 
                     {/* Actions */}
                     <div className="pt-3 flex gap-2">
-                      {order.trackingCode && (
+                      {order.tracking_code && (
                         <Button variant="outline" size="sm" className="flex-1">
                           <Truck className="mr-2 h-4 w-4" />
                           Rastrear Pedido

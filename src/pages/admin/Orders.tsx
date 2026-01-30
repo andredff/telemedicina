@@ -53,6 +53,7 @@ import {
 import { toast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import type { Database } from '@/integrations/supabase/types';
 
 interface Order {
   id: string;
@@ -64,6 +65,10 @@ interface Order {
   status: string;
   total: number;
   items: number;
+  items_detail?: Array<{
+    name: string;
+    quantity: number;
+  }>;
   prescription_id?: string;
   tracking_code?: string;
 }
@@ -74,6 +79,8 @@ interface NotificationHistory {
   sentAt: string;
   subject: string;
 }
+
+type OrderStatusEnum = Database["public"]["Enums"]["order_status"];
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -99,19 +106,30 @@ export default function AdminOrders() {
 
       if (error) throw error;
 
-      const formattedOrders = (data || []).map((order: Record<string, unknown>) => ({
-        id: order.id as string,
-        customer: (order.customer as string) || 'Cliente Desconhecido',
-        customer_email: (order.customer_email as string) || 'email@exemplo.com',
-        customer_phone: (order.customer_phone as string) || '',
-        delivery_address: (order.delivery_address as string) || '',
-        date: (order.date as string) || (order.created_at as string),
-        status: (order.status as string) || 'pending',
-        total: (order.total as number) || 0,
-        items: (order.items as number) || (order.quantity as number) || 1,
-        prescription_id: order.prescription_id as string,
-        tracking_code: order.tracking_code as string,
-      }));
+      const formattedOrders = (data || []).map((order: Record<string, unknown>) => {
+        const items = (order.order_items as Array<Record<string, unknown>> | undefined) || [];
+        const itemsCount = items.length > 0
+          ? items.reduce((sum, item) => sum + Number(item.quantity || 1), 0)
+          : (order.items as number) || (order.quantity as number) || 1;
+
+        return {
+          id: order.id as string,
+          customer: (order.customer_name as string) || (order.customer as string) || 'Cliente Desconhecido',
+          customer_email: (order.customer_email as string) || 'email@exemplo.com',
+          customer_phone: (order.customer_phone as string) || '',
+          delivery_address: (order.delivery_address as string) || '',
+          date: (order.created_at as string) || (order.date as string),
+          status: (order.status as string) || 'pending',
+          total: (order.total as number) || 0,
+          items: itemsCount,
+          items_detail: items.map((item) => ({
+            name: String(item.name || 'Medicamento'),
+            quantity: Number(item.quantity || 1),
+          })),
+          prescription_id: order.prescription_id as string,
+          tracking_code: order.tracking_code as string,
+        };
+      });
 
       setOrders(formattedOrders);
       setLoading(false);
@@ -164,6 +182,12 @@ export default function AdminOrders() {
         o.id === orderId ? { ...o, status: newStatus } : o
       ));
 
+      const persistedTrackingCode = newStatus === 'shipped'
+        ? (trackingCode || order.tracking_code)
+        : order.tracking_code;
+
+      await AdminQueries.updateOrderStatus(orderId, newStatus as OrderStatusEnum, persistedTrackingCode);
+
       // Envia notificação por e-mail
       const notificationResult = await sendOrderStatusNotification({
         orderId,
@@ -174,18 +198,20 @@ export default function AdminOrders() {
       });
 
       // Se o pedido está sendo processado, cria ordem de serviço para logística
-      if (newStatus === 'processing') {
-        await sendLogisticsServiceOrder(
-          orderId,
-          {
-            name: order.customer,
-            email: order.customer_email || '',
-            phone: order.customer_phone || '',
-            address: order.delivery_address || 'Endereço não informado',
-          },
-          [{ name: 'Medicamentos', quantity: order.items }]
-        );
-      }
+        if (newStatus === 'processing') {
+          await sendLogisticsServiceOrder(
+            orderId,
+            {
+              name: order.customer,
+              email: order.customer_email || '',
+              phone: order.customer_phone || '',
+              address: order.delivery_address || 'Endereço não informado',
+            },
+            order.items_detail && order.items_detail.length > 0
+              ? order.items_detail
+              : [{ name: 'Medicamentos', quantity: order.items }]
+          );
+        }
 
       toast({
         title: 'Status atualizado',
@@ -242,6 +268,7 @@ export default function AdminOrders() {
           setOrders(orders.map(o =>
             o.id === selectedOrder.id ? { ...o, tracking_code: trackingCode } : o
           ));
+          await AdminQueries.updateOrderStatus(selectedOrder.id, selectedOrder.status as OrderStatusEnum, trackingCode);
         }
       } else {
         toast({

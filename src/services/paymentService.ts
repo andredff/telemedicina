@@ -44,11 +44,26 @@ export interface PaymentResult {
   status: PaymentStatus;
   message: string;
   proofOfSale?: string;
+  pixQrCode?: string;
+  pixQrCodeUrl?: string;
+  pixExpiresAt?: string;
+}
+
+export interface PixPaymentRecord {
+  status: PaymentStatus;
+  amountInCents: number;
+  orderId: string;
+  pixQrCode: string;
+  pixQrCodeUrl: string;
+  pixExpiresAt: string;
 }
 
 // ==========================================
 // Serviço de Pagamento de Medicamentos
 // ==========================================
+
+const pixPayments = new Map<string, PixPaymentRecord>();
+const PIX_EXPIRATION_MINUTES = 30;
 
 /**
  * Processa pagamento de medicamentos (transação única)
@@ -103,6 +118,107 @@ export async function processMedicationPayment(
   } catch (error) {
     return handlePaymentError(error);
   }
+}
+
+/**
+ * Processa pagamento de medicamentos via PIX (stub/mock)
+ */
+export async function processMedicationPixPayment(
+  orderId: string,
+  customer: CustomerData,
+  amountInCents: number
+): Promise<PaymentResult> {
+  const paymentId = `PIX-${Date.now()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
+  const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000).toISOString();
+  const pixPayload = buildPixPayload({ orderId, customer, amountInCents, expiresAt });
+  const pixQrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(pixPayload)}`;
+
+  pixPayments.set(paymentId, {
+    status: 12,
+    amountInCents,
+    orderId,
+    pixQrCode: pixPayload,
+    pixQrCodeUrl,
+    pixExpiresAt: expiresAt,
+  });
+
+  return {
+    success: false,
+    paymentId,
+    status: 12,
+    message: "PIX gerado. Aguardando pagamento.",
+    pixQrCode: pixPayload,
+    pixQrCodeUrl,
+    pixExpiresAt: expiresAt,
+  };
+}
+
+/**
+ * Consulta status de um pagamento PIX (stub/mock)
+ */
+export async function getPixPaymentStatus(paymentId: string): Promise<PaymentResult> {
+  const record = pixPayments.get(paymentId);
+
+  if (!record) {
+    return {
+      success: false,
+      status: 3,
+      message: "Pagamento PIX não encontrado",
+    };
+  }
+
+  const isExpired = new Date(record.pixExpiresAt).getTime() < Date.now();
+  if (isExpired && record.status === 12) {
+    record.status = 3;
+  }
+
+  return {
+    success: record.status === 2,
+    paymentId,
+    status: record.status,
+    message: record.status === 12
+      ? "Pagamento PIX pendente"
+      : record.status === 2
+        ? "Pagamento PIX confirmado"
+        : "Pagamento PIX expirado",
+    pixQrCode: record.pixQrCode,
+    pixQrCodeUrl: record.pixQrCodeUrl,
+    pixExpiresAt: record.pixExpiresAt,
+  };
+}
+
+/**
+ * Confirma pagamento PIX (stub/mock)
+ */
+export async function confirmPixPayment(paymentId: string): Promise<PaymentResult> {
+  const record = pixPayments.get(paymentId);
+
+  if (!record) {
+    return {
+      success: false,
+      status: 3,
+      message: "Pagamento PIX não encontrado",
+    };
+  }
+
+  const isExpired = new Date(record.pixExpiresAt).getTime() < Date.now();
+  if (isExpired) {
+    record.status = 3;
+  } else {
+    record.status = 2;
+  }
+
+  return {
+    success: record.status === 2,
+    paymentId,
+    status: record.status,
+    message: record.status === 2
+      ? "Pagamento PIX confirmado"
+      : "PIX expirado, gere um novo código",
+    pixQrCode: record.pixQrCode,
+    pixQrCodeUrl: record.pixQrCodeUrl,
+    pixExpiresAt: record.pixExpiresAt,
+  };
 }
 
 // ==========================================
@@ -302,6 +418,17 @@ function getStatusMessage(status: PaymentStatus): string {
     20: "Transação agendada",
   };
   return messages[status] || "Status desconhecido";
+}
+
+function buildPixPayload(params: {
+  orderId: string;
+  customer: CustomerData;
+  amountInCents: number;
+  expiresAt: string;
+}): string {
+  const amount = (params.amountInCents / 100).toFixed(2);
+  const name = params.customer.name || "Cliente";
+  return `NOVITA|ORDER:${params.orderId}|AMOUNT:${amount}|NAME:${name}|EXPIRES:${params.expiresAt}`;
 }
 
 function handlePaymentError(error: unknown): PaymentResult {
