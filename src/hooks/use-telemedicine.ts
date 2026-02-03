@@ -46,10 +46,11 @@ export function useCanAccessTelemedicine(userId: string | null) {
 // HOOK: useSpecialties
 // ==========================================
 
-export function useSpecialties() {
+export function useSpecialties(enabled: boolean = true) {
   return useQuery<Specialty[]>({
     queryKey: ["telemedicine-specialties"],
     queryFn: getSpecialties,
+    enabled,
     staleTime: 1000 * 60 * 30, // 30 minutos
   });
 }
@@ -58,10 +59,11 @@ export function useSpecialties() {
 // HOOK: useConsultationHistory
 // ==========================================
 
-export function useConsultationHistory() {
+export function useConsultationHistory(enabled: boolean = true) {
   return useQuery<Consultation[]>({
     queryKey: ["consultation-history"],
     queryFn: getConsultationHistory,
+    enabled,
     staleTime: 1000 * 60, // 1 minuto
   });
 }
@@ -230,15 +232,17 @@ export function useTelemedicine({
     isLoading: isAccessCheckLoading,
   } = useCanAccessTelemedicine(userId);
 
+  const canAccessTelemedicine = accessCheck?.canAccess === true;
+
   const {
     data: specialties = [],
     isLoading: isSpecialtiesLoading,
-  } = useSpecialties();
+  } = useSpecialties(!!userId && canAccessTelemedicine);
 
   const {
     data: consultations = [],
     isLoading: isConsultationsLoading,
-  } = useConsultationHistory();
+  } = useConsultationHistory(!!userId && canAccessTelemedicine);
 
   // Mutations
   const startConsultationMutation = useStartConsultation();
@@ -252,7 +256,6 @@ export function useTelemedicine({
   );
 
   // Helpers
-  const canAccessTelemedicine = accessCheck?.canAccess === true;
   const accessDenialReason = accessCheck?.reason;
   const accessDenialMessage = accessCheck?.message;
   const iframeUrl = getTelemedicineIframeUrl();

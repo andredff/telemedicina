@@ -31,7 +31,7 @@ interface SubscriptionPlan {
 interface SubscriptionCheckoutProps {
   plan: SubscriptionPlan;
   customer: CustomerData;
-  onSuccess?: (recurrentPaymentId: string) => void;
+  onSuccess?: (recurrentPaymentId: string, billingCycle: "monthly" | "yearly") => void;
   onCancel?: () => void;
 }
 
@@ -89,7 +89,7 @@ export function SubscriptionCheckout({
 
       if (result.success) {
         toast.success("Assinatura ativada com sucesso!");
-        onSuccess?.(result.recurrentPaymentId!);
+        onSuccess?.(result.recurrentPaymentId!, billingCycle);
       } else {
         toast.error(result.message || "Falha ao processar assinatura");
       }

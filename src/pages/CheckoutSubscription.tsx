@@ -158,11 +158,12 @@ const CheckoutSubscription = () => {
     }
   }, [currentSubscription, plan, navigate, toast]);
 
-  const handleSuccess = async (recurrentPaymentId: string) => {
+  const handleSuccess = async (recurrentPaymentId: string, billingCycle: "monthly" | "yearly") => {
     // Salvar a assinatura no banco de dados
     if (user && plan) {
       const expiresAt = new Date();
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      const cycleMonths = billingCycle === "yearly" ? 12 : 1;
+      expiresAt.setMonth(expiresAt.getMonth() + cycleMonths);
 
       // Verificar se já existe uma assinatura ativa para o usuário
       const { data: existingSubscription } = await supabase
@@ -191,7 +192,7 @@ const CheckoutSubscription = () => {
             plan_id: plan.id,
             started_at: new Date().toISOString(),
             expires_at: expiresAt.toISOString(),
-            billing_cycle: "monthly",
+            billing_cycle: billingCycle,
             updated_at: new Date().toISOString(),
           })
           .eq("id", existingSubscription.id);
@@ -220,7 +221,7 @@ const CheckoutSubscription = () => {
             status: "active",
             started_at: new Date().toISOString(),
             expires_at: expiresAt.toISOString(),
-            billing_cycle: "monthly",
+            billing_cycle: billingCycle,
           });
 
         if (error) {

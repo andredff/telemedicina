@@ -1,14 +1,22 @@
 import type { AssemedConfig, AssemedUrls } from "./types";
 
-// URLs da API Assemed
+// URLs da API Assemed (podem ser sobrescritas por .env)
 const URLS = {
   sandbox: {
-    apiUrl: "https://dev-api-assemed.azurewebsites.net",
-    appUrl: "https://dev-app-assemed.azurewebsites.net",
+    apiUrl:
+      import.meta.env.VITE_ASSEMED_API_URL_HOMOLOG ||
+      "https://dev-api-assemed.azurewebsites.net",
+    appUrl:
+      import.meta.env.VITE_ASSEMED_APP_URL_HOMOLOG ||
+      "https://dev-app-assemed.azurewebsites.net",
   },
   production: {
-    apiUrl: "https://api.assemedtelemedicina.com",
-    appUrl: "https://app.assemedtelemedicina.com",
+    apiUrl:
+      import.meta.env.VITE_ASSEMED_API_URL_PROD ||
+      "https://api.assemedtelemedicina.com",
+    appUrl:
+      import.meta.env.VITE_ASSEMED_APP_URL_PROD ||
+      "https://app.assemedtelemedicina.com",
   },
 };
 
