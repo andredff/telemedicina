@@ -10,20 +10,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 
-interface OrderItem {
-  name: string;
-  quantity: number;
-  price: number;
-}
-
 interface Order {
   id: string;
-  created_at: string;
+  date: string;
   status: string;
   total: number;
-  items: OrderItem[];
+  items: { name: string; quantity: number; price: number }[];
   delivery_address: string;
   tracking_code: string | null;
+  payment_id: string | null;
+  payment_method: string | null;
+  installments: number | null;
+  shipping_cost: number;
+  subtotal: number;
+  created_at: string;
+  user_id: string;
 }
 
 const Orders = () => {
@@ -67,21 +68,9 @@ const Orders = () => {
     try {
       const { data, error } = await supabase
         .from("orders")
-        .select(`
-          id,
-          created_at,
-          status,
-          total,
-          delivery_address,
-          tracking_code,
-          order_items (
-            name,
-            quantity,
-            price
-          )
-        `)
+        .select("*")
         .eq("user_id", userId)
-        .order("created_at", { ascending: false });
+        .order("date", { ascending: false });
 
       if (error) {
         logger.error("Error fetching orders:", error);
@@ -89,21 +78,11 @@ const Orders = () => {
       }
 
       if (data) {
-        const formatted = data.map((order) => ({
-          id: order.id,
-          created_at: order.created_at,
-          status: order.status,
-          total: order.total,
-          delivery_address: order.delivery_address,
-          tracking_code: order.tracking_code,
-          items: (order.order_items || []).map((item) => ({
-            name: item.name,
-            quantity: item.quantity,
-            price: item.price,
-          })),
+        const parsedOrders = data.map(order => ({
+          ...order,
+          items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items || [],
         }));
-
-        setOrders(formatted);
+        setOrders(parsedOrders);
       }
     } catch (error) {
       logger.error("Error fetching orders:", error);
@@ -119,7 +98,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return "bg-green-500";
-      case "shipped":
+      case "in_transit":
         return "bg-blue-500";
       case "processing":
         return "bg-yellow-500";
@@ -134,7 +113,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return "Entregue";
-      case "shipped":
+      case "in_transit":
         return "Em Trânsito";
       case "processing":
         return "Processando";
@@ -149,7 +128,7 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return <CheckCircle className="h-5 w-5" />;
-      case "shipped":
+      case "in_transit":
         return <Truck className="h-5 w-5" />;
       case "processing":
         return <Clock className="h-5 w-5" />;
@@ -219,7 +198,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {orders.filter(o => o.status === "shipped").length}
+                {orders.filter(o => o.status === "in_transit").length}
               </div>
             </CardContent>
           </Card>
@@ -243,7 +222,7 @@ const Orders = () => {
           <TabsList>
             <TabsTrigger value="all">Todos</TabsTrigger>
             <TabsTrigger value="processing">Processando</TabsTrigger>
-            <TabsTrigger value="shipped">Em Trânsito</TabsTrigger>
+            <TabsTrigger value="in_transit">Em Trânsito</TabsTrigger>
             <TabsTrigger value="delivered">Entregues</TabsTrigger>
           </TabsList>
         </Tabs>
@@ -272,7 +251,7 @@ const Orders = () => {
                       <CardDescription>
                         <div className="flex items-center gap-2 mt-2">
                           <Calendar className="h-4 w-4" />
-                  <span>Pedido realizado em {new Date(order.created_at).toLocaleDateString('pt-BR')}</span>
+                          <span>Pedido realizado em {new Date(order.date).toLocaleDateString('pt-BR')}</span>
                         </div>
                       </CardDescription>
                     </div>
@@ -341,12 +320,12 @@ const Orders = () => {
                     {/* Actions */}
                     <div className="pt-3 flex gap-2">
                       {order.tracking_code && (
-                        <Button variant="outline" size="sm" className="flex-1">
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => window.open(`https://www.google.com/search?q=rastreamento+${order.tracking_code}`, '_blank')}>
                           <Truck className="mr-2 h-4 w-4" />
                           Rastrear Pedido
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="flex-1 text-primary">
+                      <Button variant="ghost" size="sm" className="flex-1 text-primary" onClick={() => navigate(`/order/${order.id}`)}>
                         Ver Detalhes
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>

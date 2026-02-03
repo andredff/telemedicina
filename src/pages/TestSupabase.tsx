@@ -1,208 +1,247 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { SearchClient } from '@/integrations/supabase/searchClient';
-import { Button } from '@/components/ui/button';
+import { TelemedicineIframe } from '@/components/telemedicine/TelemedicineIframe';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, CheckCircle2, Loader2, Play } from 'lucide-react';
+import type { Database } from '@/integrations/supabase/types';
 
-const TestSupabase = () => {
-  const [testResults, setTestResults] = useState<any>(null);
+interface TestResult {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+  timestamp: string;
+}
+
+type TableName = keyof Database['public']['Tables'];
+
+export default function TestSupabase() {
+  const [queryResult, setQueryResult] = useState<TestResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [iframeUrl, setIframeUrl] = useState('https://example.com');
+  const [selectedTable, setSelectedTable] = useState<TableName>('profiles');
 
-  const testSupabaseConnection = async () => {
+  // URLs de atalho para teste
+  const shortcutUrls = [
+    { label: 'Exemplo', url: 'https://example.com' },
+    { label: 'Google', url: 'https://www.google.com' },
+    { label: 'Telemedicina Local', url: 'http://localhost:8080/telemedicina' },
+    { label: 'API Assemed (mock)', url: 'https://api.assemed.com.br/sala-espera/123' },
+  ];
+
+  const setIframeFromShortcut = (url: string) => {
+    setIframeUrl(url);
+  };
+
+  const runQuery = async () => {
     setLoading(true);
-    setError(null);
-    
-    try {
-      console.log('Testing Supabase connection...');
-      
-      // Test 1: Basic connection
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      
-      // Test 2: Prescriptions table
-      const { data: prescriptions, error: prescriptionsError } = await supabase
-        .from('prescriptions')
-        .select('*')
-        .limit(5);
-      
-      // Test 3: Medications table
-      const { data: medications, error: medicationsError } = await supabase
-        .from('medications')
-        .select('*')
-        .limit(5);
-      
-      // Test 4: Profiles table
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .limit(5);
-      
-      // Test 5: SearchClient
-      const searchResults = await SearchClient.searchPrescriptions({ pageSize: 5 });
-      const prescriptionById = await SearchClient.getPrescriptionById('RX-2024-001');
-      const suggestions = await SearchClient.getSearchSuggestions('RX');
-      const recentPrescriptions = await SearchClient.getRecentPrescriptions(3);
+    setQueryResult(null);
 
-      setTestResults({
-        auth: { user, error: authError },
-        prescriptions: { data: prescriptions, error: prescriptionsError },
-        medications: { data: medications, error: medicationsError },
-        profiles: { data: profiles, error: profilesError },
-        searchClient: {
-          searchResults,
-          prescriptionById,
-          suggestions,
-          recentPrescriptions
-        }
-      });
-      
+    try {
+      // Fazer query baseada na tabela selecionada
+      const { data, error } = await supabase
+        .from(selectedTable)
+        .select('*')
+        .limit(10);
+
+      if (error) {
+        setQueryResult({
+          success: false,
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        setQueryResult({
+          success: true,
+          data,
+          timestamp: new Date().toISOString()
+        });
+      }
     } catch (err) {
-      console.error('Supabase test failed:', err);
-      setError(err instanceof Error ? err.message : 'Unknown error');
+      setQueryResult({
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro desconhecido',
+        timestamp: new Date().toISOString()
+      });
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    // Run test automatically when page loads
-    testSupabaseConnection();
-  }, []);
+  const testConnection = async () => {
+    setLoading(true);
+    setQueryResult(null);
 
-  const renderTableData = (data: any[]) => {
-    if (!data || data.length === 0) return <p className="text-sm text-muted-foreground">No data found</p>;
-    
-    return (
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="border-b">
-              {Object.keys(data[0]).map((key) => (
-                <th key={key} className="px-2 py-1 text-left font-medium">{key}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.slice(0, 3).map((item, index) => (
-              <tr key={index} className="border-b">
-                {Object.values(item).map((value, i) => (
-                  <td key={i} className="px-2 py-1">{String(value).substring(0, 50)}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('count', { count: 'exact', head: true });
+
+      if (error) {
+        setQueryResult({
+          success: false,
+          error: `Erro de conexão: ${error.message}`,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        setQueryResult({
+          success: true,
+          data: { message: 'Conexão com Supabase OK!', count: data },
+          timestamp: new Date().toISOString()
+        });
+      }
+    } catch (err) {
+      setQueryResult({
+        success: false,
+        error: err instanceof Error ? err.message : 'Erro de conexão',
+        timestamp: new Date().toISOString()
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const tables: TableName[] = [
+    'profiles', 
+    'orders', 
+    'prescriptions', 
+    'user_subscriptions', 
+    'medications', 
+    'cart_items',
+    'subscription_plans',
+    'dependents'
+  ];
+
   return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-3xl font-bold mb-6">Supabase Connection Test</h1>
-      
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Test Results</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <p>Testing Supabase connection...</p>
-          ) : error ? (
-            <div className="text-red-500">
-              <p>Error: {error}</p>
-              <Button onClick={testSupabaseConnection} className="mt-4">Retry Test</Button>
-            </div>
-          ) : testResults ? (
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-semibold mb-2">Auth Test</h3>
-                <p>User: {testResults.auth.user ? 'Authenticated' : 'No user'}</p>
-                <p>Error: {testResults.auth.error ? testResults.auth.error.message : 'None'}</p>
-              </div>
+    <div className="container mx-auto py-8 space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold">Teste Supabase & Iframe</h1>
+        <p className="text-muted-foreground">Teste consultas ao banco e visualize o iframe de telemedicina</p>
+      </div>
 
-              <div>
-                <h3 className="font-semibold mb-2">Prescriptions Table</h3>
-                <p>Count: {testResults.prescriptions.data?.length || 0}</p>
-                <p>Error: {testResults.prescriptions.error ? testResults.prescriptions.error.message : 'None'}</p>
-                {testResults.prescriptions.data && testResults.prescriptions.data.length > 0 && (
-                  <div className="mt-2">
-                    {renderTableData(testResults.prescriptions.data)}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-2">Medications Table</h3>
-                <p>Count: {testResults.medications.data?.length || 0}</p>
-                <p>Error: {testResults.medications.error ? testResults.medications.error.message : 'None'}</p>
-                {testResults.medications.data && testResults.medications.data.length > 0 && (
-                  <div className="mt-2">
-                    {renderTableData(testResults.medications.data)}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-2">Profiles Table</h3>
-                <p>Count: {testResults.profiles.data?.length || 0}</p>
-                <p>Error: {testResults.profiles.error ? testResults.profiles.error.message : 'None'}</p>
-                {testResults.profiles.data && testResults.profiles.data.length > 0 && (
-                  <div className="mt-2">
-                    {renderTableData(testResults.profiles.data)}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-2">SearchClient Tests</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="font-medium">Search Prescriptions:</p>
-                    <p>Count: {testResults.searchClient.searchResults.count}</p>
-                    <p>Data: {testResults.searchClient.searchResults.data.length} items</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Get Prescription by ID:</p>
-                    <p>Result: {testResults.searchClient.prescriptionById ? 'Found' : 'Not found'}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Get Suggestions:</p>
-                    <p>Count: {testResults.searchClient.suggestions.length}</p>
-                  </div>
-                  <div>
-                    <p className="font-medium">Get Recent Prescriptions:</p>
-                    <p>Count: {testResults.searchClient.recentPrescriptions.length}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                <h4 className="font-semibold mb-2">Analysis:</h4>
-                {testResults.prescriptions.data?.length === 0 && (
-                  <p className="text-yellow-700">⚠️ Prescriptions table is empty - using mock data</p>
-                )}
-                {testResults.medications.data?.length === 0 && (
-                  <p className="text-yellow-700">⚠️ Medications table is empty - using mock data</p>
-                )}
-                {testResults.profiles.data?.length === 0 && (
-                  <p className="text-yellow-700">⚠️ Profiles table is empty - using mock data</p>
-                )}
-                {testResults.searchClient.searchResults.data.length > 0 && testResults.prescriptions.data?.length === 0 && (
-                  <p className="text-green-700">✅ SearchClient is working with fallback to mock data</p>
-                )}
-              </div>
-
-              <Button onClick={testSupabaseConnection} className="mt-4">
-                Run Test Again
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Painel de Teste do Supabase */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Teste de Consulta Supabase</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex gap-2 flex-wrap">
+              <Button 
+                onClick={testConnection} 
+                variant="outline" 
+                disabled={loading}
+                className="gap-2"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                Testar Conexão
               </Button>
             </div>
-          ) : (
-            <p>Click the button below to test Supabase connection</p>
-          )}
-        </CardContent>
-      </Card>
+
+            <div className="space-y-2">
+              <Label>Tabela para consultar</Label>
+              <div className="flex flex-wrap gap-2">
+                {tables.map(table => (
+                  <Button
+                    key={table}
+                    variant={selectedTable === table ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setSelectedTable(table)}
+                    className="text-xs"
+                  >
+                    {table}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <Button 
+              onClick={runQuery} 
+              disabled={loading}
+              className="w-full gap-2"
+            >
+              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Consultar {selectedTable}
+            </Button>
+
+            {/* Resultado da Query */}
+            {queryResult && (
+              <Alert variant={queryResult.success ? 'default' : 'destructive'}>
+                {queryResult.success ? (
+                  <CheckCircle2 className="h-4 w-4 text-green-600" />
+                ) : (
+                  <AlertCircle className="h-4 w-4" />
+                )}
+                <AlertDescription>
+                  <div className="mt-2">
+                    <strong>Status:</strong> {queryResult.success ? 'Sucesso' : 'Erro'}
+                  </div>
+                  {queryResult.error && (
+                    <div className="text-red-600 mt-1">{queryResult.error}</div>
+                  )}
+                  {queryResult.data && (
+                    <pre className="mt-2 p-2 bg-muted rounded text-xs overflow-auto max-h-40">
+                      {JSON.stringify(queryResult.data, null, 2)}
+                    </pre>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-2">
+                    {new Date(queryResult.timestamp).toLocaleString()}
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Painel do Iframe */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Teste de Iframe</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="iframe-url">URL do Iframe</Label>
+              <Input
+                id="iframe-url"
+                value={iframeUrl}
+                onChange={(e) => setIframeUrl(e.target.value)}
+                placeholder="https://exemplo.com"
+              />
+              <div className="flex flex-wrap gap-2">
+                <span className="text-xs text-muted-foreground w-full">URLs de atalho:</span>
+                {shortcutUrls.map((shortcut) => (
+                  <Button
+                    key={shortcut.url}
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIframeFromShortcut(shortcut.url)}
+                    className="text-xs"
+                  >
+                    {shortcut.label}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden" style={{ height: '400px' }}>
+              <TelemedicineIframe 
+                url={iframeUrl}
+                title="Teste de Iframe"
+                className="h-full"
+                onLoad={() => console.log('Iframe carregado com sucesso')}
+                onError={() => console.log('Erro ao carregar iframe')}
+              />
+            </div>
+
+            <p className="text-xs text-muted-foreground">
+              O iframe carrega a URL especificada acima. Use uma URL válida para testar.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
-};
-
-export default TestSupabase;
+}

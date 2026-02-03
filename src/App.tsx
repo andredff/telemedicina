@@ -12,9 +12,11 @@ import Blog from "./pages/Blog";
 import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
+import ProfileSettings from "./pages/ProfileSettings";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Prescriptions from "./pages/Prescriptions";
 import Orders from "./pages/Orders";
+import OrderDetail from "./pages/OrderDetail";
 import BlogPost from "./pages/BlogPost";
 import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
@@ -53,8 +55,10 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/perfil" element={<ProfileSettings />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/orders" element={<Orders />} />
+          <Route path="/order/:id" element={<OrderDetail />} />
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
           <Route path="/cart" element={<Cart />} />

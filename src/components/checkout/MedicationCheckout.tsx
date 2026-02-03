@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, Package, ArrowLeft, QrCode } from "lucide-react";
+import { CheckCircle, XCircle, Package, ArrowLeft, MapPin, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -12,16 +12,19 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { CreditCardForm } from "./CreditCardForm";
+import { DeliveryAddressForm, type DeliveryAddress } from "./DeliveryAddressForm";
 import {
   processMedicationPayment,
-  processMedicationPixPayment,
-  confirmPixPayment,
   toCents,
   type CardData,
   type CustomerData,
 } from "@/services/paymentService";
 import { toast } from "sonner";
 import type { CartItem } from "@/types/prescription";
+import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
+
+type CheckoutStep = "address" | "payment";
 
 interface MedicationCheckoutProps {
   items: CartItem[];
@@ -38,17 +41,13 @@ export function MedicationCheckout({
 }: MedicationCheckoutProps) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
+  const [currentStep, setCurrentStep] = useState<CheckoutStep>("address");
+  const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
   const [installments, setInstallments] = useState("1");
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "pix">("card");
-  const [pixData, setPixData] = useState<{
-    paymentId: string;
-    qrCode: string;
-    qrCodeUrl: string;
-    expiresAt: string;
-  } | null>(null);
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     paymentId?: string;
+    orderId?: string;
     message: string;
   } | null>(null);
 
@@ -63,11 +62,67 @@ export function MedicationCheckout({
     return `MED-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
   };
 
+  const saveOrderToDatabase = async (orderId: string, paymentId: string, userId: string, deliveryAddress: string) => {
+    try {
+      const orderData = {
+        id: orderId,
+        user_id: userId,
+        date: new Date().toISOString(),
+        status: 'processing',
+        total: total,
+        items: items.map(item => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+        })),
+        delivery_address: deliveryAddress,
+        payment_id: paymentId,
+        payment_method: 'credit_card',
+        installments: parseInt(installments),
+        shipping_cost: shipping,
+        subtotal: subtotal,
+      };
+
+      const { data, error } = await supabase
+        .from('orders')
+        .insert(orderData)
+        .select()
+        .single();
+
+      if (error) {
+        logger.error('Error saving order to database:', error);
+        throw error;
+      }
+
+      logger.info('Order saved successfully:', data);
+      return data;
+    } catch (error) {
+      logger.error('Failed to save order:', error);
+      throw error;
+    }
+  };
+
   const handlePayment = async (cardData: CardData) => {
+    if (!deliveryAddress) {
+      toast.error("Por favor, confirme o endereço de entrega primeiro.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error('Usuário não autenticado');
+      }
+
+      // Format delivery address for storage
+      const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ''}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
+
       const orderId = generateOrderId();
+      
+      // Process payment
       const result = await processMedicationPayment(
         orderId,
         customer,
@@ -76,16 +131,35 @@ export function MedicationCheckout({
         parseInt(installments)
       );
 
-      setPaymentResult({
-        success: result.success,
-        paymentId: result.paymentId,
-        message: result.message,
-      });
+      if (result.success && result.paymentId) {
+        // Save order to database
+        try {
+          await saveOrderToDatabase(orderId, result.paymentId, user.id, deliveryAddressString);
+          
+          setPaymentResult({
+            success: true,
+            paymentId: result.paymentId,
+            orderId: orderId,
+            message: result.message,
+          });
 
-      if (result.success) {
-        toast.success("Pagamento realizado com sucesso!");
-        onSuccess?.(result.paymentId!);
+          toast.success("Pagamento realizado e pedido registrado com sucesso!");
+          onSuccess?.(result.paymentId);
+        } catch (dbError) {
+          logger.error('Payment succeeded but failed to save order:', dbError);
+          setPaymentResult({
+            success: true,
+            paymentId: result.paymentId,
+            orderId: orderId,
+            message: 'Pagamento aprovado, mas houve um erro ao registrar o pedido. Entre em contato com o suporte.',
+          });
+          toast.warning("Pagamento aprovado, mas houve um erro ao salvar o pedido.");
+        }
       } else {
+        setPaymentResult({
+          success: false,
+          message: result.message,
+        });
         toast.error(result.message || "Falha no pagamento");
       }
     } catch (error) {
@@ -99,69 +173,6 @@ export function MedicationCheckout({
       setIsLoading(false);
     }
   };
-
-  const handlePixPayment = async () => {
-    setIsLoading(true);
-
-    try {
-      const orderId = generateOrderId();
-      const result = await processMedicationPixPayment(
-        orderId,
-        customer,
-        toCents(total)
-      );
-
-      if (result.paymentId && result.pixQrCode && result.pixQrCodeUrl && result.pixExpiresAt) {
-        setPixData({
-          paymentId: result.paymentId,
-          qrCode: result.pixQrCode,
-          qrCodeUrl: result.pixQrCodeUrl,
-          expiresAt: result.pixExpiresAt,
-        });
-        toast.message("PIX gerado", {
-          description: "Finalize o pagamento para confirmar o pedido.",
-        });
-      } else {
-        toast.error(result.message || "Falha ao gerar PIX");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro desconhecido";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handlePixConfirmation = async () => {
-    if (!pixData?.paymentId) return;
-    setIsLoading(true);
-    try {
-      const result = await confirmPixPayment(pixData.paymentId);
-      setPaymentResult({
-        success: result.success,
-        paymentId: result.paymentId,
-        message: result.message,
-      });
-
-      if (result.success) {
-        toast.success("PIX confirmado com sucesso!");
-        onSuccess?.(result.paymentId!);
-      } else {
-        toast.error(result.message || "Pagamento PIX pendente");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro desconhecido";
-      toast.error(message);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (paymentMethod === "card") {
-      setPixData(null);
-    }
-  }, [paymentMethod]);
 
   const getInstallmentOptions = () => {
     const options = [];
@@ -242,160 +253,224 @@ export function MedicationCheckout({
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-2">
-      {/* Resumo do Pedido */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Package className="h-5 w-5" />
-            Resumo do Pedido
-          </CardTitle>
-          <CardDescription>{items.length} item(s) no carrinho</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {items.map((item) => (
-            <div key={item.id} className="flex justify-between items-start">
-              <div>
-                <p className="font-medium">{item.name}</p>
-                <p className="text-sm text-muted-foreground">
-                  {item.dosage} • Qtd: {item.quantity}
-                </p>
-              </div>
-              <p className="font-medium">
-                R$ {(item.price * item.quantity).toFixed(2)}
-              </p>
-            </div>
-          ))}
-
-          <Separator />
-
-          <div className="space-y-2">
-            <div className="flex justify-between text-sm">
-              <span>Subtotal</span>
-              <span>R$ {subtotal.toFixed(2)}</span>
-            </div>
-            <div className="flex justify-between text-sm">
-              <span>Frete</span>
-              <span className={shipping === 0 ? "text-green-600" : ""}>
-                {shipping === 0 ? "Grátis" : `R$ ${shipping.toFixed(2)}`}
-              </span>
-            </div>
-            {shipping === 0 && (
-              <p className="text-xs text-green-600">
-                Frete grátis para compras acima de R$ 100
-              </p>
-            )}
+    <div className="space-y-6">
+      {/* Stepper */}
+      <div className="flex items-center justify-center gap-4 mb-8">
+        <div className={`flex items-center gap-2 ${currentStep === "address" ? "text-primary" : "text-muted-foreground"}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === "address" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+            {currentStep === "payment" ? <CheckCircle className="h-5 w-5" /> : <MapPin className="h-5 w-5" />}
           </div>
-
-          <Separator />
-
-          <div className="flex justify-between text-lg font-bold">
-            <span>Total</span>
-            <span>R$ {total.toFixed(2)}</span>
+          <span className="font-medium">Endereço</span>
+        </div>
+        <div className="w-12 h-0.5 bg-border" />
+        <div className={`flex items-center gap-2 ${currentStep === "payment" ? "text-primary" : "text-muted-foreground"}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === "payment" ? "bg-primary text-primary-foreground" : "bg-muted"}`}>
+            <CreditCard className="h-5 w-5" />
           </div>
+          <span className="font-medium">Pagamento</span>
+        </div>
+      </div>
 
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Parcelamento</label>
-            <Select value={installments} onValueChange={setInstallments}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {getInstallmentOptions().map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    {option.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Forma de pagamento</label>
-            <Select value={paymentMethod} onValueChange={(value) => setPaymentMethod(value as "card" | "pix")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="card">Cartão de crédito</SelectItem>
-                <SelectItem value="pix">PIX (pagamento instantâneo)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Formulário de Pagamento */}
-      <div className="space-y-4">
-        {paymentMethod === "card" ? (
-          <CreditCardForm
-            onSubmit={(data) =>
-              handlePayment({
-                cardNumber: data.cardNumber,
-                holder: data.holder,
-                expirationDate: data.expirationDate,
-                securityCode: data.securityCode,
-                brand: data.brand,
-              })
-            }
-            isLoading={isLoading}
-            submitLabel={`Pagar R$ ${total.toFixed(2)}`}
-          />
-        ) : (
-          <Card className="w-full max-w-md">
+      {currentStep === "address" ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Resumo do Pedido */}
+          <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
-                <QrCode className="h-5 w-5" />
-                Pagamento via PIX
+                <Package className="h-5 w-5" />
+                Resumo do Pedido
               </CardTitle>
-              <CardDescription>
-                Gere o QR Code e confirme o pagamento para finalizar.
-              </CardDescription>
+              <CardDescription>{items.length} item(s) no carrinho</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {pixData ? (
-                <div className="space-y-4">
-                  <div className="flex flex-col items-center gap-3">
-                    <img
-                      src={pixData.qrCodeUrl}
-                      alt="QR Code PIX"
-                      className="h-40 w-40"
-                    />
-                    <p className="text-xs text-muted-foreground text-center">
-                      Expira em {new Date(pixData.expiresAt).toLocaleTimeString("pt-BR", {
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+              {items.map((item) => (
+                <div key={item.id} className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.dosage} • Qtd: {item.quantity}
                     </p>
                   </div>
-                  <div className="rounded-lg bg-muted/50 p-3 text-xs break-all">
-                    {pixData.qrCode}
-                  </div>
-                  <Button className="w-full" onClick={handlePixConfirmation} disabled={isLoading}>
-                    {isLoading ? "Confirmando..." : "Já paguei"}
-                  </Button>
+                  <p className="font-medium">
+                    R$ {(item.price * item.quantity).toFixed(2)}
+                  </p>
                 </div>
-              ) : (
-                <Button className="w-full" onClick={handlePixPayment} disabled={isLoading}>
-                  {isLoading ? "Gerando PIX..." : `Gerar PIX de R$ ${total.toFixed(2)}`}
-                </Button>
-              )}
-              <p className="text-xs text-muted-foreground">
-                Pagamentos PIX podem levar alguns minutos para confirmação.
-              </p>
+              ))}
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>R$ {subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Frete</span>
+                  <span className={shipping === 0 ? "text-green-600" : ""}>
+                    {shipping === 0 ? "Grátis" : `R$ ${shipping.toFixed(2)}`}
+                  </span>
+                </div>
+                {shipping === 0 && (
+                  <p className="text-xs text-green-600">
+                    Frete grátis para compras acima de R$ 100
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>R$ {total.toFixed(2)}</span>
+              </div>
             </CardContent>
           </Card>
-        )}
 
-        <Button
-          variant="ghost"
-          onClick={onCancel}
-          className="w-full max-w-md"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Voltar ao carrinho
-        </Button>
-      </div>
+          {/* Formulário de Endereço */}
+          <div className="space-y-4">
+            <DeliveryAddressForm
+              onAddressConfirm={(address) => {
+                setDeliveryAddress(address);
+                setCurrentStep("payment");
+              }}
+              onCancel={onCancel}
+            />
+
+            <Button
+              variant="ghost"
+              onClick={onCancel}
+              className="w-full"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao carrinho
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Resumo do Pedido com Endereço */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Resumo do Pedido
+              </CardTitle>
+              <CardDescription>{items.length} item(s) no carrinho</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {items.map((item) => (
+                <div key={item.id} className="flex justify-between items-start">
+                  <div>
+                    <p className="font-medium">{item.name}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {item.dosage} • Qtd: {item.quantity}
+                    </p>
+                  </div>
+                  <p className="font-medium">
+                    R$ {(item.price * item.quantity).toFixed(2)}
+                  </p>
+                </div>
+              ))}
+
+              <Separator />
+
+              <div className="space-y-2">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>R$ {subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span>Frete</span>
+                  <span className={shipping === 0 ? "text-green-600" : ""}>
+                    {shipping === 0 ? "Grátis" : `R$ ${shipping.toFixed(2)}`}
+                  </span>
+                </div>
+                {shipping === 0 && (
+                  <p className="text-xs text-green-600">
+                    Frete grátis para compras acima de R$ 100
+                  </p>
+                )}
+              </div>
+
+              <Separator />
+
+              <div className="flex justify-between text-lg font-bold">
+                <span>Total</span>
+                <span>R$ {total.toFixed(2)}</span>
+              </div>
+
+              <div className="bg-muted/50 p-3 rounded-lg space-y-2">
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <MapPin className="h-4 w-4" />
+                  Endereço de Entrega
+                </p>
+                {deliveryAddress && (
+                  <p className="text-sm text-muted-foreground">
+                    {deliveryAddress.street}, {deliveryAddress.number}
+                    {deliveryAddress.complement && ` - ${deliveryAddress.complement}`}
+                  </p>
+                )}
+                <p className="text-sm text-muted-foreground">
+                  {deliveryAddress?.neighborhood}, {deliveryAddress?.city} - {deliveryAddress?.state}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  CEP: {deliveryAddress?.zipCode}
+                </p>
+                <Button
+                  variant="link"
+                  size="sm"
+                  onClick={() => setCurrentStep("address")}
+                  className="h-auto p-0 text-primary"
+                >
+                  Alterar endereço
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Parcelamento</label>
+                <Select value={installments} onValueChange={setInstallments}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {getInstallmentOptions().map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Formulário de Pagamento */}
+          <div className="space-y-4">
+            <CreditCardForm
+              onSubmit={(data) =>
+                handlePayment({
+                  cardNumber: data.cardNumber,
+                  holder: data.holder,
+                  expirationDate: data.expirationDate,
+                  securityCode: data.securityCode,
+                  brand: data.brand,
+                })
+              }
+              isLoading={isLoading}
+              submitLabel={`Pagar R$ ${total.toFixed(2)}`}
+            />
+
+            <Button
+              variant="outline"
+              onClick={() => setCurrentStep("address")}
+              className="w-full"
+            >
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Voltar ao endereço
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

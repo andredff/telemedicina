@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   checkSubscriptionStatus,
+  canAccessTelemedicine as checkCanAccessTelemedicine,
   getSpecialties,
   startConsultation,
   getConsultationHistory,
@@ -25,6 +26,19 @@ export function useSubscriptionStatus(userId: string | null) {
     queryFn: () => checkSubscriptionStatus(userId!),
     enabled: !!userId,
     staleTime: 1000 * 60 * 5, // 5 minutos
+  });
+}
+
+// ==========================================
+// HOOK: useCanAccessTelemedicine
+// ==========================================
+
+export function useCanAccessTelemedicine(userId: string | null) {
+  return useQuery({
+    queryKey: ["can-access-telemedicine", userId],
+    queryFn: () => checkCanAccessTelemedicine(userId!),
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 2, // 2 minutos (mais frequente para captar mudanças de status)
   });
 }
 
@@ -162,6 +176,8 @@ export interface UseTelemedicineReturn {
   subscription: SubscriptionStatus | undefined;
   isSubscriptionLoading: boolean;
   canAccessTelemedicine: boolean;
+  accessDenialReason?: "no_subscription" | "expired" | "inactive";
+  accessDenialMessage?: string;
 
   // Especialidades
   specialties: Specialty[];
@@ -210,6 +226,11 @@ export function useTelemedicine({
   } = useSubscriptionStatus(userId);
 
   const {
+    data: accessCheck,
+    isLoading: isAccessCheckLoading,
+  } = useCanAccessTelemedicine(userId);
+
+  const {
     data: specialties = [],
     isLoading: isSpecialtiesLoading,
   } = useSpecialties();
@@ -231,7 +252,9 @@ export function useTelemedicine({
   );
 
   // Helpers
-  const canAccessTelemedicine = subscription?.isActive === true;
+  const canAccessTelemedicine = accessCheck?.canAccess === true;
+  const accessDenialReason = accessCheck?.reason;
+  const accessDenialMessage = accessCheck?.message;
   const iframeUrl = getTelemedicineIframeUrl();
 
   // Actions
@@ -244,6 +267,14 @@ export function useTelemedicine({
         return {
           success: false,
           error: "Usuário não autenticado",
+        };
+      }
+
+      // Verifica novamente o acesso antes de iniciar
+      if (!canAccessTelemedicine) {
+        return {
+          success: false,
+          error: accessDenialMessage || "Você não tem permissão para acessar a telemedicina.",
         };
       }
 
@@ -269,7 +300,7 @@ export function useTelemedicine({
 
       return result;
     },
-    [userId, userProfile, startConsultationMutation]
+    [userId, userProfile, startConsultationMutation, canAccessTelemedicine, accessDenialMessage]
   );
 
   const cancelActiveConsultation = useCallback(
@@ -301,8 +332,10 @@ export function useTelemedicine({
   return {
     // Status da assinatura
     subscription,
-    isSubscriptionLoading,
+    isSubscriptionLoading: isSubscriptionLoading || isAccessCheckLoading,
     canAccessTelemedicine,
+    accessDenialReason,
+    accessDenialMessage,
 
     // Especialidades
     specialties,

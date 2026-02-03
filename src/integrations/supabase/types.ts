@@ -407,30 +407,188 @@ export type Database = {
           },
         ]
       }
+      orders: {
+        Row: {
+          created_at: string
+          date: string
+          delivery_address: string
+          id: string
+          installments: number | null
+          items: Json | null
+          payment_id: string | null
+          payment_method: string | null
+          shipping_cost: number
+          status: string
+          subtotal: number
+          total: number
+          tracking_code: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          date?: string
+          delivery_address: string
+          id?: string
+          installments?: number | null
+          items?: Json | null
+          payment_id?: string | null
+          payment_method?: string | null
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          total?: number
+          tracking_code?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          date?: string
+          delivery_address?: string
+          id?: string
+          installments?: number | null
+          items?: Json | null
+          payment_id?: string | null
+          payment_method?: string | null
+          shipping_cost?: number
+          status?: string
+          subtotal?: number
+          total?: number
+          tracking_code?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      order_notifications: {
+        Row: {
+          body: string
+          created_at: string
+          customer_email: string
+          customer_name: string
+          estimated_delivery: string | null
+          id: string
+          order_id: string
+          sent_at: string | null
+          status: string
+          subject: string
+          tracking_code: string | null
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          customer_email: string
+          customer_name: string
+          estimated_delivery?: string | null
+          id?: string
+          order_id: string
+          sent_at?: string | null
+          status: string
+          subject: string
+          tracking_code?: string | null
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          customer_email?: string
+          customer_name?: string
+          estimated_delivery?: string | null
+          id?: string
+          order_id?: string
+          sent_at?: string | null
+          status?: string
+          subject?: string
+          tracking_code?: string | null
+        }
+        Relationships: []
+      }
+      logistics_service_orders: {
+        Row: {
+          created_at: string
+          customer_email: string | null
+          customer_name: string | null
+          customer_phone: string | null
+          delivery_address: string | null
+          id: string
+          items: Json | null
+          order_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id?: string
+          items?: Json | null
+          order_id: string
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          customer_email?: string | null
+          customer_name?: string | null
+          customer_phone?: string | null
+          delivery_address?: string | null
+          id?: string
+          items?: Json | null
+          order_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
+          address: string | null
+          city: string | null
+          complement: string | null
           created_at: string
           email: string
           full_name: string
           id: string
+          neighborhood: string | null
+          number: string | null
           role: string | null
+          state: string | null
           updated_at: string
+          zip_code: string | null
         }
         Insert: {
+          address?: string | null
+          city?: string | null
+          complement?: string | null
           created_at?: string
           email: string
           full_name: string
           id: string
+          neighborhood?: string | null
+          number?: string | null
           role?: string | null
+          state?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Update: {
+          address?: string | null
+          city?: string | null
+          complement?: string | null
           created_at?: string
           email?: string
           full_name?: string
           id?: string
+          neighborhood?: string | null
+          number?: string | null
           role?: string | null
+          state?: string | null
           updated_at?: string
+          zip_code?: string | null
         }
         Relationships: []
       }

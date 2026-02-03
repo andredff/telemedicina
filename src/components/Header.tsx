@@ -1,4 +1,4 @@
-import { ShoppingCart, User, LogOut, Heart, Settings, CreditCard, HelpCircle } from "lucide-react";
+import { ShoppingCart, User, LogOut, Heart, Settings, CreditCard, HelpCircle, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import {
@@ -52,6 +52,7 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                 size="icon"
                 className="relative"
                 onClick={() => navigate("/cart")}
+                type="button"
               >
                 <ShoppingCart className="h-5 w-5" />
                 {cartItemsCount > 0 && (
@@ -62,11 +63,11 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
               </Button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="icon">
+                  <Button variant="ghost" size="icon" type="button">
                     <Settings className="h-5 w-5" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuContent align="end" className="w-48 z-[100]">
                   <DropdownMenuLabel>Configurações</DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/dashboard")}>
@@ -76,6 +77,10 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                   <DropdownMenuItem onClick={() => navigate("/planos")}>
                     <CreditCard className="mr-2 h-4 w-4" />
                     Meu Plano
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => navigate("/pedidos")}>
+                    <Package className="mr-2 h-4 w-4" />
+                    Meus Pedidos
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={() => navigate("/como-funciona")}>
@@ -89,6 +94,7 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
                 size="sm"
                 onClick={handleLogout}
                 className="gap-2"
+                type="button"
               >
                 <LogOut className="h-4 w-4" />
                 <span className="hidden sm:inline">Sair</span>
