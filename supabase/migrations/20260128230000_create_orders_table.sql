@@ -3,7 +3,7 @@ CREATE TABLE public.orders (
   id TEXT PRIMARY KEY,
   user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   date TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(),
-  status TEXT NOT NULL CHECK (status IN ('processing', 'confirmed', 'in_transit', 'delivered', 'cancelled')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'processing', 'shipped', 'delivered', 'cancelled')),
   total DECIMAL(10, 2) NOT NULL,
   items JSONB NOT NULL,
   delivery_address TEXT NOT NULL,
@@ -28,6 +28,12 @@ CREATE POLICY "Users can view their own orders"
 CREATE POLICY "Users can insert their own orders"
   ON public.orders FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+
+-- Allow authenticated users to update order status (for admin panel)
+CREATE POLICY "allow_authenticated_update"
+  ON public.orders FOR UPDATE
+  USING (auth.role() = 'authenticated')
+  WITH CHECK (auth.role() = 'authenticated');
 
 -- Create index for faster queries
 CREATE INDEX idx_orders_user_id ON public.orders(user_id);
