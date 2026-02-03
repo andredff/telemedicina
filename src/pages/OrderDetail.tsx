@@ -49,6 +49,7 @@ interface Order {
   tracking_code: string | null;
   payment_id: string | null;
   payment_method: string | null;
+  payment_status?: string | null;
   installments: number | null;
   shipping_cost: number;
   subtotal: number;
@@ -95,6 +96,13 @@ const OrderDetail = () => {
     }
   }, [session, id]);
 
+  const normalizeStatus = (status: string | null | undefined) => {
+    if (!status) return "pending";
+    if (status === "in_transit") return "shipped";
+    if (status === "confirmed") return "processing";
+    return status;
+  };
+
   const fetchOrder = async (orderId: string, userId: string) => {
     try {
       const { data, error } = await supabase
@@ -117,6 +125,7 @@ const OrderDetail = () => {
           : [];
         const parsedData = {
           ...data,
+          status: normalizeStatus(data.status),
           items: itemsData as OrderItem[],
         };
         setOrder(parsedData);
@@ -370,7 +379,11 @@ const OrderDetail = () => {
                 <div>
                   <p className="text-sm font-medium">Método de pagamento</p>
                   <p className="text-sm text-muted-foreground capitalize">
-                    {order.payment_method === "credit_card" ? "Cartão de Crédito" : order.payment_method}
+                    {order.payment_method === "credit_card"
+                      ? "Cartão de Crédito"
+                      : order.payment_method === "pix"
+                        ? "PIX"
+                        : order.payment_method}
                   </p>
                 </div>
                 {order.payment_id && (
@@ -383,7 +396,11 @@ const OrderDetail = () => {
                 )}
                 <div>
                   <p className="text-sm font-medium">Status do pagamento</p>
-                  <Badge className="bg-green-500 mt-1">Aprovado</Badge>
+                  {order.payment_status === "pending" || order.status === "pending" ? (
+                    <Badge className="bg-yellow-500 mt-1">Pendente</Badge>
+                  ) : (
+                    <Badge className="bg-green-500 mt-1">Aprovado</Badge>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -400,7 +417,7 @@ const OrderDetail = () => {
                     Falar com Suporte
                   </a>
                 </Button>
-                {order.status === "processing" && (
+                {(order.status === "processing" || order.status === "pending") && (
                   <Button
                     variant="destructive"
                     className="w-full justify-start"
@@ -411,7 +428,7 @@ const OrderDetail = () => {
                     {cancelling ? "Cancelando..." : "Cancelar Pedido"}
                   </Button>
                 )}
-                {order.status !== "processing" && (
+                {order.status !== "processing" && order.status !== "pending" && (
                   <Button variant="outline" className="w-full justify-start" asChild>
                     <a href="/cancelamento">
                       <Package className="h-4 w-4 mr-2" />

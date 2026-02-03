@@ -9,9 +9,18 @@ ALTER TABLE public.orders DROP CONSTRAINT IF EXISTS orders_status_check;
 ALTER TABLE public.orders ADD CONSTRAINT orders_status_check
   CHECK (status = ANY (ARRAY['pending'::text, 'processing'::text, 'shipped'::text, 'delivered'::text, 'cancelled'::text]));
 
--- Add UPDATE policy for authenticated users
-CREATE POLICY IF NOT EXISTS allow_authenticated_update
-  ON public.orders
-  FOR UPDATE
-  USING (auth.role() = 'authenticated')
-  WITH CHECK (auth.role() = 'authenticated');
+-- Add UPDATE policy for authenticated users (Postgres 14 compatible)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies
+    WHERE tablename = 'orders'
+      AND policyname = 'allow_authenticated_update'
+  ) THEN
+    CREATE POLICY "allow_authenticated_update"
+      ON public.orders
+      FOR UPDATE
+      USING (auth.role() = 'authenticated')
+      WITH CHECK (auth.role() = 'authenticated');
+  END IF;
+END $$;

@@ -15,9 +15,9 @@ interface OrderTrackingProps {
 }
 
 const statusSteps: { status: OrderStatus; label: string; icon: typeof Clock }[] = [
-  { status: 'processing', label: 'Pedido Recebido', icon: CheckCircle },
-  { status: 'confirmed', label: 'Pagamento Confirmado', icon: Clock },
-  { status: 'in_transit', label: 'Em Trânsito', icon: Truck },
+  { status: 'pending', label: 'Pedido Recebido', icon: CheckCircle },
+  { status: 'processing', label: 'Em Separação', icon: Clock },
+  { status: 'shipped', label: 'Em Trânsito', icon: Truck },
   { status: 'delivered', label: 'Entregue', icon: Home },
 ];
 
@@ -46,7 +46,13 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
       console.log('🔄 Refresh data:', data);
       if (data) {
         console.log('📦 Status do servidor:', data.status);
-        onStatusChange?.(data.status as OrderStatus);
+        const normalizedStatus =
+          data.status === 'in_transit'
+            ? 'shipped'
+            : data.status === 'confirmed'
+              ? 'processing'
+              : (data.status as OrderStatus);
+        onStatusChange?.(normalizedStatus);
         setLastUpdate(new Date());
         toast.success('Status atualizado!');
       } else {
@@ -70,7 +76,7 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
 
   const getCurrentStepIndex = () => {
     const stepIndex = statusSteps.findIndex((step) => step.status === status);
-    if (status === 'pending' || status === 'cancelled') return -1;
+    if (status === 'cancelled') return -1;
     return stepIndex >= 0 ? stepIndex : 0;
   };
 
@@ -101,7 +107,7 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
               <p className="font-semibold">{formatOrderStatus(status)}</p>
             </div>
           </div>
-          <Badge className={getStatusColor(status)}>{status}</Badge>
+          <Badge className={getStatusColor(status)}>{formatOrderStatus(status)}</Badge>
         </div>
 
         {/* Código de rastreio */}

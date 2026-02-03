@@ -3,9 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
 export type OrderStatus = 
+  | 'pending'
   | 'processing'
-  | 'confirmed'
-  | 'in_transit'
+  | 'shipped'
   | 'delivered'
   | 'cancelled';
 
@@ -34,11 +34,18 @@ export function useOrderSubscription({
   const [lastUpdate, setLastUpdate] = useState<OrderUpdate | null>(null);
   const { toast } = useToast();
 
+  const normalizeStatus = (status: string | null | undefined): OrderStatus => {
+    if (!status) return "pending";
+    if (status === "in_transit") return "shipped";
+    if (status === "confirmed") return "processing";
+    return status as OrderStatus;
+  };
+
   const showNotification = useCallback((update: OrderUpdate) => {
     const statusLabels: Record<OrderStatus, string> = {
+      pending: 'Pendente',
       processing: 'Em processamento',
-      confirmed: 'Confirmado',
-      in_transit: 'Em trânsito',
+      shipped: 'Em trânsito',
       delivered: 'Entregue',
       cancelled: 'Cancelado',
     };
@@ -51,7 +58,7 @@ export function useOrderSubscription({
 
     onStatusChange?.(update);
 
-    if (update.tracking_code && update.status === 'in_transit') {
+    if (update.tracking_code && update.status === 'shipped') {
       onTrackingUpdate?.(update.tracking_code);
     }
   }, [onStatusChange, onTrackingUpdate, toast]);
@@ -83,9 +90,9 @@ export function useOrderSubscription({
           
           const update: OrderUpdate = {
             id: payload.new.id as string,
-            status: newStatus,
+            status: normalizeStatus(newStatus),
             tracking_code: payload.new.tracking_code as string | null,
-            previousStatus: oldStatus,
+            previousStatus: oldStatus ? normalizeStatus(oldStatus) : undefined,
             timestamp: new Date().toISOString(),
           };
 
@@ -143,6 +150,13 @@ export function useUserOrdersSubscription({
   const [isConnected, setIsConnected] = useState(false);
   const { toast } = useToast();
 
+  const normalizeStatus = (status: string | null | undefined): OrderStatus => {
+    if (!status) return "pending";
+    if (status === "in_transit") return "shipped";
+    if (status === "confirmed") return "processing";
+    return status as OrderStatus;
+  };
+
   useEffect(() => {
     if (!userId) {
       setIsConnected(false);
@@ -173,7 +187,7 @@ export function useUserOrdersSubscription({
           } else if (payload.eventType === 'UPDATE') {
             onOrderUpdate?.(
               payload.new.id as string,
-              payload.new.status as OrderStatus
+              normalizeStatus(payload.new.status as string)
             );
           }
         }
@@ -206,9 +220,9 @@ export function getTrackingLink(carrier: string, trackingCode: string): string {
 // Utility para formatar status
 export function formatOrderStatus(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {
+    pending: 'Pendente',
     processing: 'Em processamento',
-    confirmed: 'Confirmado',
-    in_transit: 'Em trânsito',
+    shipped: 'Em trânsito',
     delivered: 'Entregue',
     cancelled: 'Cancelado',
   };
@@ -218,9 +232,9 @@ export function formatOrderStatus(status: OrderStatus): string {
 // Utility para obter cor do status
 export function getStatusColor(status: OrderStatus): string {
   const colors: Record<OrderStatus, string> = {
+    pending: 'bg-slate-100 text-slate-800',
     processing: 'bg-indigo-100 text-indigo-800',
-    confirmed: 'bg-blue-100 text-blue-800',
-    in_transit: 'bg-purple-100 text-purple-800',
+    shipped: 'bg-purple-100 text-purple-800',
     delivered: 'bg-green-100 text-green-800',
     cancelled: 'bg-red-100 text-red-800',
   };

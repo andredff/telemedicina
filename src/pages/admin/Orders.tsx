@@ -98,6 +98,13 @@ export default function AdminOrders() {
     fetchOrders();
   }, []);
 
+  const normalizeStatus = (status: string | null | undefined) => {
+    if (!status) return "pending";
+    if (status === "in_transit") return "shipped";
+    if (status === "confirmed") return "processing";
+    return status;
+  };
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -117,7 +124,7 @@ export default function AdminOrders() {
           customer_phone: (order.customer_phone as string) || '',
           delivery_address: (order.delivery_address as string) || '',
           date: (order.date as string) || (order.created_at as string),
-          status: (order.status as string) || 'processing', // Corrigido: era 'pending'
+          status: normalizeStatus(order.status as string) || 'pending',
           total: (order.total as number) || 0,
           items: itemsData as OrderItem[],
           prescription_id: order.prescription_id as string,
@@ -148,15 +155,15 @@ export default function AdminOrders() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      processing: { text: 'Processando', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-4 w-4" /> },
-      confirmed: { text: 'Confirmado', color: 'bg-blue-100 text-blue-800', icon: <Package className="h-4 w-4" /> },
-      in_transit: { text: 'Em Trânsito', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
+      pending: { text: 'Pendente', color: 'bg-slate-100 text-slate-800', icon: <Clock className="h-4 w-4" /> },
+      processing: { text: 'Processando', color: 'bg-yellow-100 text-yellow-800', icon: <Package className="h-4 w-4" /> },
+      shipped: { text: 'Em Trânsito', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
       delivered: { text: 'Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
       cancelled: { text: 'Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] ||
-      statusConfig.processing;
+      statusConfig.pending;
 
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
@@ -257,9 +264,22 @@ export default function AdminOrders() {
 
         // Atualiza tracking code no pedido se informado
         if (trackingCode) {
-          setOrders(orders.map(o =>
-            o.id === selectedOrder.id ? { ...o, tracking_code: trackingCode } : o
-          ));
+          const { error: trackingError } = await AdminQueries.updateOrderTracking(
+            selectedOrder.id,
+            trackingCode
+          );
+
+          if (!trackingError) {
+            setOrders(orders.map(o =>
+              o.id === selectedOrder.id ? { ...o, tracking_code: trackingCode } : o
+            ));
+          } else {
+            toast({
+              title: 'Erro',
+              description: 'Não foi possível salvar o código de rastreio no banco.',
+              variant: 'destructive',
+            });
+          }
         }
       } else {
         toast({
@@ -308,9 +328,9 @@ export default function AdminOrders() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
+            <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="processing">Processando</SelectItem>
-            <SelectItem value="confirmed">Confirmado</SelectItem>
-            <SelectItem value="in_transit">Em Trânsito</SelectItem>
+            <SelectItem value="shipped">Em Trânsito</SelectItem>
             <SelectItem value="delivered">Entregue</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>
           </SelectContent>
@@ -377,17 +397,17 @@ export default function AdminOrders() {
                         value={order.status}
                         onValueChange={(value) => handleStatusChange(order.id, value)}
                       >
-                        <SelectTrigger className="w-[120px] text-sm">
-                          <SelectValue placeholder="Alterar status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="processing">Processando</SelectItem>
-                          <SelectItem value="confirmed">Confirmado</SelectItem>
-                          <SelectItem value="in_transit">Em Trânsito</SelectItem>
-                          <SelectItem value="delivered">Entregue</SelectItem>
-                          <SelectItem value="cancelled">Cancelado</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <SelectTrigger className="w-[120px] text-sm">
+                        <SelectValue placeholder="Alterar status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="pending">Pendente</SelectItem>
+                        <SelectItem value="processing">Processando</SelectItem>
+                        <SelectItem value="shipped">Em Trânsito</SelectItem>
+                        <SelectItem value="delivered">Entregue</SelectItem>
+                        <SelectItem value="cancelled">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
                       <Button
                         variant="outline"
                         size="sm"
@@ -436,7 +456,7 @@ export default function AdminOrders() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              {orders.filter(o => o.status === 'in_transit').length}
+              {orders.filter(o => o.status === 'shipped').length}
             </div>
           </CardContent>
         </Card>

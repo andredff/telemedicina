@@ -1,5 +1,13 @@
 // Test Supabase connectivity
 import { createClient } from "@supabase/supabase-js";
 
-const SUPABASE_URL = "https://wtedhqhqducvwadjjgii.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0ZWRocWhxZHVjdndhZGpqZ2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MTUxMzYsImV4cCI6MjA4MDE5MTEzNn0.fYUtrzuUyI7Qm2oNfIZdqb_hcG1Y5IjD5CXap2P2uNw";
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_PUBLISHABLE_KEY =
+  process.env.VITE_SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_PUBLISHABLE_KEY) {
+  console.error(
+    "Configure VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY (ou VITE_SUPABASE_PUBLISHABLE_KEY) no ambiente."
+  );
+  process.exit(1);
+}

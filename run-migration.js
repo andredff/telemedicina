@@ -1,15 +1,25 @@
 import { createClient } from '@supabase/supabase-js';
 import { readFileSync } from 'fs';
 
-const supabaseUrl = 'https://wtedhqhqducvwadjjgii.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0ZWRocWhxZHVjdndhZGpqZ2lpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ2MTUxMzYsImV4cCI6MjA4MDE5MTEzNn0.fYUtrzuUyI7Qm2oNfIZdqb_hcG1Y5IjD5CXap2P2uNw';
+const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseKey =
+  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.VITE_SUPABASE_ANON_KEY ||
+  process.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error(
+    'Configure VITE_SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY (ou VITE_SUPABASE_ANON_KEY).'
+  );
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
 async function runMigration() {
   console.log('🚀 Executando migração para adicionar plano Diamante...');
   
-  const sql = readFileSync('./supabase/migrations/20260109081750_update_plans_briefing.sql', 'utf8');
+  const sql = readFileSync('./supabase/migrations/20260128221200_update_plan_data.sql', 'utf8');
   
   const { data, error } = await supabase.rpc('exec_sql', { sql_query: sql });
   

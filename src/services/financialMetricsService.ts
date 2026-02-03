@@ -56,7 +56,25 @@ const PLAN_PRICES: Record<string, number> = {
   prata: 149.90,
   ouro: 249.90,
   platina: 449.90,
+  diamante: 449.90,
   coletivo: 39.90, // por pessoa
+};
+
+type NormalizedPlanKey = "bronze" | "prata" | "ouro" | "platina" | "coletivo";
+
+const normalizePlanType = (type: string | null | undefined): NormalizedPlanKey | null => {
+  if (!type) return null;
+  if (type.includes("coletivo")) return "coletivo";
+  if (type === "diamante") return "platina";
+  if (type === "platina") return "platina";
+  if (type === "bronze" || type === "prata" || type === "ouro") return type;
+  return null;
+};
+
+const resolvePlanPrice = (planType: string | null | undefined, planPrice?: number | null) => {
+  if (typeof planPrice === "number") return planPrice;
+  if (!planType) return 0;
+  return PLAN_PRICES[planType] || 0;
 };
 
 /**
@@ -74,7 +92,7 @@ export async function getFinancialMetrics(): Promise<FinancialMetrics> {
     const churnData = await fetchChurnData();
 
     // Calcula MRR
-    const mrr = calculateMRR(subscriptionData.activeByPlan);
+    const mrr = subscriptionData.activeRevenue;
 
     // Monta objeto de métricas
     const metrics: FinancialMetrics = {
@@ -131,11 +149,21 @@ async function fetchSubscriptionData(): Promise<{
     platina: number;
     coletivo: number;
   };
+  activeRevenue: number;
 }> {
   try {
     const { data, error } = await supabase
       .from("user_subscriptions")
-      .select("id, status, plan_type, created_at");
+      .select(`
+        id,
+        status,
+        created_at,
+        expires_at,
+        plan:subscription_plans (
+          type,
+          price_monthly
+        )
+      `);
 
     if (error) {
       // Se tabela não existir, retorna dados mock
@@ -145,23 +173,49 @@ async function fetchSubscriptionData(): Promise<{
       throw error;
     }
 
-    const subscriptions = data || [];
-    const active = subscriptions.filter((s) => s.status === "active");
+    const subscriptions = (data || []) as Array<{
+      status: string;
+      created_at: string;
+      expires_at?: string | null;
+      plan?: { type?: string | null; price_monthly?: number | null } | Array<{ type?: string | null; price_monthly?: number | null }>;
+    }>;
+    const now = new Date();
+    const active = subscriptions.filter((s) => {
+      const expiresAt = s.expires_at ? new Date(s.expires_at) : null;
+      const isExpired = !!expiresAt && expiresAt <= now;
+      return s.status === "active" && !isExpired;
+    });
 
     // Conta por plano
     const activeByPlan = {
-      bronze: active.filter((s) => s.plan_type === "bronze").length,
-      prata: active.filter((s) => s.plan_type === "prata").length,
-      ouro: active.filter((s) => s.plan_type === "ouro").length,
-      platina: active.filter((s) => s.plan_type === "platina").length,
-      coletivo: active.filter((s) => s.plan_type === "coletivo").length,
+      bronze: 0,
+      prata: 0,
+      ouro: 0,
+      platina: 0,
+      coletivo: 0,
     };
+
+    let activeRevenue = 0;
+    active.forEach((subscription) => {
+      const planData = Array.isArray(subscription.plan)
+        ? subscription.plan[0]
+        : subscription.plan;
+      const normalized = normalizePlanType(planData?.type);
+      const planKey = normalized || "coletivo";
+      const price = resolvePlanPrice(planKey, planData?.price_monthly);
+      activeRevenue += price;
+
+      if (normalized) {
+        activeByPlan[normalized] += 1;
+      }
+    });
 
     return {
       total: subscriptions.length,
       active: active.length,
-      inactive: subscriptions.filter((s) => s.status !== "active").length,
+      inactive: subscriptions.length - active.length,
       activeByPlan,
+      activeRevenue: Math.round(activeRevenue * 100) / 100,
     };
   } catch (error) {
     logger.warn("Usando dados mock para assinaturas:", error);
@@ -179,8 +233,15 @@ async function fetchDelinquencyData(): Promise<{
   try {
     const { data, error } = await supabase
       .from("user_subscriptions")
-      .select("id, plan_type, status, payment_status, amount_due")
-      .or("payment_status.eq.overdue,payment_status.eq.failed");
+      .select(`
+        id,
+        status,
+        expires_at,
+        plan:subscription_plans (
+          type,
+          price_monthly
+        )
+      `);
 
     if (error) {
       if (error.code === "42P01") {
@@ -189,15 +250,30 @@ async function fetchDelinquencyData(): Promise<{
       throw error;
     }
 
-    const delinquent = data || [];
-    const totalAmount = delinquent.reduce((sum, s) => {
-      const planPrice = PLAN_PRICES[s.plan_type] || 0;
-      return sum + (s.amount_due || planPrice);
+    const now = new Date();
+    const delinquent = ((data || []) as Array<{
+      status: string;
+      expires_at?: string | null;
+      plan?: { type?: string | null; price_monthly?: number | null } | Array<{ type?: string | null; price_monthly?: number | null }>;
+    }>).filter((subscription) => {
+      const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
+      const isExpired = !!expiresAt && expiresAt <= now;
+      return subscription.status !== "active" || isExpired;
+    });
+
+    const totalAmount = delinquent.reduce((sum, subscription) => {
+      const planData = Array.isArray(subscription.plan)
+        ? subscription.plan[0]
+        : subscription.plan;
+      const normalized = normalizePlanType(planData?.type);
+      const planKey = normalized || "coletivo";
+      const price = resolvePlanPrice(planKey, planData?.price_monthly);
+      return sum + price;
     }, 0);
 
     return {
       count: delinquent.length,
-      totalAmount,
+      totalAmount: Math.round(totalAmount * 100) / 100,
     };
   } catch (error) {
     logger.warn("Usando dados mock para inadimplência:", error);
@@ -341,6 +417,13 @@ function getMockSubscriptionData() {
       platina: 42,
       coletivo: 16,
     },
+    activeRevenue: calculateMRR({
+      bronze: 120,
+      prata: 156,
+      ouro: 89,
+      platina: 42,
+      coletivo: 16,
+    }),
   };
 }
 

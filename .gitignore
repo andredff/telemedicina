@@ -27,3 +27,9 @@ dist-ssr
 *.cjs
 analyze-implementation.cjs
 test-all-pages.js
+
+# Playwright / artefatos locais
+test-results/
+playwright-report/
+output/
+novita.migrai.com.br

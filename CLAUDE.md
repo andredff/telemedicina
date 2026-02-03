@@ -6,6 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Novità is a telemedicine and home care platform demo built with React. It enables patients to manage medical consultations, prescriptions, and medication orders. The app is in Portuguese (Brazilian).
 
+## MVP Contract
+
+The source of truth for MVP scope and acceptance is `ESCOPO_FECHADO.md`.
+
 ## Development Commands
 
 ```bash
@@ -53,6 +57,8 @@ Key tables: `profiles`, `prescriptions`, `medications`, `cart_items`, `subscript
 
 Subscription plan types: bronze, prata, ouro, platina, coletivo, diamante
 
+Order status enum (Supabase): `pending`, `processing`, `shipped`, `delivered`, `cancelled`
+
 ## Cielo Payment Integration
 
 The project integrates with Cielo E-commerce API for payment processing.
@@ -84,6 +90,12 @@ When Cielo credentials are not configured, the client automatically uses a mock 
 - Plans page → Auth (with plan param) → `/checkout/subscription?plan=tipo`
 - Cart → Checkout → `/checkout/medication`
 
+### PIX (Medication Checkout)
+PIX is implemented as a mock/stub:
+- QR code is generated client-side via `processMedicationPixPayment()`.
+- Confirmation uses `confirmPixPayment()` (simulated).
+- Orders are persisted with `payment_status` and `pix_*` fields in `orders`.
+
 ### Test Cards
 The last digit determines the transaction result:
 - Ends in 0, 1, 4: Authorized
@@ -108,3 +120,21 @@ Optional (Cielo - uses mock if not set):
 - `VITE_CIELO_MERCHANT_ID` - Cielo store identifier
 - `VITE_CIELO_MERCHANT_KEY` - Cielo API key
 - `VITE_CIELO_SANDBOX` - Set to "true" for sandbox environment
+
+## AWS Deploy (S3 + CloudFront)
+
+The repo includes a deploy script to S3 with CloudFront configuration:
+- `deploy-aws.sh`
+
+Typical flow:
+```bash
+bash test-validation.sh
+npm run build
+bash deploy-aws.sh
+aws cloudfront create-distribution --distribution-config file:///tmp/cloudfront-config.json
+```
+
+Notes:
+- Requires AWS CLI configured and credentials available.
+- Bucket and domain are set to `novita.migrai.com.br` in `deploy-aws.sh`.
+- DNS/SSL setup must be completed in CloudFront.

@@ -177,6 +177,7 @@ const mockOrders = [
     items: 2,
     total: 156.80,
     status: 'delivered',
+    tracking_code: undefined,
     date: '2024-12-20T10:00:00Z',
     created_at: '2024-12-20T10:00:00Z'
   },
@@ -191,6 +192,7 @@ const mockOrders = [
     items: 1,
     total: 89.90,
     status: 'processing',
+    tracking_code: undefined,
     date: '2024-12-27T14:30:00Z',
     created_at: '2024-12-27T14:30:00Z'
   },
@@ -205,6 +207,7 @@ const mockOrders = [
     items: 3,
     total: 234.50,
     status: 'shipped',
+    tracking_code: undefined,
     date: '2024-12-26T09:15:00Z',
     created_at: '2024-12-26T09:15:00Z'
   }
@@ -412,6 +415,33 @@ export const AdminQueries = {
       return { error: null };
     } catch (error) {
       console.error('[AdminQueries] Erro ao atualizar status:', error);
+      return { error };
+    }
+  },
+
+  // Update tracking code for an order
+  async updateOrderTracking(orderId: string, trackingCode: string | null) {
+    if (!supabaseAdmin) {
+      const orderIndex = mockOrders.findIndex(o => o.id === orderId);
+      if (orderIndex >= 0) {
+        mockOrders[orderIndex].tracking_code = trackingCode || undefined;
+      }
+      return { error: null };
+    }
+
+    try {
+      const { error } = await supabaseAdmin
+        .from('orders')
+        .update({
+          tracking_code: trackingCode,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      console.error('[AdminQueries] Erro ao atualizar tracking:', error);
       return { error };
     }
   },

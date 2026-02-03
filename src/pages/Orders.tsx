@@ -64,6 +64,13 @@ const Orders = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  const normalizeStatus = (status: string | null | undefined) => {
+    if (!status) return "pending";
+    if (status === "in_transit") return "shipped";
+    if (status === "confirmed") return "processing";
+    return status;
+  };
+
   const fetchOrders = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -80,6 +87,7 @@ const Orders = () => {
       if (data) {
         const parsedOrders = data.map(order => ({
           ...order,
+          status: normalizeStatus(order.status),
           items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items || [],
         }));
         setOrders(parsedOrders);
@@ -96,9 +104,11 @@ const Orders = () => {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "pending":
+        return "bg-slate-500";
       case "delivered":
         return "bg-green-500";
-      case "in_transit":
+      case "shipped":
         return "bg-blue-500";
       case "processing":
         return "bg-yellow-500";
@@ -111,9 +121,11 @@ const Orders = () => {
 
   const getStatusText = (status: string) => {
     switch (status) {
+      case "pending":
+        return "Pendente";
       case "delivered":
         return "Entregue";
-      case "in_transit":
+      case "shipped":
         return "Em Trânsito";
       case "processing":
         return "Processando";
@@ -128,9 +140,11 @@ const Orders = () => {
     switch (status) {
       case "delivered":
         return <CheckCircle className="h-5 w-5" />;
-      case "in_transit":
+      case "shipped":
         return <Truck className="h-5 w-5" />;
       case "processing":
+        return <Clock className="h-5 w-5" />;
+      case "pending":
         return <Clock className="h-5 w-5" />;
       default:
         return <Package className="h-5 w-5" />;
@@ -180,12 +194,12 @@ const Orders = () => {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Em Processamento
+                Pendentes/Processando
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-yellow-600">
-                {orders.filter(o => o.status === "processing").length}
+                {orders.filter(o => o.status === "processing" || o.status === "pending").length}
               </div>
             </CardContent>
           </Card>
@@ -198,7 +212,7 @@ const Orders = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">
-                {orders.filter(o => o.status === "in_transit").length}
+                {orders.filter(o => o.status === "shipped").length}
               </div>
             </CardContent>
           </Card>
@@ -221,8 +235,9 @@ const Orders = () => {
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="mb-6">
           <TabsList>
             <TabsTrigger value="all">Todos</TabsTrigger>
+            <TabsTrigger value="pending">Pendentes</TabsTrigger>
             <TabsTrigger value="processing">Processando</TabsTrigger>
-            <TabsTrigger value="in_transit">Em Trânsito</TabsTrigger>
+            <TabsTrigger value="shipped">Em Trânsito</TabsTrigger>
             <TabsTrigger value="delivered">Entregues</TabsTrigger>
           </TabsList>
         </Tabs>
