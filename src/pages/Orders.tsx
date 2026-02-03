@@ -10,20 +10,21 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 
-interface OrderItem {
-  name: string;
-  quantity: number;
-  price: number;
-}
-
 interface Order {
   id: string;
   date: string;
   status: string;
   total: number;
-  items: OrderItem[];
+  items: { name: string; quantity: number; price: number }[];
   delivery_address: string;
   tracking_code: string | null;
+  payment_id: string | null;
+  payment_method: string | null;
+  installments: number | null;
+  shipping_cost: number;
+  subtotal: number;
+  created_at: string;
+  user_id: string;
 }
 
 const Orders = () => {
@@ -77,7 +78,11 @@ const Orders = () => {
       }
 
       if (data) {
-        setOrders(data);
+        const parsedOrders = data.map(order => ({
+          ...order,
+          items: typeof order.items === 'string' ? JSON.parse(order.items) : order.items || [],
+        }));
+        setOrders(parsedOrders);
       }
     } catch (error) {
       logger.error("Error fetching orders:", error);
@@ -314,13 +319,13 @@ const Orders = () => {
 
                     {/* Actions */}
                     <div className="pt-3 flex gap-2">
-                      {order.trackingCode && (
-                        <Button variant="outline" size="sm" className="flex-1">
+                      {order.tracking_code && (
+                        <Button variant="outline" size="sm" className="flex-1" onClick={() => window.open(`https://www.google.com/search?q=rastreamento+${order.tracking_code}`, '_blank')}>
                           <Truck className="mr-2 h-4 w-4" />
                           Rastrear Pedido
                         </Button>
                       )}
-                      <Button variant="ghost" size="sm" className="flex-1 text-primary">
+                      <Button variant="ghost" size="sm" className="flex-1 text-primary" onClick={() => navigate(`/order/${order.id}`)}>
                         Ver Detalhes
                         <ChevronRight className="ml-1 h-4 w-4" />
                       </Button>

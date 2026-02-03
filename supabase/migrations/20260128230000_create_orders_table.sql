@@ -40,27 +40,4 @@ CREATE TRIGGER update_orders_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
 
--- Create order_notifications table for logistics
-CREATE TABLE public.order_notifications (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id TEXT NOT NULL REFERENCES public.orders(id) ON DELETE CASCADE,
-  notification_type TEXT NOT NULL,
-  recipient TEXT NOT NULL,
-  status TEXT NOT NULL CHECK (status IN ('pending', 'sent', 'failed')),
-  sent_at TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()
-);
-
--- Enable RLS on order_notifications
-ALTER TABLE public.order_notifications ENABLE ROW LEVEL SECURITY;
-
--- Admin-only access to notifications
-CREATE POLICY "Admin can view all order notifications"
-  ON public.order_notifications FOR SELECT
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.email LIKE '%@novita.com.br'
-    )
-  );
+-- order_notifications table is created in 20240202000000_create_order_notifications.sql

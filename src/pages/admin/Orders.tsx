@@ -54,6 +54,12 @@ import { toast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 
+interface OrderItem {
+  name: string;
+  quantity: number;
+  price: number;
+}
+
 interface Order {
   id: string;
   customer: string;
@@ -63,7 +69,7 @@ interface Order {
   date: string;
   status: string;
   total: number;
-  items: number;
+  items: OrderItem[];
   prescription_id?: string;
   tracking_code?: string;
 }
@@ -99,19 +105,25 @@ export default function AdminOrders() {
 
       if (error) throw error;
 
-      const formattedOrders = (data || []).map((order: Record<string, unknown>) => ({
-        id: order.id as string,
-        customer: (order.customer as string) || 'Cliente Desconhecido',
-        customer_email: (order.customer_email as string) || 'email@exemplo.com',
-        customer_phone: (order.customer_phone as string) || '',
-        delivery_address: (order.delivery_address as string) || '',
-        date: (order.date as string) || (order.created_at as string),
-        status: (order.status as string) || 'pending',
-        total: (order.total as number) || 0,
-        items: (order.items as number) || (order.quantity as number) || 1,
-        prescription_id: order.prescription_id as string,
-        tracking_code: order.tracking_code as string,
-      }));
+      const formattedOrders = (data || []).map((order: Record<string, unknown>) => {
+        // Parse items if it's a string or null
+        const itemsData = order.items 
+          ? (typeof order.items === "string" ? JSON.parse(order.items) : order.items)
+          : [];
+        return {
+          id: order.id as string,
+          customer: (order.customer as string) || 'Cliente Desconhecido',
+          customer_email: (order.customer_email as string) || 'email@exemplo.com',
+          customer_phone: (order.customer_phone as string) || '',
+          delivery_address: (order.delivery_address as string) || '',
+          date: (order.date as string) || (order.created_at as string),
+          status: (order.status as string) || 'processing', // Corrigido: era 'pending'
+          total: (order.total as number) || 0,
+          items: itemsData as OrderItem[],
+          prescription_id: order.prescription_id as string,
+          tracking_code: order.tracking_code as string,
+        };
+      });
 
       setOrders(formattedOrders);
       setLoading(false);
@@ -136,15 +148,15 @@ export default function AdminOrders() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      pending: { text: 'Pendente', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-4 w-4" /> },
-      processing: { text: 'Processando', color: 'bg-blue-100 text-blue-800', icon: <Package className="h-4 w-4" /> },
-      shipped: { text: 'Enviado', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
+      processing: { text: 'Processando', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-4 w-4" /> },
+      confirmed: { text: 'Confirmado', color: 'bg-blue-100 text-blue-800', icon: <Package className="h-4 w-4" /> },
+      in_transit: { text: 'Em Trânsito', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
       delivered: { text: 'Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
       cancelled: { text: 'Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] ||
-      statusConfig.pending;
+      statusConfig.processing;
 
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
@@ -158,6 +170,12 @@ export default function AdminOrders() {
     try {
       const order = orders.find(o => o.id === orderId);
       if (!order) return;
+
+      // Atualiza no banco de dados
+      const { error: updateError } = await AdminQueries.updateOrderStatus(orderId, newStatus);
+      if (updateError) {
+        throw new Error('Falha ao atualizar status no banco de dados');
+      }
 
       // Atualiza status localmente
       setOrders(orders.map(o =>
@@ -183,7 +201,7 @@ export default function AdminOrders() {
             phone: order.customer_phone || '',
             address: order.delivery_address || 'Endereço não informado',
           },
-          [{ name: 'Medicamentos', quantity: order.items }]
+          order.items.map(item => ({ name: item.name, quantity: item.quantity }))
         );
       }
 
@@ -290,9 +308,9 @@ export default function AdminOrders() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="processing">Processando</SelectItem>
-            <SelectItem value="shipped">Enviado</SelectItem>
+            <SelectItem value="confirmed">Confirmado</SelectItem>
+            <SelectItem value="in_transit">Em Trânsito</SelectItem>
             <SelectItem value="delivered">Entregue</SelectItem>
             <SelectItem value="cancelled">Cancelado</SelectItem>
           </SelectContent>
@@ -342,7 +360,7 @@ export default function AdminOrders() {
                     </div>
                   </TableCell>
                   <TableCell>{order.prescription_id || 'N/A'}</TableCell>
-                  <TableCell>{order.items} {order.items === 1 ? 'item' : 'itens'}</TableCell>
+                  <TableCell>{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}</TableCell>
                   <TableCell>
                     {new Date(order.date).toLocaleDateString('pt-BR', {
                       day: '2-digit',
@@ -363,9 +381,9 @@ export default function AdminOrders() {
                           <SelectValue placeholder="Alterar status" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pending">Pendente</SelectItem>
                           <SelectItem value="processing">Processando</SelectItem>
-                          <SelectItem value="shipped">Enviado</SelectItem>
+                          <SelectItem value="confirmed">Confirmado</SelectItem>
+                          <SelectItem value="in_transit">Em Trânsito</SelectItem>
                           <SelectItem value="delivered">Entregue</SelectItem>
                           <SelectItem value="cancelled">Cancelado</SelectItem>
                         </SelectContent>
@@ -401,12 +419,12 @@ export default function AdminOrders() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Pendentes</CardTitle>
+            <CardTitle className="text-sm font-medium">Processando</CardTitle>
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-yellow-600">
-              {orders.filter(o => o.status === 'pending').length}
+              {orders.filter(o => o.status === 'processing').length}
             </div>
           </CardContent>
         </Card>
@@ -418,7 +436,7 @@ export default function AdminOrders() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              {orders.filter(o => o.status === 'shipped').length}
+              {orders.filter(o => o.status === 'in_transit').length}
             </div>
           </CardContent>
         </Card>
@@ -498,29 +516,23 @@ export default function AdminOrders() {
                     {notificationHistory.map((notification) => (
                       <div key={notification.id} className="p-3 flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium">{notification.subject}</p>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="font-medium">{notification.subject}</p>
+                          <p className="text-sm text-muted-foreground">
                             {new Date(notification.sentAt).toLocaleString('pt-BR')}
                           </p>
                         </div>
-                        <Badge variant="secondary">{notification.status}</Badge>
+                        <Badge variant={notification.status === 'sent' ? 'default' : 'destructive'}>
+                          {notification.status}
+                        </Badge>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground text-center py-4 border rounded-lg">
-                    Nenhuma notificação enviada ainda
-                  </p>
+                  <p className="text-sm text-muted-foreground">Nenhuma notificação enviada ainda</p>
                 )}
               </div>
             </div>
           )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDetailsDialog(false)}>
-              Fechar
-            </Button>
-          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -530,47 +542,44 @@ export default function AdminOrders() {
           <DialogHeader>
             <DialogTitle>Enviar Notificação</DialogTitle>
             <DialogDescription>
-              Envie uma atualização por e-mail para o cliente
+              Envie uma notificação por e-mail para o cliente sobre este pedido
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div>
-              <Label>Destinatário</Label>
-              <p className="text-sm text-muted-foreground">
-                {selectedOrder?.customer} ({selectedOrder?.customer_email})
-              </p>
-            </div>
-
-            <div>
-              <Label>Status Atual</Label>
-              <div className="mt-1">{selectedOrder && getStatusBadge(selectedOrder.status)}</div>
-            </div>
-
-            {selectedOrder?.status === 'shipped' && (
-              <>
+          {selectedOrder && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="tracking">Código de Rastreio</Label>
-                  <Input
-                    id="tracking"
-                    placeholder="Ex: BR123456789"
-                    value={trackingCode}
-                    onChange={(e) => setTrackingCode(e.target.value)}
-                  />
+                  <Label>Cliente</Label>
+                  <p className="font-medium">{selectedOrder.customer}</p>
                 </div>
-
                 <div>
-                  <Label htmlFor="delivery">Previsão de Entrega</Label>
-                  <Input
-                    id="delivery"
-                    placeholder="Ex: 3 a 5 dias úteis"
-                    value={estimatedDelivery}
-                    onChange={(e) => setEstimatedDelivery(e.target.value)}
-                  />
+                  <Label>E-mail</Label>
+                  <p className="font-medium">{selectedOrder.customer_email}</p>
                 </div>
-              </>
-            )}
-          </div>
+              </div>
+
+              <div>
+                <Label htmlFor="tracking">Código de Rastreamento (opcional)</Label>
+                <Input
+                  id="tracking"
+                  value={trackingCode}
+                  onChange={(e) => setTrackingCode(e.target.value)}
+                  placeholder={selectedOrder.tracking_code || 'Código de rastreamento'}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="delivery">Previsão de Entrega (opcional)</Label>
+                <Input
+                  id="delivery"
+                  value={estimatedDelivery}
+                  onChange={(e) => setEstimatedDelivery(e.target.value)}
+                  placeholder="Ex: 3-5 dias úteis"
+                />
+              </div>
+            </div>
+          )}
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowNotificationDialog(false)}>
@@ -579,7 +588,7 @@ export default function AdminOrders() {
             <Button onClick={handleSendNotification} disabled={sendingNotification}>
               {sendingNotification ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                   Enviando...
                 </>
               ) : (

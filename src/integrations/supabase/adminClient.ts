@@ -5,13 +5,13 @@ import type { Database } from './types';
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Admin client with extended functionality
-// Note: For full admin functionality, we would need the service role key
-// but for security reasons, we'll implement admin features using the
-// publishable key with proper RBAC
+// Debug: log environment variables
+console.log('[AdminClient] VITE_SUPABASE_URL:', SUPABASE_URL);
+console.log('[AdminClient] VITE_SUPABASE_PUBLISHABLE_KEY:', SUPABASE_PUBLISHABLE_KEY ? '***' : 'undefined');
 
 // Check if Supabase is configured
 const isSupabaseConfigured = SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY;
+console.log('[AdminClient] isSupabaseConfigured:', isSupabaseConfigured);
 
 export const supabaseAdmin = isSupabaseConfigured 
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -22,6 +22,8 @@ export const supabaseAdmin = isSupabaseConfigured
       }
     })
   : null;
+
+console.log('[AdminClient] supabaseAdmin initialized:', !!supabaseAdmin);
 
 // RBAC (Role-Based Access Control) utility functions
 export const RBAC = {
@@ -277,16 +279,30 @@ export const AdminQueries = {
   
   // Get all orders
   async getAllOrders() {
+    console.log('[AdminQueries] getAllOrders chamado');
+    
     if (!supabaseAdmin) {
       console.log('[AdminQueries] Supabase not configured, returning mock orders');
       return { data: mockOrders, error: null };
     }
     
     try {
+      console.log('[AdminQueries] Buscando pedidos do Supabase...');
+      // Join orders with profiles to get customer name and email
       const result = await supabaseAdmin
-        .from('cart_items')
-        .select('*')
+        .from('orders')
+        .select(`
+          *,
+          profiles!inner (
+            full_name,
+            email
+          )
+        `)
         .order('created_at', { ascending: false });
+      
+      console.log('[AdminQueries] result.data:', result.data);
+      console.log('[AdminQueries] result.error:', result.error);
+      console.log('[AdminQueries] result.data?.length:', result.data?.length);
       
       // If database is empty or table doesn't exist, use mock data
       if (!result.data || result.data.length === 0 || result.error) {
@@ -294,10 +310,131 @@ export const AdminQueries = {
         return { data: mockOrders, error: null };
       }
       
-      return result;
+      // Transform the data to include customer and customer_email from profiles
+      const ordersWithCustomer = result.data.map(order => ({
+        ...order,
+        customer: order.profiles?.full_name || 'Cliente Desconhecido',
+        customer_email: order.profiles?.email || 'email@exemplo.com',
+      }));
+      
+      console.log('[AdminQueries] returning', ordersWithCustomer.length, 'orders');
+      return { data: ordersWithCustomer, error: null };
     } catch (error) {
-      console.error('Error fetching orders:', error);
+      console.error('[AdminQueries] Error fetching orders:', error);
       return { data: mockOrders, error: null };
+    }
+  },
+  
+  // Get order by ID
+  async getOrderById(orderId: string) {
+    if (!supabaseAdmin) {
+      console.log('[AdminQueries] Supabase not configured, searching mock orders');
+      const order = mockOrders.find(o => o.id === orderId);
+      return { data: order || null, error: null };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('orders')
+        .select(`
+          *,
+          profiles!inner (
+            full_name,
+            email
+          )
+        `)
+        .eq('id', orderId)
+        .single();
+      
+      if (result.error && result.error.code !== 'PGRST116') {
+        throw result.error;
+      }
+      
+      if (result.data) {
+        const orderWithCustomer = {
+          ...result.data,
+          customer: result.data.profiles?.full_name || 'Cliente Desconhecido',
+          customer_email: result.data.profiles?.email || 'email@exemplo.com',
+        };
+        return { data: orderWithCustomer, error: null };
+      }
+      
+      return { data: null, error: null };
+    } catch (error) {
+      console.error('Error fetching order:', error);
+      const order = mockOrders.find(o => o.id === orderId);
+      return { data: order || null, error: null };
+    }
+  },
+  
+  // Update order status
+  async updateOrderStatus(orderId: string, status: string) {
+    console.log('[AdminQueries] updateOrderStatus chamado:', orderId, status);
+    console.log('[AdminQueries] supabaseAdmin configurado:', !!supabaseAdmin);
+    
+    if (!supabaseAdmin) {
+      console.log('[AdminQueries] Supabase não configurado, usando mock');
+      const orderIndex = mockOrders.findIndex(o => o.id === orderId);
+      if (orderIndex >= 0) {
+        mockOrders[orderIndex].status = status;
+      }
+      return { error: null };
+    }
+    
+    try {
+      console.log('[AdminQueries] Fazendo update no Supabase para:', orderId);
+      const { data, error } = await supabaseAdmin
+        .from('orders')
+        .update({ status })
+        .eq('id', orderId)
+        .select();
+      
+      console.log('[AdminQueries] Data retornado:', JSON.stringify(data, null, 2));
+      console.log('[AdminQueries] Erro do Supabase:', error);
+      
+      if (error) {
+        console.error('[AdminQueries] Detalhes do erro:', JSON.stringify(error, null, 2));
+        throw error;
+      }
+      
+      console.log('[AdminQueries] Update realizado com sucesso');
+      
+      // Verificar se o update foi persistido
+      console.log('[AdminQueries] Verificando se o update foi persistido...');
+      const verifyResult = await supabaseAdmin
+        .from('orders')
+        .select('status')
+        .eq('id', orderId)
+        .single();
+      
+      console.log('[AdminQueries] Status no banco após update:', verifyResult.data);
+      
+      return { error: null };
+    } catch (error) {
+      console.error('[AdminQueries] Erro ao atualizar status:', error);
+      return { error };
+    }
+  },
+  
+  // Get orders by user ID
+  async getOrdersByUserId(userId: string) {
+    if (!supabaseAdmin) {
+      console.log('[AdminQueries] Supabase not configured, searching mock orders');
+      const userOrders = mockOrders.filter(o => o.user_id === userId);
+      return { data: userOrders, error: null };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('orders')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      return { data: result.data || [], error: null };
+    } catch (error) {
+      console.error('Error fetching user orders:', error);
+      return { data: [], error: null };
     }
   },
   
@@ -345,9 +482,9 @@ export const AdminQueries = {
         .from('profiles')
         .select('*', { count: 'exact', head: true });
       
-      // Get order count
+      // Get order count (using orders table)
       const ordersPromise = supabaseAdmin
-        .from('cart_items')
+        .from('orders')
         .select('*', { count: 'exact', head: true });
       
       // Get prescription count

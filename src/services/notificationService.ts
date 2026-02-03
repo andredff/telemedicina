@@ -1,6 +1,7 @@
 /**
  * Serviço de Notificação para Logística
  * Envia notificações por e-mail quando o status do pedido é alterado
+ * Nota: Em produção, o envio real de e-mails deve ser feito pelo backend
  */
 
 import { supabase } from "@/integrations/supabase/client";
