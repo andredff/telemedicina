@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { logger } from "@/lib/logger";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface UserSubscription {
@@ -113,7 +114,7 @@ const ProfileSettings = () => {
           setSubscription(subscriptionData);
         }
       } catch (error) {
-        console.error("Error fetching user data:", error);
+        logger.error("Error fetching user data:", error);
         toast({
           title: "Erro",
           description: "Não foi possível carregar seus dados.",
@@ -230,7 +231,7 @@ const ProfileSettings = () => {
         description: "Seus dados foram atualizados com sucesso.",
       });
     } catch (error) {
-      console.error("Error updating profile:", error);
+      logger.error("Error updating profile:", error);
       toast({
         title: "Erro ao atualizar",
         description: "Não foi possível atualizar seus dados. Tente novamente.",

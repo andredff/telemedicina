@@ -1,11 +1,11 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 const adminEmail = process.env.E2E_ADMIN_EMAIL || "admin@novita.com";
 const adminPassword = process.env.E2E_ADMIN_PASSWORD || "Admin#123";
 const patientEmail = process.env.E2E_PATIENT_EMAIL || "paciente01@novita.com";
 const patientPassword = process.env.E2E_PATIENT_PASSWORD || "Paciente#123";
 
-async function login(page: any, email: string, password: string) {
+async function login(page: Page, email: string, password: string) {
   await page.goto("/auth");
   await page.getByRole("tab", { name: "Login" }).click();
   await page.getByLabel("Email").fill(email);

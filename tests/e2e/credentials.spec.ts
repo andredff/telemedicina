@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 
 type Cred = { label: string; email: string; password: string };
 
@@ -18,7 +18,7 @@ const creds: Cred[] = [
   }),
 ];
 
-async function login(page: any, email: string, password: string) {
+async function login(page: Page, email: string, password: string) {
   await page.goto("/auth");
   await page.getByRole("tab", { name: "Login" }).click();
   await page.getByLabel("Email").fill(email);

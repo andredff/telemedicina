@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle, CheckCircle2, Loader2, Play } from 'lucide-react';
+import { logger } from '@/lib/logger';
 import type { Database } from '@/integrations/supabase/types';
 
 interface TestResult {
@@ -231,8 +232,8 @@ export default function TestSupabase() {
                 url={iframeUrl}
                 title="Teste de Iframe"
                 className="h-full"
-                onLoad={() => console.log('Iframe carregado com sucesso')}
-                onError={() => console.log('Erro ao carregar iframe')}
+                onLoad={() => logger.info('Iframe carregado com sucesso')}
+                onError={() => logger.warn('Erro ao carregar iframe')}
               />
             </div>
 

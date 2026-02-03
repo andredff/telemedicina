@@ -4,6 +4,7 @@ import { ArrowLeft, ShoppingCart, ShoppingBag } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MedicationCheckout } from "@/components/checkout";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import type { CartItem } from "@/types/prescription";
 import type { CustomerData } from "@/services/paymentService";
@@ -67,7 +68,7 @@ const CheckoutMedication = () => {
         setProfile({ ...data, cpf });
       }
     } catch (error) {
-      console.error("Error fetching profile:", error);
+      logger.error("Error fetching profile:", error);
     }
   };
 

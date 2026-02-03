@@ -4,6 +4,7 @@ import { ArrowLeft, Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SubscriptionCheckout } from "@/components/checkout";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import type { CustomerData } from "@/services/paymentService";
 import { useToast } from "@/hooks/use-toast";
@@ -49,7 +50,7 @@ const CheckoutSubscription = () => {
         setProfile({ ...data, cpf });
       }
     } catch (error) {
-      console.error("Error fetching profile:", error);
+      logger.error("Error fetching profile:", error);
     }
   }, []);
 
@@ -79,7 +80,7 @@ const CheckoutSubscription = () => {
         });
       }
     } catch (error) {
-      console.error("Error fetching current subscription:", error);
+      logger.error("Error fetching current subscription:", error);
     }
   }, []);
 
@@ -110,7 +111,7 @@ const CheckoutSubscription = () => {
 
       setPlan(formattedPlan);
     } catch (error) {
-      console.error("Error fetching plan:", error);
+      logger.error("Error fetching plan:", error);
       navigate("/planos");
     } finally {
       setLoading(false);
@@ -196,7 +197,7 @@ const CheckoutSubscription = () => {
           .eq("id", existingSubscription.id);
 
         if (error) {
-          console.error("Error updating subscription:", error);
+          logger.error("Error updating subscription:", error);
           toast({
             title: "Erro",
             description: "Não foi possível atualizar sua assinatura.",
@@ -223,7 +224,7 @@ const CheckoutSubscription = () => {
           });
 
         if (error) {
-          console.error("Error creating subscription:", error);
+          logger.error("Error creating subscription:", error);
           toast({
             title: "Erro",
             description: "Não foi possível criar sua assinatura.",

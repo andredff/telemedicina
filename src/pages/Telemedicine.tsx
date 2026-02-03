@@ -27,6 +27,7 @@ import {
 } from "@/components/telemedicine";
 import { useTelemedicine } from "@/hooks/use-telemedicine";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import type { User } from "@supabase/supabase-js";
 import type { Specialty } from "@/integrations/assemed";
 
@@ -96,7 +97,7 @@ const Telemedicine = () => {
         });
       }
     } catch (error) {
-      console.error("Erro ao buscar perfil:", error);
+      logger.error("Erro ao buscar perfil:", error);
     }
   };
 
