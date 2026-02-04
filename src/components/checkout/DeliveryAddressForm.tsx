@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { MapPin, Edit2, Check } from "lucide-react";
+import { MapPin, Edit2, Check, Search, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { supabase } from "@/integrations/supabase/client";
+import { searchCep, isValidCepFormat } from "@/integrations/correios";
 
 interface DeliveryAddressFormProps {
   onAddressConfirm: (address: DeliveryAddress) => void;
@@ -27,6 +28,8 @@ export function DeliveryAddressForm({
 }: DeliveryAddressFormProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearchingCep, setIsSearchingCep] = useState(false);
+  const [cepError, setCepError] = useState<string | null>(null);
   const [address, setAddress] = useState<DeliveryAddress>({
     street: "",
     number: "",
@@ -73,6 +76,41 @@ export function DeliveryAddressForm({
 
   const handleInputChange = (field: keyof DeliveryAddress, value: string) => {
     setAddress((prev) => ({ ...prev, [field]: value }));
+    // Clear CEP error when user starts typing
+    if (field === "zipCode") {
+      setCepError(null);
+    }
+  };
+
+  const handleCepSearch = async () => {
+    if (!isValidCepFormat(address.zipCode)) {
+      setCepError("CEP inválido. Digite os 8 dígitos do CEP.");
+      return;
+    }
+
+    setIsSearchingCep(true);
+    setCepError(null);
+
+    try {
+      const result = await searchCep(address.zipCode);
+
+      if (result) {
+        setAddress((prev) => ({
+          ...prev,
+          street: result.street,
+          neighborhood: result.neighborhood,
+          city: result.city,
+          state: result.state,
+        }));
+      } else {
+        setCepError("CEP não encontrado. Por favor, preencha o endereço manualmente.");
+      }
+    } catch (error) {
+      console.error("Error searching CEP:", error);
+      setCepError("Erro ao buscar CEP. Por favor, tente novamente.");
+    } finally {
+      setIsSearchingCep(false);
+    }
   };
 
   const handleSave = async () => {
@@ -113,6 +151,7 @@ export function DeliveryAddressForm({
       setAddress(originalAddress);
     }
     setIsEditing(false);
+    setCepError(null);
   };
 
   const hasAddress = address.street && address.city && address.state && address.zipCode;
@@ -177,12 +216,46 @@ export function DeliveryAddressForm({
         <div className="grid grid-cols-2 gap-4">
           <div className="col-span-2">
             <Label htmlFor="zipCode">CEP</Label>
-            <Input
-              id="zipCode"
-              value={address.zipCode}
-              onChange={(e) => handleInputChange("zipCode", e.target.value)}
-              placeholder="00000-000"
-            />
+            <div className="flex gap-2">
+              <Input
+                id="zipCode"
+                value={address.zipCode}
+                onChange={(e) => handleInputChange("zipCode", e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && isValidCepFormat(address.zipCode)) {
+                    e.preventDefault();
+                    handleCepSearch();
+                  }
+                }}
+                placeholder="00000-000"
+                className="flex-1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleCepSearch}
+                disabled={isSearchingCep || !isValidCepFormat(address.zipCode)}
+                className="gap-1 min-w-[100px]"
+              >
+                {isSearchingCep ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Buscando...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4" />
+                    Buscar
+                  </>
+                )}
+              </Button>
+            </div>
+            {cepError && (
+              <p className="text-sm text-red-500 mt-1">{cepError}</p>
+            )}
+            <p className="text-xs text-muted-foreground mt-1">
+              Digite o CEP e clique em buscar para preencher o endereço automaticamente
+            </p>
           </div>
 
           <div className="col-span-2 sm:col-span-1">
