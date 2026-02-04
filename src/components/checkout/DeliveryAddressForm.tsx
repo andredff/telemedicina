@@ -68,12 +68,6 @@ export function DeliveryAddressForm({
         };
         setAddress(loadedAddress);
         setOriginalAddress(loadedAddress);
-        
-        // Auto-confirm if address has required fields
-        const hasAddress = loadedAddress.street && loadedAddress.city && loadedAddress.state && loadedAddress.zipCode;
-        if (hasAddress) {
-          onAddressConfirm(loadedAddress);
-        }
       }
     } catch (error) {
       console.error("Error loading profile address:", error);
@@ -184,15 +178,26 @@ export function DeliveryAddressForm({
               <p className="text-muted-foreground">
                 {address.city} - {address.state}, {address.zipCode}
               </p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                className="mt-3 gap-2"
-              >
-                <Edit2 className="h-4 w-4" />
-                Alterar endereço
-              </Button>
+              <div className="flex gap-3 mt-3">
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => onAddressConfirm(address)}
+                  className="flex-1 gap-2"
+                >
+                  <Check className="h-4 w-4" />
+                  Confirmar Endereço
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                  className="gap-2"
+                >
+                  <Edit2 className="h-4 w-4" />
+                  Alterar
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="text-center py-4">
@@ -204,6 +209,15 @@ export function DeliveryAddressForm({
                 Adicionar endereço
               </Button>
             </div>
+          )}
+          {onCancel && (
+            <Button
+              variant="ghost"
+              onClick={onCancel}
+              className="w-full mt-3"
+            >
+              Cancelar
+            </Button>
           )}
         </CardContent>
       </Card>
@@ -333,7 +347,7 @@ export function DeliveryAddressForm({
             className="flex-1 gap-2"
           >
             <Check className="h-4 w-4" />
-            {isLoading ? "Salvando..." : "Confirmar Endereço"}
+            {isLoading ? "Salvando..." : "Salvar e Confirmar"}
           </Button>
           {originalAddress && (
             <Button

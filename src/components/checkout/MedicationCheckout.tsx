@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, Package, ArrowLeft, MapPin, CreditCard, QrCode, Clock } from "lucide-react";
+import { CheckCircle, XCircle, Package, ArrowLeft, MapPin, CreditCard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -11,14 +11,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import { CreditCardForm } from "./CreditCardForm";
 import { DeliveryAddressForm, type DeliveryAddress } from "./DeliveryAddressForm";
 import {
   processMedicationPayment,
-  processMedicationPixPayment,
-  confirmPixPayment,
   toCents,
   type CardData,
   type CustomerData,
@@ -48,16 +44,6 @@ export function MedicationCheckout({
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("address");
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
   const [installments, setInstallments] = useState("1");
-  const [paymentMethod, setPaymentMethod] = useState<"card" | "pix">("card");
-  const [pixPayment, setPixPayment] = useState<{
-    paymentId: string;
-    orderId: string;
-    qrCode: string;
-    qrCodeUrl: string;
-    expiresAt: string;
-  } | null>(null);
-  const [isPixCreating, setIsPixCreating] = useState(false);
-  const [isPixConfirming, setIsPixConfirming] = useState(false);
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     paymentId?: string;
@@ -81,20 +67,14 @@ export function MedicationCheckout({
     paymentId: string | null;
     userId: string;
     deliveryAddress: string;
-    paymentMethod: "credit_card" | "pix";
     paymentStatus: "paid" | "pending" | "failed";
-    pix?: {
-      qrCode: string;
-      qrCodeUrl: string;
-      expiresAt: string;
-    };
   }) => {
     try {
       const orderData = {
         id: params.orderId,
         user_id: params.userId,
         date: new Date().toISOString(),
-        status: params.paymentMethod === "pix" ? "pending" : "processing" as const,
+        status: "processing" as const,
         total: total,
         items: items.map(item => ({
           name: item.name,
@@ -103,11 +83,11 @@ export function MedicationCheckout({
         })),
         delivery_address: params.deliveryAddress,
         payment_id: params.paymentId,
-        payment_method: params.paymentMethod,
+        payment_method: "credit_card" as const,
         payment_status: params.paymentStatus,
-        pix_qr_code: params.pix?.qrCode || null,
-        pix_qr_code_url: params.pix?.qrCodeUrl || null,
-        pix_expires_at: params.pix?.expiresAt || null,
+        pix_qr_code: null,
+        pix_qr_code_url: null,
+        pix_expires_at: null,
         installments: parseInt(installments),
         shipping_cost: shipping,
         subtotal: subtotal,
@@ -171,7 +151,6 @@ export function MedicationCheckout({
             paymentId: result.paymentId,
             userId: user.id,
             deliveryAddress: deliveryAddressString,
-            paymentMethod: "credit_card",
             paymentStatus: "paid",
           });
           
@@ -210,114 +189,6 @@ export function MedicationCheckout({
       toast.error(message);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handlePixPayment = async () => {
-    if (!deliveryAddress) {
-      toast.error("Por favor, confirme o endereço de entrega primeiro.");
-      return;
-    }
-
-    setIsPixCreating(true);
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        throw new Error("Usuário não autenticado");
-      }
-
-      const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ''}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
-      const orderId = generateOrderId();
-
-      const result = await processMedicationPixPayment(
-        orderId,
-        customer,
-        toCents(total)
-      );
-
-      if (!result.paymentId || !result.pixQrCode || !result.pixQrCodeUrl || !result.pixExpiresAt) {
-        throw new Error(result.message || "Falha ao gerar PIX");
-      }
-
-      await saveOrderToDatabase({
-        orderId,
-        paymentId: result.paymentId,
-        userId: user.id,
-        deliveryAddress: deliveryAddressString,
-        paymentMethod: "pix",
-        paymentStatus: "pending",
-        pix: {
-          qrCode: result.pixQrCode,
-          qrCodeUrl: result.pixQrCodeUrl,
-          expiresAt: result.pixExpiresAt,
-        },
-      });
-
-      setPixPayment({
-        paymentId: result.paymentId,
-        orderId,
-        qrCode: result.pixQrCode,
-        qrCodeUrl: result.pixQrCodeUrl,
-        expiresAt: result.pixExpiresAt,
-      });
-
-      toast.success("PIX gerado! Aguardando pagamento.");
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao gerar PIX";
-      toast.error(message);
-    } finally {
-      setIsPixCreating(false);
-    }
-  };
-
-  const handlePixConfirmation = async () => {
-    if (!pixPayment) return;
-
-    setIsPixConfirming(true);
-
-    try {
-      const result = await confirmPixPayment(pixPayment.paymentId);
-
-      if (result.success) {
-        // Atualiza status do pedido no banco
-        const { error } = await supabase
-          .from("orders")
-          .update({
-            status: "processing",
-            payment_status: "paid",
-            payment_id: pixPayment.paymentId,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", pixPayment.orderId);
-
-        if (error) {
-          throw error;
-        }
-
-        setPaymentResult({
-          success: true,
-          paymentId: pixPayment.paymentId,
-          orderId: pixPayment.orderId,
-          message: "Pagamento PIX confirmado!",
-        });
-
-        toast.success("Pagamento PIX confirmado!");
-        onSuccess?.(pixPayment.paymentId);
-      } else {
-        setPaymentResult({
-          success: false,
-          paymentId: pixPayment.paymentId,
-          orderId: pixPayment.orderId,
-          message: result.message || "PIX ainda não confirmado.",
-        });
-        toast.error(result.message || "PIX ainda não confirmado.");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Erro ao confirmar PIX";
-      toast.error(message);
-    } finally {
-      setIsPixConfirming(false);
     }
   };
 
@@ -602,116 +473,19 @@ export function MedicationCheckout({
 
           {/* Formulário de Pagamento */}
           <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Forma de pagamento</CardTitle>
-                <CardDescription>Escolha como deseja pagar</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <RadioGroup
-                  value={paymentMethod}
-                  onValueChange={(value) => setPaymentMethod(value as "card" | "pix")}
-                  className="grid grid-cols-2 gap-4"
-                >
-                  <Label
-                    htmlFor="payment-card"
-                    className={`flex items-center justify-center gap-2 p-4 border rounded-lg cursor-pointer transition-colors ${
-                      paymentMethod === "card"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <RadioGroupItem value="card" id="payment-card" className="sr-only" />
-                    <CreditCard className="h-4 w-4" />
-                    Cartão
-                  </Label>
-                  <Label
-                    htmlFor="payment-pix"
-                    className={`flex items-center justify-center gap-2 p-4 border rounded-lg cursor-pointer transition-colors ${
-                      paymentMethod === "pix"
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:bg-muted/50"
-                    }`}
-                  >
-                    <RadioGroupItem value="pix" id="payment-pix" className="sr-only" />
-                    <QrCode className="h-4 w-4" />
-                    PIX
-                  </Label>
-                </RadioGroup>
-              </CardContent>
-            </Card>
-
-            {paymentMethod === "card" ? (
-              <CreditCardForm
-                onSubmit={(data) =>
-                  handlePayment({
-                    cardNumber: data.cardNumber,
-                    holder: data.holder,
-                    expirationDate: data.expirationDate,
-                    securityCode: data.securityCode,
-                    brand: data.brand,
-                  })
-                }
-                isLoading={isLoading}
-                submitLabel={`Pagar R$ ${total.toFixed(2)}`}
-              />
-            ) : (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Pagamento via PIX</CardTitle>
-                  <CardDescription>Gere o QR Code e finalize o pagamento</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {pixPayment ? (
-                    <div className="space-y-4">
-                      <div className="flex flex-col items-center gap-3">
-                        <div className="rounded-lg border p-3 bg-white">
-                          <img
-                            src={pixPayment.qrCodeUrl}
-                            alt="QR Code PIX"
-                            className="h-48 w-48"
-                          />
-                        </div>
-                        <p className="text-sm text-muted-foreground text-center">
-                          Escaneie o QR Code no seu app bancário ou copie o código abaixo.
-                        </p>
-                        <div className="w-full rounded-lg border p-3 text-xs break-all bg-muted/30">
-                          {pixPayment.qrCode}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Clock className="h-4 w-4" />
-                          Válido até {new Date(pixPayment.expiresAt).toLocaleTimeString("pt-BR")}
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={handlePixConfirmation}
-                        className="w-full"
-                        disabled={isPixConfirming}
-                      >
-                        {isPixConfirming ? "Confirmando pagamento..." : "Já paguei"}
-                      </Button>
-
-                      <Button
-                        variant="outline"
-                        onClick={() => setPixPayment(null)}
-                        className="w-full"
-                      >
-                        Gerar novo PIX
-                      </Button>
-                    </div>
-                  ) : (
-                    <Button
-                      onClick={handlePixPayment}
-                      disabled={isPixCreating}
-                      className="w-full"
-                    >
-                      {isPixCreating ? "Gerando PIX..." : `Gerar PIX de R$ ${total.toFixed(2)}`}
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-            )}
+            <CreditCardForm
+              onSubmit={(data) =>
+                handlePayment({
+                  cardNumber: data.cardNumber,
+                  holder: data.holder,
+                  expirationDate: data.expirationDate,
+                  securityCode: data.securityCode,
+                  brand: data.brand,
+                })
+              }
+              isLoading={isLoading}
+              submitLabel={`Pagar R$ ${total.toFixed(2)}`}
+            />
 
             <Button
               variant="outline"
