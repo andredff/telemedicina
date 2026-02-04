@@ -1,0 +1,11 @@
+{
+  "lock": false,
+  "tasks": {
+    "check": "deno fmt --check && deno lint",
+    "start": "deno run -A --watch=static/,routes/ index.ts"
+  },
+  "imports": {
+    "std@0.168.0": "https://deno.land/std@0.168.0/",
+    "@supabase/supabase-js@2.39.0": "https://esm.sh/@supabase/supabase-js@2.39.0"
+  }
+}

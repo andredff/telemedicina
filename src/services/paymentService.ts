@@ -8,6 +8,8 @@ import type {
   PaymentStatus,
 } from "@/integrations/cielo";
 
+export type { CardBrand };
+
 // ==========================================
 // Tipos do Serviço de Pagamento
 // ==========================================

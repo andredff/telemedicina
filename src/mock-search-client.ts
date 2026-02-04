@@ -64,11 +64,11 @@ export class MockPrescriptionSearchService {
 
     // Convert mock data to the expected format
     const mockData = mockPrescriptions.map(prescription => ({
-      id: prescription.code,
+      id: prescription.id,
       patient_name: prescription.patientName,
       doctor_name: prescription.doctorName,
       doctor_crm: prescription.doctorCRM,
-      date: prescription.issueDate,
+      date: prescription.date,
       status: prescription.status,
       user_id: 'mock-user-id',
       created_at: new Date().toISOString(),
@@ -85,11 +85,14 @@ export class MockPrescriptionSearchService {
       }))
     }));
 
+    // Normalize query - trim whitespace
+    const normalizedQuery = query.trim();
+
     // Apply filters
     let filteredData = [...mockData];
 
-    if (query) {
-      const lowerQuery = query.toLowerCase();
+    if (normalizedQuery) {
+      const lowerQuery = normalizedQuery.toLowerCase();
       filteredData = filteredData.filter(p =>
         p.id.toLowerCase().includes(lowerQuery) ||
         p.patient_name.toLowerCase().includes(lowerQuery) ||
@@ -156,8 +159,8 @@ export class MockPrescriptionSearchService {
 
     // Add ID suggestions
     mockPrescriptions.forEach(p => {
-      if (p.code.toLowerCase().includes(lowerQuery)) {
-        suggestions.add(p.code);
+      if (p.id.toLowerCase().includes(lowerQuery)) {
+        suggestions.add(p.id);
       }
     });
 
@@ -180,11 +183,11 @@ export class MockPrescriptionSearchService {
 
   static async getRecentPrescriptions(limit: number = 5): Promise<PrescriptionWithMedications[]> {
     const mockData = mockPrescriptions.map(prescription => ({
-      id: prescription.code,
+      id: prescription.id,
       patient_name: prescription.patientName,
       doctor_name: prescription.doctorName,
       doctor_crm: prescription.doctorCRM,
-      date: prescription.issueDate,
+      date: prescription.date,
       status: prescription.status,
       user_id: 'mock-user-id',
       created_at: new Date().toISOString(),
@@ -205,18 +208,18 @@ export class MockPrescriptionSearchService {
   }
 
   static async getPrescriptionById(prescriptionId: string): Promise<PrescriptionWithMedications | null> {
-    const prescription = mockPrescriptions.find(p => p.code === prescriptionId);
+    const prescription = mockPrescriptions.find(p => p.id === prescriptionId);
     
     if (!prescription) {
       return null;
     }
 
     return {
-      id: prescription.code,
+      id: prescription.id,
       patient_name: prescription.patientName,
       doctor_name: prescription.doctorName,
       doctor_crm: prescription.doctorCRM,
-      date: prescription.issueDate,
+      date: prescription.date,
       status: prescription.status,
       user_id: 'mock-user-id',
       created_at: new Date().toISOString(),

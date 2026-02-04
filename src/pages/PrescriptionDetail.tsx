@@ -112,7 +112,15 @@ const PrescriptionDetail = () => {
     const cartItems: CartItem[] = prescription.medications
       .filter((med) => selectedMeds.has(med.id))
       .map((med) => ({
-        ...med,
+        id: med.id,
+        name: med.name,
+        dosage: med.dosage,
+        frequency: med.frequency,
+        duration: med.duration,
+        price: med.price,
+        inStock: med.in_stock,
+        imageUrl: med.image_url,
+        cartItemId: `${prescription.id}-${med.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         prescriptionId: prescription.id,
         quantity: 1,
       }));

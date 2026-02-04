@@ -23,6 +23,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
+import { getRecentActivities, type Activity } from "@/services/activityService";
 
 interface Medication {
   id: string;
@@ -61,6 +62,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<{ full_name: string; email: string } | null>(null);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -142,6 +144,15 @@ const Dashboard = () => {
     }
   };
 
+  const fetchRecentActivities = async (userId: string) => {
+    try {
+      const activities = await getRecentActivities(userId, 10);
+      setRecentActivities(activities);
+    } catch (error) {
+      logger.error("Error fetching activities:", error);
+    }
+  };
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -154,6 +165,7 @@ const Dashboard = () => {
           fetchProfile(session.user.id);
           fetchPrescriptions(session.user.id);
           fetchSubscription(session.user.id);
+          fetchRecentActivities(session.user.id);
         }
       }
     );
@@ -168,6 +180,7 @@ const Dashboard = () => {
         fetchProfile(session.user.id);
         fetchPrescriptions(session.user.id);
         fetchSubscription(session.user.id);
+        fetchRecentActivities(session.user.id);
       }
       setLoading(false);
     });
@@ -445,25 +458,29 @@ const Dashboard = () => {
           </h2>
           <Card className="bg-card border-border/50">
             <CardContent className="p-0 divide-y divide-border/50">
-              {[
-                { icon: Video, title: "Consulta realizada", desc: "Dr. João Silva • Clínico Geral", time: "Hoje, 14:30" },
-                { icon: FileText, title: "Nova receita disponível", desc: "2 medicamentos prescritos", time: "Hoje, 14:45" },
-                { icon: Pill, title: "Pedido de medicamentos", desc: "Em preparação • Entrega amanhã", time: "Ontem, 10:00" },
-              ].map((activity, index) => (
-                <div key={index} className="flex items-center gap-4 p-4">
-                  <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                    <activity.icon className="h-5 w-5 text-muted-foreground" />
+              {recentActivities.length > 0 ? (
+                recentActivities.map((activity, index) => (
+                  <div key={activity.id || index} className="flex items-center gap-4 p-4">
+                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
+                      {activity.icon === "Video" && <Video className="h-5 w-5 text-muted-foreground" />}
+                      {activity.icon === "FileText" && <FileText className="h-5 w-5 text-muted-foreground" />}
+                      {activity.icon === "Pill" && <Pill className="h-5 w-5 text-muted-foreground" />}
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">{activity.title}</p>
+                      <p className="text-sm text-muted-foreground">{activity.description}</p>
+                    </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5" />
+                      {activity.time}
+                    </div>
                   </div>
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">{activity.title}</p>
-                    <p className="text-sm text-muted-foreground">{activity.desc}</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                    <Clock className="h-3.5 w-3.5" />
-                    {activity.time}
-                  </div>
+                ))
+              ) : (
+                <div className="flex items-center justify-center p-8 text-muted-foreground">
+                  <p>Nenhuma atividade recente</p>
                 </div>
-              ))}
+              )}
             </CardContent>
           </Card>
         </div>

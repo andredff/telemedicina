@@ -94,7 +94,7 @@ export function MedicationCheckout({
         id: params.orderId,
         user_id: params.userId,
         date: new Date().toISOString(),
-        status: params.paymentMethod === "pix" ? "pending" : "processing",
+        status: params.paymentMethod === "pix" ? "pending" : "processing" as const,
         total: total,
         items: items.map(item => ({
           name: item.name,
@@ -431,7 +431,7 @@ export function MedicationCheckout({
             </CardHeader>
             <CardContent className="space-y-4">
               {items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start">
+                <div key={item.cartItemId} className="flex justify-between items-start">
                   <div>
                     <p className="font-medium">{item.name}</p>
                     <p className="text-sm text-muted-foreground">
@@ -482,6 +482,15 @@ export function MedicationCheckout({
               }}
               onCancel={onCancel}
             />
+
+            <Button
+              variant="default"
+              onClick={() => setCurrentStep("payment")}
+              className="w-full"
+            >
+              <CreditCard className="h-4 w-4 mr-2" />
+              Ir para Pagamento
+            </Button>
 
             <Button
               variant="ghost"

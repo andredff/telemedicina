@@ -47,16 +47,34 @@ interface CreditCardFormProps {
   submitLabel?: string;
 }
 
-const CARD_BRAND_ICONS: Record<CardBrand, string> = {
-  Visa: "💳",
-  Master: "💳",
-  Amex: "💳",
-  Elo: "💳",
-  Hipercard: "💳",
-  Diners: "💳",
-  Discover: "💳",
-  JCB: "💳",
+const CARD_BRAND_CONFIG: Record<CardBrand, { name: string; color: string; bgColor: string }> = {
+  Visa: { name: "Visa", color: "#1A1F71", bgColor: "#1A1F71" },
+  Master: { name: "Mastercard", color: "#EB001B", bgColor: "#EB001B" },
+  Amex: { name: "Amex", color: "#006FCF", bgColor: "#006FCF" },
+  Elo: { name: "Elo", color: "#FF7800", bgColor: "#FF7800" },
+  Hipercard: { name: "Hipercard", color: "#8B1D3A", bgColor: "#8B1D3A" },
+  Diners: { name: "Diners", color: "#004AAD", bgColor: "#004AAD" },
+  Discover: { name: "Discover", color: "#FF6000", bgColor: "#FF6000" },
+  JCB: { name: "JCB", color: "#B61B28", bgColor: "#B61B28" },
 };
+
+function CardBrandFlag({ brand, size = "sm" }: { brand: CardBrand; size?: "sm" | "md" }) {
+  const config = CARD_BRAND_CONFIG[brand];
+  const sizeClass = size === "md" ? "px-3 py-1 text-sm" : "px-2 py-0.5 text-xs";
+  
+  return (
+    <span 
+      className={`inline-flex items-center justify-center font-bold rounded ${sizeClass}`}
+      style={{ 
+        backgroundColor: config.bgColor, 
+        color: "white",
+        minWidth: size === "md" ? "60px" : "45px"
+      }}
+    >
+      {config.name}
+    </span>
+  );
+}
 
 export function CreditCardForm({
   onSubmit,
@@ -67,6 +85,7 @@ export function CreditCardForm({
 
   const form = useForm<CardFormData>({
     resolver: zodResolver(cardFormSchema),
+    mode: "onTouched",
     defaultValues: {
       cardNumber: "",
       holder: "",
@@ -134,9 +153,9 @@ export function CreditCardForm({
                         }}
                       />
                       {detectedBrand && (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium">
-                          {detectedBrand}
-                        </span>
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                          <CardBrandFlag brand={detectedBrand} />
+                        </div>
                       )}
                     </div>
                   </FormControl>

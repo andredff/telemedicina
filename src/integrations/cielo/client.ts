@@ -1,4 +1,4 @@
-import { getCieloCredentials, getCieloUrls } from "./config";
+import { getCieloCredentials, getCieloUrls, getServerUrl } from "./config";
 import { cieloMockClient } from "./mockClient";
 import type {
   CreateSaleRequest,
@@ -15,23 +15,28 @@ class CieloClient {
   private transactionalUrl: string;
   private queryUrl: string;
   private useMock: boolean;
+  private useLocalServer: boolean;
+  private localServerUrl: string;
 
   constructor() {
     const credentials = getCieloCredentials();
     const urls = getCieloUrls(credentials.isSandbox);
+    const serverUrl = getServerUrl();
 
     this.merchantId = credentials.merchantId;
     this.merchantKey = credentials.merchantKey;
     this.transactionalUrl = urls.transactionalUrl;
     this.queryUrl = urls.queryUrl;
-
-    // Usa mock se não houver credenciais configuradas
     this.useMock = !this.merchantId || !this.merchantKey;
+    this.useLocalServer = !!serverUrl && !this.useMock;
+    this.localServerUrl = serverUrl;
 
     if (this.useMock) {
       console.info(
         "[Cielo] Credenciais não configuradas. Usando modo MOCK para testes locais."
       );
+    } else if (this.useLocalServer) {
+      console.info(`[Cielo] Usando servidor local: ${this.localServerUrl}`);
     }
   }
 
@@ -68,6 +73,28 @@ class CieloClient {
     return data as T;
   }
 
+  private async localRequest<T>(
+    endpoint: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.localServerUrl}${endpoint}`;
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        "Content-Type": "application/json",
+        ...options.headers,
+      },
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Request failed");
+    }
+
+    return data as T;
+  }
+
   // ==========================================
   // PAGAMENTO SIMPLES (Medicamentos)
   // ==========================================
@@ -82,6 +109,33 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.createCreditCardSale(request);
     }
+
+    if (this.useLocalServer) {
+      return this.localRequest<SaleResponse>("/api/cielo/payment", {
+        method: "POST",
+        body: JSON.stringify({
+          orderId: request.MerchantOrderId,
+          customer: {
+            name: request.Customer.Name,
+            email: request.Customer.Email,
+            cpf: request.Customer.Identity,
+            birthdate: request.Customer.Birthdate,
+            address: request.Customer.Address,
+          },
+          card: {
+            cardNumber: request.Payment.CreditCard?.CardNumber,
+            holder: request.Payment.CreditCard?.Holder,
+            expirationDate: request.Payment.CreditCard?.ExpirationDate,
+            securityCode: request.Payment.CreditCard?.SecurityCode,
+            brand: request.Payment.CreditCard?.Brand,
+          },
+          amountInCents: request.Payment.Amount,
+          installments: request.Payment.Installments,
+          paymentType: "credit_card",
+        }),
+      });
+    }
+
     return this.request<SaleResponse>(`${this.transactionalUrl}/1/sales/`, {
       method: "POST",
       body: JSON.stringify(request),
@@ -98,6 +152,14 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.captureSale(paymentId, amount);
     }
+
+    if (this.useLocalServer) {
+      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/capture`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+    }
+
     const url = amount
       ? `${this.transactionalUrl}/1/sales/${paymentId}/capture?amount=${amount}`
       : `${this.transactionalUrl}/1/sales/${paymentId}/capture`;
@@ -117,6 +179,14 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.cancelSale(paymentId, amount);
     }
+
+    if (this.useLocalServer) {
+      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ amount }),
+      });
+    }
+
     const url = amount
       ? `${this.transactionalUrl}/1/sales/${paymentId}/void?amount=${amount}`
       : `${this.transactionalUrl}/1/sales/${paymentId}/void`;
@@ -133,6 +203,11 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.getSale(paymentId);
     }
+
+    if (this.useLocalServer) {
+      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}`);
+    }
+
     return this.request<SaleResponse>(
       `${this.queryUrl}/1/sales/${paymentId}`,
       {
@@ -170,6 +245,35 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.createRecurrentSale(request);
     }
+
+    if (this.useLocalServer) {
+      return this.localRequest<SaleResponse>("/api/cielo/payment", {
+        method: "POST",
+        body: JSON.stringify({
+          orderId: request.MerchantOrderId,
+          customer: {
+            name: request.Customer.Name,
+            email: request.Customer.Email,
+            cpf: request.Customer.Identity,
+            birthdate: request.Customer.Birthdate,
+          },
+          card: {
+            cardNumber: request.Payment.CreditCard?.CardNumber,
+            holder: request.Payment.CreditCard?.Holder,
+            expirationDate: request.Payment.CreditCard?.ExpirationDate,
+            securityCode: request.Payment.CreditCard?.SecurityCode,
+            brand: request.Payment.CreditCard?.Brand,
+          },
+          amountInCents: request.Payment.Amount,
+          installments: 1,
+          paymentType: "recurrent",
+          interval: request.Payment.RecurrentPayment?.Interval,
+          startDate: request.Payment.RecurrentPayment?.StartDate,
+          endDate: request.Payment.RecurrentPayment?.EndDate,
+        }),
+      });
+    }
+
     return this.request<SaleResponse>(`${this.transactionalUrl}/1/sales/`, {
       method: "POST",
       body: JSON.stringify(request),

@@ -50,18 +50,18 @@ const Cart = () => {
     setCartItems(cart);
   };
 
-  const updateQuantity = (itemId: string, newQuantity: number) => {
+  const updateQuantity = (cartItemId: string, newQuantity: number) => {
     if (newQuantity < 1) return;
     
     const updatedCart = cartItems.map((item) =>
-      item.id === itemId ? { ...item, quantity: newQuantity } : item
+      item.cartItemId === cartItemId ? { ...item, quantity: newQuantity } : item
     );
     localStorage.setItem("cart", JSON.stringify(updatedCart));
     setCartItems(updatedCart);
   };
 
-  const removeItem = (itemId: string) => {
-    const updatedCart = cartItems.filter((item) => item.id !== itemId);
+  const removeItem = (cartItemId: string) => {
+    const updatedCart = cartItems.filter((item) => item.cartItemId !== cartItemId);
     localStorage.setItem("cart", JSON.stringify(updatedCart));
     setCartItems(updatedCart);
     toast({
@@ -129,7 +129,7 @@ const Cart = () => {
           <div className="grid gap-6 lg:grid-cols-3">
             <div className="lg:col-span-2 space-y-4">
               {cartItems.map((item) => (
-                <Card key={item.id} className="border-border/50">
+                <Card key={item.cartItemId} className="border-border/50">
                   <CardContent className="flex items-center gap-4 p-6">
                     <div className="flex-1">
                       <h3 className="font-heading font-semibold text-lg mb-1">{item.name}</h3>
@@ -147,7 +147,7 @@ const Cart = () => {
                             variant="outline"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                            onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                           >
                             <Minus className="h-3 w-3" />
                           </Button>
@@ -155,14 +155,14 @@ const Cart = () => {
                             type="number"
                             min="1"
                             value={item.quantity}
-                            onChange={(e) => updateQuantity(item.id, parseInt(e.target.value) || 1)}
+                            onChange={(e) => updateQuantity(item.cartItemId, parseInt(e.target.value) || 1)}
                             className="w-16 h-7 text-center"
                           />
                           <Button
                             variant="outline"
                             size="icon"
                             className="h-7 w-7"
-                            onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                            onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                           >
                             <Plus className="h-3 w-3" />
                           </Button>
@@ -183,7 +183,7 @@ const Cart = () => {
                       <Button
                         variant="destructive"
                         size="sm"
-                        onClick={() => removeItem(item.id)}
+                        onClick={() => removeItem(item.cartItemId)}
                         className="gap-2"
                       >
                         <Trash2 className="h-4 w-4" />

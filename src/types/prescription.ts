@@ -20,6 +20,7 @@ export interface Prescription {
 }
 
 export interface CartItem extends Medication {
+  cartItemId: string;
   prescriptionId: string;
   quantity: number;
 }

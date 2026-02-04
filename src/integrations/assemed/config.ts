@@ -41,6 +41,17 @@ export function getAssemedCredentials(): AssemedConfig {
  * Obtém as URLs da API baseado no ambiente (sandbox ou produção)
  */
 export function getAssemedUrls(isSandbox: boolean): AssemedUrls {
+  const useProxy = import.meta.env.DEV && import.meta.env.VITE_USE_PROXY === "true";
+
+  if (useProxy) {
+    return {
+      apiUrl: "/api/assemed",
+      appUrl: isSandbox
+        ? "https://dev-app-assemed.azurewebsites.net"
+        : "https://app.assemedtelemedicina.com",
+    };
+  }
+
   return isSandbox ? URLS.sandbox : URLS.production;
 }
 
