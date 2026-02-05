@@ -41,6 +41,7 @@ import {
   CONTATO,
 } from "@/data/landingContent";
 import { INDIVIDUAL_PLANS, formatPrice } from "@/data/plansData";
+import ambulanciaImage from "@/assets/ambulancia-novita.jpg";
 
 // Icon mapping for dynamic icon rendering
 const ICON_MAP: Record<string, LucideIcon> = {
@@ -455,7 +456,7 @@ function Index(): JSX.Element {
             <div className="relative order-2 lg:order-1">
               <div className="absolute inset-0 gradient-hero rounded-3xl blur-2xl opacity-10 scale-95" />
               <img
-                src="https://images.unsplash.com/photo-1587745416684-47953f16f02f?auto=format&fit=crop&w=800&q=80"
+                src={ambulanciaImage}
                 alt="UTI Móvel"
                 className="relative rounded-3xl shadow-elevated w-full h-[400px] object-cover"
               />
