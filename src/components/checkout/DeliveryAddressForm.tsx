@@ -180,15 +180,6 @@ export function DeliveryAddressForm({
               </p>
               <div className="flex gap-3 mt-3">
                 <Button
-                  variant="default"
-                  size="sm"
-                  onClick={() => onAddressConfirm(address)}
-                  className="flex-1 gap-2"
-                >
-                  <Check className="h-4 w-4" />
-                  Confirmar Endereço
-                </Button>
-                <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setIsEditing(true)}
@@ -209,15 +200,6 @@ export function DeliveryAddressForm({
                 Adicionar endereço
               </Button>
             </div>
-          )}
-          {onCancel && (
-            <Button
-              variant="ghost"
-              onClick={onCancel}
-              className="w-full mt-3"
-            >
-              Cancelar
-            </Button>
           )}
         </CardContent>
       </Card>
