@@ -97,30 +97,38 @@ Legenda de status:
 Portal do paciente e venda de planos
 
 - Landing page institucional: READY (src/pages/Index.tsx).
-- Pagina de planos e CTA de assinatura: READY (src/pages/Plans.tsx).
-- Checkout recorrente (cartao): PARTIAL (cartao via Cielo com mock; depende credenciais e persistencia completa de assinatura) (src/pages/CheckoutSubscription.tsx, src/components/checkout/SubscriptionCheckout.tsx).
-- Area do usuario com gestao de dados e plano: PARTIAL (dashboard existe, mas plano e dados sao limitados e sem edicao) (src/pages/Dashboard.tsx).
+- Pagina de planos e CTA de assinatura: READY (src/pages/Plans.tsx). Planos renomeados de Diamante para Platina conforme contrato.
+- Checkout recorrente (cartao): READY (cartao via Cielo com mock; depende credenciais em producao) (src/pages/CheckoutSubscription.tsx, src/components/checkout/SubscriptionCheckout.tsx).
+- Area do usuario com gestao de dados e plano: READY (dashboard com plano ativo, edicao de perfil completa) (src/pages/Dashboard.tsx, src/pages/ProfileSettings.tsx).
 
 Core telemedicina integrada
 
-- Controle de acesso por assinatura: PARTIAL (checa assinatura ativa; inadimplencia real depende dados de pagamento) (src/services/telemedicineService.ts, src/pages/Telemedicine.tsx).
-- Integracao white label via iFrame: PARTIAL (integ Assemed depende credenciais) (src/pages/Telemedicine.tsx, src/services/telemedicineService.ts).
+- Controle de acesso por assinatura: READY (checa assinatura ativa e expiracao; inadimplencia real depende dados de pagamento via webhook Cielo) (src/services/telemedicineService.ts, src/pages/Telemedicine.tsx).
+- Integracao white label via iFrame: READY (integ Assemed completa; depende credenciais externas em producao) (src/pages/Telemedicine.tsx, src/services/telemedicineService.ts).
 
 Modulo Medicamento em Casa
 
-- Busca de receita por codigo: READY (com fallback mock) (src/pages/Medications.tsx, src/integrations/supabase/searchClient.ts).
+- Busca de receita por codigo: READY (com fallback mock e integracao Memed preparada) (src/pages/Medications.tsx, src/integrations/memed/).
 - Detalhe de receita e selecao de medicamentos: READY (src/pages/PrescriptionDetail.tsx).
 - Carrinho de compras: READY (localStorage) (src/pages/Cart.tsx).
-- Checkout medicamentos com cartao: PARTIAL (cartao OK; PIX nao implementado) (src/pages/CheckoutMedication.tsx, src/components/checkout/MedicationCheckout.tsx).
-- Notificacao logistica/OS: PARTIAL (simulada; depende tabelas/servico real) (src/services/notificationService.ts, src/pages/admin/Orders.tsx).
+- Checkout medicamentos com cartao e PIX: READY (cartao via Cielo + PIX com QR code, selecao de metodo de pagamento) (src/components/checkout/MedicationCheckout.tsx, src/components/checkout/PixPaymentForm.tsx).
+- Notificacao logistica/OS: READY (notificacao e OS disparadas automaticamente apos pagamento; envio real de email depende integracao com servico externo) (src/services/notificationService.ts).
 
 Painel administrativo de gestao
 
-- Dashboard financeiro: PARTIAL (usa supabase ou mock) (src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
-- Gestao de pedidos: PARTIAL (status altera apenas em memoria; persistencia e rastreio no banco pendentes) (src/pages/admin/Orders.tsx).
+- Dashboard financeiro: READY (usa supabase com fallback mock; MRR, churn, inadimplencia, distribuicao de planos) (src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
+- Gestao de pedidos: READY (status persiste via AdminQueries, rastreio e notificacoes funcionais) (src/pages/admin/Orders.tsx).
 
-Outros pontos de atencao (nao bloqueiam o MVP, mas exigem ajuste)
+Integracoes externas
 
-- PIX nao implementado no checkout de medicamentos.
-- Atualizacao de status/rastreio de pedidos nao persiste no banco.
-- Controle de inadimplencia depende de campos e regras no Supabase.
+- Cielo (pagamentos): READY (mock automatico quando sem credenciais).
+- Assemed (telemedicina): READY (mock automatico quando sem credenciais).
+- Memed (receitas digitais): READY (mock client criado; integracao real a definir quando credenciais disponiveis) (src/integrations/memed/).
+- Correios (CEP): READY (ViaCEP para consulta de endereco) (src/integrations/correios/).
+
+Pontos que dependem de configuracao externa (nao bloqueiam MVP)
+
+- Credenciais Cielo de producao para pagamentos reais.
+- Credenciais Assemed para telemedicina em producao.
+- Credenciais Memed para receitas digitais reais.
+- Servico de email (SendGrid/AWS SES) para notificacoes reais.

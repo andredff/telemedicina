@@ -94,7 +94,7 @@ const CheckoutSubscription = () => {
       const { data, error } = await supabase
         .from("subscription_plans")
         .select("*")
-        .eq("type", planType as "bronze" | "prata" | "ouro" | "diamante" | "bronze-coletivo" | "prata-coletivo" | "ouro-coletivo" | "diamante-coletivo")
+        .eq("type", planType as "bronze" | "prata" | "ouro" | "platina" | "diamante" | "bronze-coletivo" | "prata-coletivo" | "ouro-coletivo" | "platina-coletivo" | "diamante-coletivo")
         .single();
 
       if (error || !data) {

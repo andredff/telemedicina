@@ -28,6 +28,7 @@ import { FAQ_ITEMS } from "@/data/landingContent";
 
 // Plan icon mapping based on plan type
 const PLAN_ICONS: Record<string, LucideIcon> = {
+  platina: Gem,
   diamante: Gem,
   ouro: Crown,
   coletivo: Users,
