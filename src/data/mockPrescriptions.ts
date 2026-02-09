@@ -61,7 +61,7 @@ export const mockPrescriptions: Prescription[] = [
         dosage: "500mg",
         frequency: "1 comprimido, a cada 6 horas (se necessário)",
         duration: "7 dias",
-        price: 8.90,
+        price: 2.00,
         inStock: true,
       },
     ],

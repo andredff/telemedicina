@@ -59,7 +59,7 @@ export function MedicationCheckout({
     (acc, item) => acc + item.price * item.quantity,
     0
   );
-  const shipping = subtotal > 100 ? 0 : 9.9;
+  const shipping = subtotal > 100 ? 0 : 1;
   const total = subtotal + shipping;
 
   const generateOrderId = () => {
@@ -427,15 +427,6 @@ export function MedicationCheckout({
               }}
               onCancel={onCancel}
             />
-
-            <Button
-              variant="default"
-              onClick={() => setCurrentStep("payment")}
-              className="w-full"
-            >
-              <CreditCard className="h-4 w-4 mr-2" />
-              Ir para Pagamento
-            </Button>
 
             <Button
               variant="ghost"

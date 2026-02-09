@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { MapPin, Edit2, Check, Search, Loader2 } from "lucide-react";
+import { MapPin, Edit2, Check, Search, Loader2, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -178,10 +178,17 @@ export function DeliveryAddressForm({
               <p className="text-muted-foreground">
                 {address.city} - {address.state}, {address.zipCode}
               </p>
-              <div className="flex gap-3 mt-3">
+              <div className="flex gap-3 mt-4 pt-2">
+                <Button
+                  onClick={() => onAddressConfirm(address)}
+                  className="flex-1 gap-2"
+                >
+                  Continuar para Pagamento
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="outline"
-                  size="sm"
+                  size="default"
                   onClick={() => setIsEditing(true)}
                   className="gap-2"
                 >

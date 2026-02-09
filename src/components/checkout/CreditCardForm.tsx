@@ -21,7 +21,7 @@ const cardFormSchema = z.object({
     .string()
     .min(16, "Número do cartão inválido")
     .max(19, "Número do cartão inválido")
-    .refine((val) => /^[\d\s]+$/.test(val), "Número do cartão inválido"),
+    .refine((val) => /^(\d{4}\s){3}\d{4}$/.test(val), "Número do cartão inválido"),
   holder: z
     .string()
     .min(3, "Nome do titular é obrigatório")
@@ -31,11 +31,12 @@ const cardFormSchema = z.object({
     ),
   expirationDate: z
     .string()
+    .min(7, "Data inválida (MM/AAAA)")
     .regex(/^(0[1-9]|1[0-2])\/20\d{2}$/, "Data inválida (MM/AAAA)"),
   securityCode: z
     .string()
-    .min(3, "CVV inválido")
-    .max(4, "CVV inválido")
+    .min(3, "CVV deve ter 3-4 dígitos")
+    .max(4, "CVV deve ter 3-4 dígitos")
     .regex(/^\d+$/, "CVV deve conter apenas números"),
 });
 
@@ -85,7 +86,7 @@ export function CreditCardForm({
 
   const form = useForm<CardFormData>({
     resolver: zodResolver(cardFormSchema),
-    mode: "onTouched",
+    mode: "onChange",
     defaultValues: {
       cardNumber: "",
       holder: "",
@@ -246,7 +247,11 @@ export function CreditCardForm({
               <span>Seus dados estão protegidos com criptografia SSL</span>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full" 
+              disabled={isLoading || !form.formState.isValid}
+            >
               {isLoading ? (
                 <span className="flex items-center gap-2">
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />

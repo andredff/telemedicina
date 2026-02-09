@@ -392,8 +392,38 @@ export async function getSubscriptionStatus(
 // Helpers
 // ==========================================
 
-function mapPaymentResponse(response: SaleResponse): PaymentResult {
-  const payment = response.Payment;
+// Tipo para resposta do servidor local
+interface LocalServerResponse {
+  success: boolean;
+  paymentId?: string;
+  recurrentPaymentId?: string;
+  authorizationCode?: string;
+  status: number;
+  message?: string;
+  proofOfSale?: string;
+}
+
+function mapPaymentResponse(response: SaleResponse | LocalServerResponse): PaymentResult {
+  // Verifica se é resposta do servidor local (formato simplificado)
+  if ('success' in response && !('Payment' in response)) {
+    const localResponse = response as LocalServerResponse;
+    const status = localResponse.status as PaymentStatus;
+    const isSuccess = localResponse.success === true || status === 1 || status === 2;
+    
+    return {
+      success: isSuccess,
+      paymentId: localResponse.paymentId,
+      recurrentPaymentId: localResponse.recurrentPaymentId,
+      authorizationCode: localResponse.authorizationCode,
+      status: status,
+      message: localResponse.message || getStatusMessage(status),
+      proofOfSale: localResponse.proofOfSale,
+    };
+  }
+
+  // Formato padrão da API Cielo
+  const cieloResponse = response as SaleResponse;
+  const payment = cieloResponse.Payment;
   const isSuccess = payment.Status === 1 || payment.Status === 2;
 
   return {
