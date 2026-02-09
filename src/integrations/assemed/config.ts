@@ -41,7 +41,8 @@ export function getAssemedCredentials(): AssemedConfig {
  * Obtém as URLs da API baseado no ambiente (sandbox ou produção)
  */
 export function getAssemedUrls(isSandbox: boolean): AssemedUrls {
-  const useProxy = import.meta.env.DEV && import.meta.env.VITE_USE_PROXY === "true";
+  // Em desenvolvimento, usa proxy para evitar CORS
+  const useProxy = import.meta.env.DEV;
 
   if (useProxy) {
     return {
@@ -56,7 +57,27 @@ export function getAssemedUrls(isSandbox: boolean): AssemedUrls {
 }
 
 /**
- * Monta a URL da sala de espera para teleconsulta
+ * Monta a URL da sala de espera para teleconsulta white-label Novità
+ * Usada para iframe em https://telemedicina.novitahomecare.com.br/
+ */
+export function getWhiteLabelConsultationUrl(
+  accessToken: string,
+  tipoConsulta: "imediata" | "agendada" = "imediata"
+): string {
+  const baseUrl = TELEMEDICINA_IFRAME_URL.replace(/\/$/, "");
+  
+  // Remove o Bearer prefix se existir
+  const token = accessToken.replace(/^Bearer\s+/i, "");
+  
+  // A URL white-label aceita o token via query param
+  if (tipoConsulta === "imediata") {
+    return `${baseUrl}/consulta-imediata?token=${encodeURIComponent(token)}`;
+  }
+  return `${baseUrl}/agendar-consulta?token=${encodeURIComponent(token)}`;
+}
+
+/**
+ * Monta a URL da sala de espera para teleconsulta (Assemed)
  */
 export function getWaitingRoomUrl(
   atendimentoId: number,

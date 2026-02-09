@@ -119,18 +119,37 @@ class AssemedClient {
       },
     });
 
-    const data = await response.json();
+    // Verifica se a resposta é JSON válido
+    const contentType = response.headers.get("content-type");
+    const isJson = contentType?.includes("application/json") || contentType?.includes("text/json");
 
     if (!response.ok) {
-      const error = data as AssemedError;
+      let errorMessage = `HTTP ${response.status}`;
+      
+      if (isJson) {
+        const errorData = await response.json();
+        errorMessage = errorData.message || errorData.title || errorMessage;
+      } else {
+        errorMessage = await response.text() || errorMessage;
+      }
+
+      console.error("[Assemed] Erro na API:", {
+        status: response.status,
+        endpoint,
+        error: errorMessage,
+      });
+
       throw new AssemedApiError(
-        error.message || "Erro na API Assemed",
-        error.code || "UNKNOWN_ERROR",
+        errorMessage,
+        "API_ERROR",
         response.status
       );
     }
 
-    return data as T;
+    if (isJson) {
+      return response.json();
+    }
+    return {} as T;
   }
 
   // ==========================================
@@ -162,6 +181,39 @@ class AssemedClient {
       cnpj: this.cnpj,
       ...data,
     };
+
+    // Debug: log da requisição para identificar campos nulos
+    console.log("[Assemed] RegisterPatient request:", {
+      ...request,
+      identificacao: {
+        clientId: request.identificacao.clientId,
+        clientSecretLength: request.identificacao.clientSecret?.length || 0,
+      },
+    });
+
+    // Validação de campos obrigatórios antes de enviar
+    const camposObrigatorios = [
+      { campo: "clientId", valor: this.clientId },
+      { campo: "clientSecret", valor: this.clientSecret },
+      { campo: "cnpj", valor: this.cnpj },
+      { campo: "nome", valor: data.nome },
+      { campo: "cpf", valor: data.cpf },
+      { campo: "dataNascimento", valor: data.dataNascimento },
+      { campo: "sexo", valor: data.sexo },
+      { campo: "telefone", valor: data.telefone },
+      { campo: "email", valor: data.email },
+    ];
+
+    const camposFaltando = camposObrigatorios.filter(c => !c.valor);
+    if (camposFaltando.length > 0) {
+      const campos = camposFaltando.map(c => c.campo).join(", ");
+      console.error("[Assemed] Campos obrigatórios faltando:", campos);
+      throw new AssemedApiError(
+        `Campos obrigatórios faltando: ${campos}`,
+        "VALIDATION_ERROR",
+        400
+      );
+    }
 
     return this.request<RegisterPatientResponse>(
       "/api/Pacientes/cadastro-externo",
@@ -195,6 +247,14 @@ class AssemedClient {
       clientId: this.clientId,
       clientSecret: this.clientSecret,
     };
+
+    // Debug: log da requisição (sem expor o secret completo)
+    console.log("[Assemed] Login request:", {
+      cpfPaciente: cpf,
+      clientId: this.clientId,
+      clientSecretLength: this.clientSecret?.length || 0,
+      apiUrl: this.apiUrl,
+    });
 
     const response = await this.request<LoginResponse>(
       "/api/Auth/login-externo",

@@ -134,6 +134,7 @@ export interface Consultation {
   tipoProfissionalId: number;
   profissionalNome: string | null;
   status: ConsultationStatus;
+  situacao?: ConsultationStatus; // Alias para compatibilidade com API
   dataHoraCriacao: string;
   dataHoraInicio: string | null;
   dataHoraFim: string | null;

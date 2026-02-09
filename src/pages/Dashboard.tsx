@@ -24,6 +24,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { getRecentActivities, type Activity } from "@/services/activityService";
+import { TelemedConsultationFrame, TelemedicineWhiteLabelFrame } from "@/components/telemedicine";
+import { assemedClient } from "@/integrations/assemed/client";
+import { useToast } from "@/hooks/use-toast";
+import type { RegisterPatientRequest } from "@/integrations/assemed/types";
 
 interface Medication {
   id: string;
@@ -43,6 +47,15 @@ interface Prescription {
   medications?: Medication[];
 }
 
+interface ProfileData {
+  full_name: string;
+  email: string;
+  cpf?: string;
+  phone?: string;
+  birth_date?: string;
+  gender?: string;
+}
+
 interface UserSubscription {
   id: string;
   status: string;
@@ -56,33 +69,79 @@ interface UserSubscription {
 
 const Dashboard = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<{ full_name: string; email: string } | null>(null);
+  const [profile, setProfile] = useState<ProfileData | null>(null);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+  const [activeConsultationId, setActiveConsultationId] = useState<number | null>(null);
+  const [whiteLabelAccessToken, setWhiteLabelAccessToken] = useState<string | null>(null);
+  const [whiteLabelTipoConsulta, setWhiteLabelTipoConsulta] = useState<"imediata" | "agendada">("imediata");
+  const [isCreatingConsultation, setIsCreatingConsultation] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     try {
+      // Primeiro tenta buscar da tabela profiles
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, email")
+        .select("*")
         .eq("id", userId)
         .single();
 
-      if (error) {
-        logger.error("Error fetching profile:", error);
+      // Se der erro de coluna inexistente, busca sem especificar colunas
+      if (error && error.code === '42703') {
+        const { data: fallbackData } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", userId)
+          .single();
+        
+        await fetchCpfFromMetadata(fallbackData);
         return;
       }
 
       if (data) {
-        setProfile(data);
+        await fetchCpfFromMetadata(data);
+      } else {
+        await fetchCpfFromMetadata(undefined);
       }
     } catch (error) {
       logger.error("Error fetching profile:", error);
+      await fetchCpfFromMetadata(undefined);
     }
+  };
+
+  // Função auxiliar para buscar CPF do metadata do Supabase
+  const fetchCpfFromMetadata = async (existingData?: Record<string, unknown>) => {
+    let cpf: string | undefined;
+    
+    // Método 1: Tentar do user_metadata do Supabase
+    const { data: userData } = await supabase.auth.getUser();
+    if (userData?.user?.user_metadata?.cpf) {
+      cpf = userData.user.user_metadata.cpf as string;
+    }
+    
+    // Método 2: Tentar do identity_data do Supabase (para login social)
+    if (!cpf && userData?.user?.identities) {
+      const identity = userData.user.identities[0];
+      if (identity?.identity_data?.cpf) {
+        cpf = identity.identity_data.cpf as string;
+      }
+    }
+
+    const profileData: ProfileData = {
+      full_name: (existingData?.full_name as string) || (userData?.user?.user_metadata?.full_name as string) || userData?.user?.email?.split('@')[0] || "",
+      email: (existingData?.email as string) || userData?.user?.email || "",
+      phone: (existingData?.phone as string) || (userData?.user?.user_metadata?.phone as string) || "",
+      birth_date: (existingData?.birth_date as string) || (userData?.user?.user_metadata?.birth_date as string) || "",
+      gender: (existingData?.gender as "M" | "F") || (userData?.user?.user_metadata?.gender as "M" | "F") || "M",
+      cpf: cpf || "",
+    };
+
+    setProfile(profileData);
   };
 
   const fetchPrescriptions = async (userId: string) => {
@@ -130,7 +189,6 @@ const Dashboard = () => {
       }
 
       if (data) {
-        // Handle the nested plan object
         const subscriptionData: UserSubscription = {
           id: data.id,
           status: data.status,
@@ -193,6 +251,315 @@ const Dashboard = () => {
     navigate("/auth");
   };
 
+  /**
+   * Abre a plataforma white-label de telemedicina (https://telemedicina.novitahomecare.com.br/)
+   * já autenticada com o usuário do projeto
+   */
+  const handleStartWhiteLabelConsultation = async (tipo: "imediata" | "agendada") => {
+    try {
+      setIsCreatingConsultation(true);
+      
+      if (!subscription?.plan) {
+        toast({
+          title: "Plano necessário",
+          description: "Você precisa assinar um plano para ter acesso à telemedicina.",
+          variant: "destructive",
+        });
+        navigate("/planos");
+        return;
+      }
+
+      // Verificar se tem CPF cadastrado
+      if (!profile?.cpf) {
+        toast({
+          title: "CPF necessário",
+          description: "É necessário ter CPF cadastrado no perfil para acessar a telemedicina.",
+          variant: "destructive",
+        });
+        navigate("/perfil");
+        return;
+      }
+
+      // Limpar CPF (remover máscara se houver)
+      const cpf = profile.cpf.replace(/\D/g, "");
+
+      if (cpf.length !== 11) {
+        toast({
+          title: "CPF inválido",
+          description: "O CPF cadastrado no perfil é inválido. Por favor, atualize seus dados.",
+          variant: "destructive",
+        });
+        navigate("/perfil");
+        return;
+      }
+
+      toast({
+        title: "Autenticando...",
+        description: tipo === "imediata" 
+          ? "Preparando consulta imediata..."
+          : "Preparando agendamento de consulta...",
+      });
+
+      // Fazer login na Assemed com CPF e credenciais do projeto
+      const loginResponse = await assemedClient.login(cpf);
+
+      if (!loginResponse?.accessToken) {
+        throw new Error("Falha ao autenticar na plataforma de telemedicina");
+      }
+
+      // Abrir iframe white-label com o token obtido
+      setWhiteLabelAccessToken(loginResponse.accessToken);
+      setWhiteLabelTipoConsulta(tipo);
+    } catch (error: unknown) {
+      logger.error("Erro ao abrir telemedicina white-label:", error);
+      
+      // Verificar se é erro 401 (Unauthorized)
+      if (error instanceof Error && error.message.includes("401")) {
+        toast({
+          title: "Acesso negado",
+          description: `CPF não cadastrado na plataforma ou credenciais inválidas.\n\nDebug: ClientId=${profile?.cpf ? 'OK' : 'N/A'}`,
+          variant: "destructive",
+          duration: 10000,
+        });
+      } else if (error instanceof Error && (
+        error.message.includes("404") || 
+        error.message.toLowerCase().includes("not found") ||
+        error.message.toLowerCase().includes("não encontrado")
+      )) {
+        // Tentar cadastrar o paciente
+        try {
+          toast({
+            title: "Paciente não encontrado",
+            description: "Realizando cadastro na plataforma de telemedicina...",
+          });
+
+          await registerPatientInAssemed(cpf);
+          
+          // Tentar login novamente após cadastro
+          const retryLogin = await assemedClient.login(profile.cpf.replace(/\D/g, ""));
+          
+          if (!retryLogin?.accessToken) {
+            throw new Error("Falha ao autenticar após cadastro");
+          }
+          
+          setWhiteLabelAccessToken(retryLogin.accessToken);
+          setWhiteLabelTipoConsulta(tipo);
+          
+          toast({
+            title: "Cadastro realizado!",
+            description: "Abrindo telemedicina...",
+          });
+          return;
+        } catch (registerError) {
+          logger.error("Erro ao registrar paciente:", registerError);
+          toast({
+            title: "Erro no cadastro",
+            description: "Não foi possível realizar o cadastro na plataforma de telemedicina.",
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro ao acessar telemedicina",
+          description: error instanceof Error ? error.message : "Não foi possível acessar a telemedicina. Tente novamente.",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsCreatingConsultation(false);
+    }
+  };
+
+  const handleStartImmediateConsultation = async () => {
+    // Verificar se tem CPF cadastrado antes de tudo
+    if (!profile?.cpf) {
+      toast({
+        title: "CPF necessário",
+        description: "É necessário ter CPF cadastrado no perfil para acessar a telemedicina.",
+        variant: "destructive",
+      });
+      navigate("/perfil");
+      return;
+    }
+
+    // Limpar CPF (remover máscara se houver)
+    const cpf = profile.cpf.replace(/\D/g, "");
+
+    if (cpf.length !== 11) {
+      toast({
+        title: "CPF inválido",
+        description: "O CPF cadastrado no perfil é inválido. Por favor, atualize seus dados.",
+        variant: "destructive",
+      });
+      navigate("/perfil");
+      return;
+    }
+
+    try {
+      setIsCreatingConsultation(true);
+      
+      if (!subscription?.plan) {
+        toast({
+          title: "Plano necessário",
+          description: "Você precisa assinar um plano para ter acesso à telemedicina.",
+          variant: "destructive",
+        });
+        navigate("/planos");
+        return;
+      }
+
+      toast({
+        title: "Autenticando...",
+        description: "Realizando login na plataforma de telemedicina.",
+      });
+
+      // Fazer login na Assemed com CPF e credenciais do projeto
+      const loginResponse = await assemedClient.login(cpf);
+
+      if (!loginResponse?.accessToken) {
+        throw new Error("Falha ao autenticar na plataforma de telemedicina");
+      }
+
+      toast({
+        title: "Criando consulta...",
+        description: "Aguarde enquanto preparamos sua consulta com clínico geral.",
+      });
+
+      const decodedToken = assemedClient.decodeToken(loginResponse.accessToken);
+      
+      if (!decodedToken?.pacienteId) {
+        throw new Error("Não foi possível identificar o paciente.");
+      }
+
+      // Criar consulta
+      const consultation = await assemedClient.createConsultation({
+        tipoProfissional: 1,
+        especialidadeId: 8,
+        pacienteId: parseInt(decodedToken.pacienteId),
+      });
+
+      if (consultation && consultation.id) {
+        toast({
+          title: "Consulta criada!",
+          description: "Abrindo sala de espera...",
+        });
+        
+        setActiveConsultationId(consultation.id);
+      }
+    } catch (error: unknown) {
+      logger.error("Erro ao criar consulta imediata:", error);
+      
+      // Verificar se é erro de paciente não cadastrado (404)
+      if (error instanceof Error && (
+        error.message.includes("404") || 
+        error.message.toLowerCase().includes("not found") ||
+        error.message.toLowerCase().includes("não encontrado")
+      )) {
+        // Tentar registrar o paciente
+        toast({
+          title: "Paciente não encontrado",
+          description: "Realizando cadastro na plataforma de telemedicina...",
+        });
+
+        try {
+          await registerPatientInAssemed(cpf);
+          
+          // Após registro, tentar login novamente
+          toast({
+            title: "Cadastro realizado!",
+            description: "Realizando login...",
+          });
+
+          const loginResponse = await assemedClient.login(cpf);
+          
+          if (!loginResponse?.accessToken) {
+            throw new Error("Falha ao autenticar após cadastro");
+          }
+
+          const decodedToken = assemedClient.decodeToken(loginResponse.accessToken);
+          
+          if (!decodedToken?.pacienteId) {
+            throw new Error("Não foi possível identificar o paciente após cadastro.");
+          }
+
+          // Criar consulta
+          const consultation = await assemedClient.createConsultation({
+            tipoProfissional: 1,
+            especialidadeId: 8,
+            pacienteId: parseInt(decodedToken.pacienteId),
+          });
+
+          if (consultation && consultation.id) {
+            toast({
+              title: "Consulta criada!",
+              description: "Abrindo sala de espera...",
+            });
+            setActiveConsultationId(consultation.id);
+          }
+        } catch (registerError) {
+          logger.error("Erro ao registrar paciente:", registerError);
+          toast({
+            title: "Erro no cadastro",
+            description: "Não foi possível realizar o cadastro na plataforma de telemedicina. Por favor, tente novamente ou entre em contato com o suporte.",
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      toast({
+        title: "Erro ao criar consulta",
+        description: error instanceof Error ? error.message : "Não foi possível criar a consulta. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCreatingConsultation(false);
+    }
+  };
+
+  /**
+   * Registra o paciente na plataforma Assemed
+   */
+  const registerPatientInAssemed = async (cpf: string): Promise<void> => {
+    if (!profile?.full_name || !profile?.email) {
+      throw new Error("Dados do perfil incompletos para cadastro");
+    }
+
+    const gender = profile.gender === "M" ? "M" : profile.gender === "F" ? "F" : "M";
+    
+    // Formatar data de nascimento corretamente para ISO 8601
+    let dataNascimento = "1990-01-01T00:00:00.000Z";
+    if (profile.birth_date) {
+      // Se a data estiver no formato brasileiro DD/MM/YYYY, converter
+      if (profile.birth_date.includes("/")) {
+        const [day, month, year] = profile.birth_date.split("/");
+        dataNascimento = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00.000Z`;
+      } else if (profile.birth_date.includes("-")) {
+        // Já está em formato ISO ou YYYY-MM-DD
+        dataNascimento = profile.birth_date.includes("T") 
+          ? profile.birth_date 
+          : `${profile.birth_date}T00:00:00.000Z`;
+      }
+    }
+
+    // Limpar telefone (apenas números) e garantir formato válido
+    let telefone = profile.phone?.replace(/\D/g, "") || "";
+    if (telefone.length < 10) {
+      telefone = "00000000000"; // Telefone padrão se inválido
+    }
+
+    const registerData: Omit<RegisterPatientRequest, "identificacao" | "cnpj"> = {
+      nome: profile.full_name.substring(0, 250), // Máximo 250 caracteres
+      cpf: cpf,
+      dataNascimento: dataNascimento,
+      sexo: gender,
+      telefone: telefone.substring(0, 20), // Máximo 20 caracteres
+      email: profile.email.substring(0, 100), // Máximo 100 caracteres
+    };
+
+    await assemedClient.registerPatient(registerData);
+  };
+
   const getStatusBadge = (status: string) => {
     const variants = {
       pending: "default",
@@ -213,6 +580,30 @@ const Dashboard = () => {
     );
   };
 
+  if (activeConsultationId) {
+    return (
+      <TelemedConsultationFrame
+        consultationId={activeConsultationId}
+        onClose={() => setActiveConsultationId(null)}
+      />
+    );
+  }
+
+  // Renderiza o iframe white-label se houver token
+  if (whiteLabelAccessToken) {
+    return (
+      <TelemedicineWhiteLabelFrame
+        accessToken={whiteLabelAccessToken}
+        tipoConsulta={whiteLabelTipoConsulta}
+        onClose={() => {
+          setWhiteLabelAccessToken(null);
+          setWhiteLabelTipoConsulta("imediata");
+        }}
+        title="Telemedicina Novità Home Care"
+      />
+    );
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -223,13 +614,11 @@ const Dashboard = () => {
 
   const userName = profile?.full_name || user?.user_metadata?.full_name || "Paciente";
 
-  // Helper para formatar data de expiração
   const formatExpirationDate = (dateStr: string | null) => {
     if (!dateStr) return "Sem data definida";
     return new Date(dateStr).toLocaleDateString("pt-BR");
   };
 
-  // Helper para obter descrição do plano
   const getPlanDescription = () => {
     if (!subscription?.plan) return "Você ainda não possui um plano ativo";
     return subscription.plan.description || "Consultas ilimitadas com clínico geral";
@@ -237,7 +626,6 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
       <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
         <div className="container mx-auto flex h-16 items-center justify-between px-4">
           <div className="flex items-center gap-3">
@@ -266,7 +654,6 @@ const Dashboard = () => {
       </header>
       
       <main className="container mx-auto px-4 py-8">
-        {/* Welcome Section */}
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
             Olá, {userName.split(" ")[0]}!
@@ -276,12 +663,18 @@ const Dashboard = () => {
           </p>
         </div>
 
-        {/* Quick Actions */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/telemedicina")}>
+          <Card 
+            className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" 
+            onClick={() => handleStartWhiteLabelConsultation("imediata")}
+          >
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Video className="h-6 w-6 text-primary" />
+                {isCreatingConsultation ? (
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+                ) : (
+                  <Video className="h-6 w-6 text-primary" />
+                )}
               </div>
               <div>
                 <p className="font-medium text-foreground">Consulta Imediata</p>
@@ -290,7 +683,10 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/telemedicina")}>
+          <Card 
+            className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
+            onClick={() => handleStartWhiteLabelConsultation("agendada")}
+          >
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
                 <Calendar className="h-6 w-6 text-accent" />
@@ -327,7 +723,6 @@ const Dashboard = () => {
           </Card>
         </div>
 
-        {/* Subscription Card */}
         {subscription?.plan ? (
           <Card className="mb-8 gradient-hero border-0 text-primary-foreground">
             <CardContent className="p-6">
@@ -377,7 +772,6 @@ const Dashboard = () => {
           </Card>
         )}
 
-        {/* Prescriptions */}
         <div className="mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-heading font-semibold text-foreground">
@@ -451,7 +845,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        {/* Recent Activity */}
         <div>
           <h2 className="text-xl font-heading font-semibold text-foreground mb-4">
             Atividade Recente

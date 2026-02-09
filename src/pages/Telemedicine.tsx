@@ -24,6 +24,7 @@ import {
   AccessBlockedModal,
   SpecialtyCard,
   ConsultationCard,
+  TestRegisterPatient,
 } from "@/components/telemedicine";
 import { useTelemedicine } from "@/hooks/use-telemedicine";
 import { supabase } from "@/integrations/supabase/client";
@@ -262,6 +263,30 @@ const Telemedicine = () => {
               </Button>
             </AlertDescription>
           </Alert>
+        )}
+
+        {/* Botão de teste para cadastrar paciente externo (apenas em desenvolvimento) */}
+        {import.meta.env.DEV && (
+          <div className="mb-6 p-4 border border-dashed border-yellow-500 rounded-lg bg-yellow-50 dark:bg-yellow-950/20">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
+                  🧪 Modo Desenvolvimento
+                </p>
+                <p className="text-xs text-yellow-600 dark:text-yellow-400">
+                  Cadastre um paciente de teste na API Assemed para testar o login externo
+                </p>
+              </div>
+              <TestRegisterPatient
+                defaultName={profile?.full_name}
+                defaultEmail={profile?.email}
+                defaultPhone={profile?.phone}
+                defaultCpf={profile?.cpf}
+                defaultBirthDate={profile?.birth_date}
+                defaultGender={profile?.gender}
+              />
+            </div>
+          </div>
         )}
 
         {/* Tabs */}

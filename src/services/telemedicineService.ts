@@ -3,6 +3,7 @@ import {
   getWaitingRoomUrl,
   getAssemedCredentials,
   TELEMEDICINA_IFRAME_URL,
+  AssemedApiError,
 } from "@/integrations/assemed";
 import type {
   Consultation,
@@ -175,19 +176,40 @@ export async function canAccessTelemedicine(userId: string): Promise<{
 export async function ensurePatientRegistered(
   patient: TelemedicinePatient
 ): Promise<number> {
+  console.log("[Telemedicine] Verificando registro do paciente na Assemed:", {
+    cpf: patient.cpf,
+    nome: patient.nome,
+    email: patient.email,
+  });
+
   // Primeiro tenta fazer login para ver se paciente já existe
   try {
+    console.log("[Telemedicine] Tentando login do paciente...");
     const loginResponse = await assemedClient.login(patient.cpf);
     const decoded = assemedClient.decodeToken(loginResponse.accessToken);
+
+    console.log("[Telemedicine] Login realizado com sucesso!", {
+      pacienteId: decoded?.pacienteId,
+      nome: decoded?.nome,
+    });
 
     if (decoded?.pacienteId) {
       return parseInt(decoded.pacienteId, 10);
     }
-  } catch {
-    // Paciente não existe, vamos cadastrar
+  } catch (error) {
+    // Verifica se é erro 401 (não autorizado)
+    if (error instanceof AssemedApiError) {
+      console.log("[Telemedicine] Paciente não encontrado ou credenciais inválidas:", {
+        statusCode: error.statusCode,
+        message: error.message,
+      });
+    } else {
+      console.log("[Telemedicine] Erro ao fazer login, prosseguindo com cadastro:", error);
+    }
   }
 
   // Cadastra o paciente
+  console.log("[Telemedicine] Cadastrando novo paciente na Assemed...");
   const registerResponse = await assemedClient.registerPatient({
     nome: patient.nome,
     cpf: patient.cpf,
@@ -197,8 +219,13 @@ export async function ensurePatientRegistered(
     sexo: patient.sexo,
   });
 
+  console.log("[Telemedicine] Paciente cadastrado com sucesso:", {
+    pacienteId: registerResponse.pacienteId,
+  });
+
   // Faz login para obter o token
   await assemedClient.login(patient.cpf);
+  console.log("[Telemedicine] Login realizado após cadastro!");
 
   return registerResponse.pacienteId;
 }
@@ -256,9 +283,16 @@ export async function startConsultation(
     }
 
     // Garante que o paciente está cadastrado na Assemed
+    console.log("[Telemedicine] Verificando/cadastrando paciente na Assemed...");
     const pacienteId = await ensurePatientRegistered(patient);
+    console.log("[Telemedicine] Paciente verificado/cadastrado com ID:", pacienteId);
 
     // Cria a consulta
+    console.log("[Telemedicine] Criando consulta...", {
+      pacienteId,
+      especialidadeId,
+      tipoProfissionalId,
+    });
     const response = await assemedClient.createConsultation({
       pacienteId,
       especialidadeId,
