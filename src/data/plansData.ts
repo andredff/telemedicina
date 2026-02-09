@@ -88,9 +88,9 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     ],
   },
   {
-    id: 'individual-diamante',
-    name: 'Diamante',
-    type: 'diamante',
+    id: 'individual-platina',
+    name: 'Platina',
+    type: 'platina',
     category: 'individual',
     description: 'Melhor e mais avançado controle da saúde',
     shortDescription: 'Melhor e mais avançado controle da saúde',
@@ -165,9 +165,9 @@ export const COLETIVO_PLANS: PlanData[] = [
     ],
   },
   {
-    id: 'coletivo-diamante',
-    name: 'Diamante Familiar',
-    type: 'diamante-coletivo',
+    id: 'coletivo-platina',
+    name: 'Platina Familiar',
+    type: 'platina-coletivo',
     category: 'coletivo',
     description: 'O melhor plano para toda a família',
     shortDescription: 'Plano completo - até 3 pessoas',
@@ -206,7 +206,7 @@ export const getPlanColor = (type: string): string => {
   if (type.includes('bronze')) return 'from-amber-700 to-amber-500';
   if (type.includes('prata')) return 'from-slate-400 to-slate-300';
   if (type.includes('ouro')) return 'from-yellow-500 to-yellow-400';
-  if (type.includes('diamante')) return 'from-cyan-400 to-blue-500';
+  if (type.includes('platina') || type.includes('diamante')) return 'from-cyan-400 to-blue-500';
   return 'from-primary to-secondary';
 };
 

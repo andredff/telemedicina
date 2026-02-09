@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle, XCircle, Package, ArrowLeft, MapPin, CreditCard } from "lucide-react";
+import { CheckCircle, XCircle, Package, ArrowLeft, MapPin, CreditCard, QrCode } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { CreditCardForm } from "./CreditCardForm";
+import { PixPaymentForm } from "./PixPaymentForm";
 import { DeliveryAddressForm, type DeliveryAddress } from "./DeliveryAddressForm";
 import {
   processMedicationPayment,
@@ -23,8 +24,10 @@ import { toast } from "sonner";
 import type { CartItem } from "@/types/prescription";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { sendOrderStatusNotification, sendLogisticsServiceOrder } from "@/services/notificationService";
 
 type CheckoutStep = "address" | "payment";
+type PaymentMethod = "credit_card" | "pix";
 
 interface MedicationCheckoutProps {
   items: CartItem[];
@@ -44,6 +47,7 @@ export function MedicationCheckout({
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("address");
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
   const [installments, setInstallments] = useState("1");
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit_card");
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     paymentId?: string;
@@ -68,6 +72,10 @@ export function MedicationCheckout({
     userId: string;
     deliveryAddress: string;
     paymentStatus: "paid" | "pending" | "failed";
+    paymentMethod?: "credit_card" | "pix";
+    pixQrCode?: string | null;
+    pixQrCodeUrl?: string | null;
+    pixExpiresAt?: string | null;
   }) => {
     try {
       const orderData = {
@@ -83,11 +91,11 @@ export function MedicationCheckout({
         })),
         delivery_address: params.deliveryAddress,
         payment_id: params.paymentId,
-        payment_method: "credit_card" as const,
+        payment_method: params.paymentMethod || "credit_card",
         payment_status: params.paymentStatus,
-        pix_qr_code: null,
-        pix_qr_code_url: null,
-        pix_expires_at: null,
+        pix_qr_code: params.pixQrCode || null,
+        pix_qr_code_url: params.pixQrCodeUrl || null,
+        pix_expires_at: params.pixExpiresAt || null,
         installments: parseInt(installments),
         shipping_cost: shipping,
         subtotal: subtotal,
@@ -111,6 +119,30 @@ export function MedicationCheckout({
     } catch (error) {
       logger.error('Failed to save order:', error);
       throw error;
+    }
+  };
+
+  const triggerLogisticsNotifications = async (orderId: string) => {
+    if (!deliveryAddress || !customer) return;
+    try {
+      const addressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ""}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
+
+      await sendOrderStatusNotification({
+        orderId,
+        customerEmail: customer.email || "",
+        customerName: customer.name,
+        status: "pending",
+        items: items.map((i) => ({ name: i.name, quantity: i.quantity })),
+      });
+
+      await sendLogisticsServiceOrder(orderId, {
+        name: customer.name,
+        email: customer.email || "",
+        phone: "",
+        address: addressString,
+      }, items.map((i) => ({ name: i.name, quantity: i.quantity })));
+    } catch (err) {
+      logger.warn("Falha ao enviar notificações de logística (não bloqueante):", err);
     }
   };
 
@@ -161,6 +193,7 @@ export function MedicationCheckout({
             message: result.message,
           });
 
+          await triggerLogisticsNotifications(orderId);
           toast.success("Pagamento realizado e pedido registrado com sucesso!");
           onSuccess?.(result.paymentId);
         } catch (dbError) {
@@ -189,6 +222,47 @@ export function MedicationCheckout({
       toast.error(message);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handlePixSuccess = async (pixPaymentId: string) => {
+    if (!deliveryAddress) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não autenticado");
+
+      const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ""}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
+
+      const orderId = generateOrderId();
+
+      await saveOrderToDatabase({
+        orderId,
+        paymentId: pixPaymentId,
+        userId: user.id,
+        deliveryAddress: deliveryAddressString,
+        paymentStatus: "paid",
+        paymentMethod: "pix",
+      });
+
+      await triggerLogisticsNotifications(orderId);
+
+      setPaymentResult({
+        success: true,
+        paymentId: pixPaymentId,
+        orderId,
+        message: "Pagamento PIX confirmado!",
+      });
+
+      toast.success("Pagamento PIX confirmado e pedido registrado!");
+      onSuccess?.(pixPaymentId);
+    } catch (error) {
+      logger.error("PIX payment succeeded but failed to save order:", error);
+      setPaymentResult({
+        success: true,
+        paymentId: pixPaymentId,
+        message: "Pagamento aprovado, mas houve um erro ao registrar o pedido. Entre em contato com o suporte.",
+      });
     }
   };
 
@@ -473,19 +547,58 @@ export function MedicationCheckout({
 
           {/* Formulário de Pagamento */}
           <div className="space-y-4">
-            <CreditCardForm
-              onSubmit={(data) =>
-                handlePayment({
-                  cardNumber: data.cardNumber,
-                  holder: data.holder,
-                  expirationDate: data.expirationDate,
-                  securityCode: data.securityCode,
-                  brand: data.brand,
-                })
-              }
-              isLoading={isLoading}
-              submitLabel={`Pagar R$ ${total.toFixed(2)}`}
-            />
+            {/* Seleção de Método de Pagamento */}
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("credit_card")}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                  paymentMethod === "credit_card"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:border-muted-foreground/50"
+                }`}
+              >
+                <CreditCard className="h-5 w-5" />
+                <span className="font-medium text-sm">Cartão</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPaymentMethod("pix")}
+                className={`flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-colors ${
+                  paymentMethod === "pix"
+                    ? "border-primary bg-primary/5 text-primary"
+                    : "border-border hover:border-muted-foreground/50"
+                }`}
+              >
+                <QrCode className="h-5 w-5" />
+                <span className="font-medium text-sm">PIX</span>
+              </button>
+            </div>
+
+            {paymentMethod === "credit_card" ? (
+              <CreditCardForm
+                onSubmit={(data) =>
+                  handlePayment({
+                    cardNumber: data.cardNumber,
+                    holder: data.holder,
+                    expirationDate: data.expirationDate,
+                    securityCode: data.securityCode,
+                    brand: data.brand,
+                  })
+                }
+                isLoading={isLoading}
+                submitLabel={`Pagar R$ ${total.toFixed(2)}`}
+              />
+            ) : (
+              <PixPaymentForm
+                total={total}
+                orderId={generateOrderId()}
+                customer={customer}
+                onSuccess={handlePixSuccess}
+                isLoading={isLoading}
+                setIsLoading={setIsLoading}
+              />
+            )}
 
             <Button
               variant="outline"

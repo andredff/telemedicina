@@ -44,6 +44,11 @@ INSERT INTO auth.users (
   email,
   encrypted_password,
   email_confirmed_at,
+  confirmation_token,
+  recovery_token,
+  email_change_token_new,
+  email_change,
+  email_change_token_current,
   raw_app_meta_data,
   raw_user_meta_data,
   created_at,
@@ -56,6 +61,11 @@ SELECT
   email,
   crypt(password, gen_salt('bf')),
   now(),
+  '',
+  '',
+  '',
+  '',
+  '',
   '{"provider":"email","providers":["email"]}'::jsonb,
   jsonb_build_object('full_name', full_name),
   now(),
@@ -108,11 +118,11 @@ plan_choice AS (
     id,
     rn,
     CASE (rn % 8)
-      WHEN 0 THEN 'diamante-coletivo'
+      WHEN 0 THEN 'platina-coletivo'
       WHEN 1 THEN 'ouro-coletivo'
       WHEN 2 THEN 'prata-coletivo'
       WHEN 3 THEN 'bronze-coletivo'
-      WHEN 4 THEN 'diamante'
+      WHEN 4 THEN 'platina'
       WHEN 5 THEN 'ouro'
       WHEN 6 THEN 'prata'
       ELSE 'bronze'
