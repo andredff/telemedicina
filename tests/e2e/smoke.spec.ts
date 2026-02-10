@@ -53,8 +53,10 @@ test("Login admin e acesso a Admin Orders/Reports/Users", async ({ page }) => {
 
 test("Profile settings", async ({ page }) => {
   await login(page, patientEmail, patientPassword);
+  await page.waitForURL(/\/dashboard/);
   await page.goto("/perfil");
-  await expect(page.getByRole("heading", { name: /Meu Perfil/i })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: /Meu Perfil/i })).toBeVisible({ timeout: 15000 });
 });
 
 test("Fluxo de compra básico (sem pagamento real)", async ({ page }) => {
@@ -79,6 +81,8 @@ test("Fluxo de compra básico (sem pagamento real)", async ({ page }) => {
   });
 
   await login(page, patientEmail, patientPassword);
+  await page.waitForURL(/\/dashboard/);
   await page.goto("/checkout/medication");
-  await expect(page.getByRole("heading", { name: /Finalizar Compra/i })).toBeVisible();
+  await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", { name: /Finalizar Compra/i })).toBeVisible({ timeout: 15000 });
 });
