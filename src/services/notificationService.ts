@@ -6,6 +6,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { getEmailSubject, renderEmailTemplate } from "./emailTemplates";
 
 export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
 
@@ -28,83 +29,6 @@ export interface NotificationResult {
   notificationId?: string;
 }
 
-// Templates de e-mail para cada status
-const emailTemplates: Record<OrderStatus, { subject: string; getBody: (data: OrderNotification) => string }> = {
-  pending: {
-    subject: "Pedido Recebido - Novitá Telemedicina",
-    getBody: (data) => `
-      Olá ${data.customerName},
-
-      Seu pedido #${data.orderId} foi recebido com sucesso!
-
-      Estamos processando seu pedido e em breve você receberá mais informações.
-
-      Atenciosamente,
-      Equipe Novitá Telemedicina
-    `,
-  },
-  processing: {
-    subject: "Pedido em Preparação - Novitá Telemedicina",
-    getBody: (data) => `
-      Olá ${data.customerName},
-
-      Ótimas notícias! Seu pedido #${data.orderId} está sendo preparado.
-
-      Nossa equipe está separando seus medicamentos com todo cuidado.
-      Você receberá uma notificação assim que o pedido for enviado.
-
-      Atenciosamente,
-      Equipe Novitá Telemedicina
-    `,
-  },
-  shipped: {
-    subject: "Pedido Enviado - Novitá Telemedicina",
-    getBody: (data) => `
-      Olá ${data.customerName},
-
-      Seu pedido #${data.orderId} foi enviado!
-
-      ${data.trackingCode ? `Código de rastreio: ${data.trackingCode}` : ""}
-      ${data.estimatedDelivery ? `Previsão de entrega: ${data.estimatedDelivery}` : ""}
-
-      Você pode acompanhar a entrega através do código de rastreio.
-
-      Atenciosamente,
-      Equipe Novitá Telemedicina
-    `,
-  },
-  delivered: {
-    subject: "Pedido Entregue - Novitá Telemedicina",
-    getBody: (data) => `
-      Olá ${data.customerName},
-
-      Seu pedido #${data.orderId} foi entregue com sucesso!
-
-      Esperamos que você esteja satisfeito com seus medicamentos.
-      Se tiver alguma dúvida ou problema, entre em contato conosco.
-
-      Obrigado por escolher a Novitá Telemedicina!
-
-      Atenciosamente,
-      Equipe Novitá Telemedicina
-    `,
-  },
-  cancelled: {
-    subject: "Pedido Cancelado - Novitá Telemedicina",
-    getBody: (data) => `
-      Olá ${data.customerName},
-
-      Seu pedido #${data.orderId} foi cancelado.
-
-      Se você não solicitou este cancelamento ou tem alguma dúvida,
-      entre em contato com nosso suporte.
-
-      Atenciosamente,
-      Equipe Novitá Telemedicina
-    `,
-  },
-};
-
 /**
  * Envia notificação de alteração de status do pedido
  */
@@ -112,19 +36,13 @@ export async function sendOrderStatusNotification(
   notification: OrderNotification
 ): Promise<NotificationResult> {
   try {
-    const template = emailTemplates[notification.status];
-
-    if (!template) {
-      return {
-        success: false,
-        message: `Template não encontrado para status: ${notification.status}`,
-      };
-    }
+    const subject = getEmailSubject(notification.status);
+    const htmlBody = renderEmailTemplate(notification);
 
     const emailContent = {
       to: notification.customerEmail,
-      subject: template.subject,
-      body: template.getBody(notification),
+      subject,
+      body: htmlBody,
       orderId: notification.orderId,
       status: notification.status,
       sentAt: new Date().toISOString(),
