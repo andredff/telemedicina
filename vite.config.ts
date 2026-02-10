@@ -11,6 +11,8 @@ export default defineConfig(({ mode }) => {
     ? "https://dev-api-assemed.azurewebsites.net"
     : "https://api.assemedtelemedicina.com";
 
+  const resendApiKey = env.RESEND_API_KEY || "";
+
   return {
     server: {
       host: "::",
@@ -23,6 +25,20 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/assemed/, ""),
+        },
+        // Proxy para Resend (email) - injeta API key no header Authorization
+        "/api/resend": {
+          target: "https://api.resend.com",
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path.replace(/^\/api\/resend/, ""),
+          configure: (proxy) => {
+            proxy.on("proxyReq", (proxyReq) => {
+              if (resendApiKey) {
+                proxyReq.setHeader("Authorization", `Bearer ${resendApiKey}`);
+              }
+            });
+          },
         },
       },
     },

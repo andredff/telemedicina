@@ -1,7 +1,7 @@
 /**
  * Serviço de Notificação para Logística
  * Envia notificações por e-mail quando o status do pedido é alterado
- * Nota: Em produção, o envio real de e-mails deve ser feito pelo backend
+ * Usa Resend API para envio real de e-mails (via proxy Vite em dev)
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -78,16 +78,14 @@ export async function sendOrderStatusNotification(
       throw error;
     }
 
-    // Em produção, aqui seria integrado com um serviço de e-mail (SendGrid, AWS SES, etc.)
-    // Por enquanto, simulamos o envio
-    logger.info(`[NOTIFICATION] E-mail enviado para ${notification.customerEmail}`, {
+    // Envia e-mail via Resend API
+    logger.info(`[NOTIFICATION] Enviando e-mail para ${notification.customerEmail}`, {
       orderId: notification.orderId,
       status: notification.status,
       subject: emailContent.subject,
     });
 
-    // Simula chamada a serviço de e-mail externo
-    await simulateEmailSend(emailContent);
+    await sendEmailViaResend(emailContent);
 
     return {
       success: true,
@@ -104,20 +102,60 @@ export async function sendOrderStatusNotification(
 }
 
 /**
- * Simula envio de e-mail (em produção, usar serviço real)
+ * Envia e-mail via Resend API (proxy /api/resend em dev, edge function em prod)
  */
-async function simulateEmailSend(emailContent: {
+async function sendEmailViaResend(emailContent: {
   to: string;
   subject: string;
   body: string;
 }): Promise<void> {
-  // Simula delay de envio
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  const from =
+    import.meta.env.VITE_RESEND_FROM ||
+    "Novità Telemedicina <onboarding@resend.dev>";
 
-  logger.info(`[EMAIL SERVICE] Simulando envio de e-mail:`, {
-    to: emailContent.to,
-    subject: emailContent.subject,
-  });
+  const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === "true";
+  const localServerUrl = import.meta.env.VITE_LOCAL_SERVER_URL || "http://localhost:3001";
+  const baseUrl = useLocalServer ? localServerUrl : "";
+
+  try {
+    const response = await fetch(`${baseUrl}/api/resend/emails`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        from,
+        to: [emailContent.to],
+        subject: emailContent.subject,
+        html: emailContent.body,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      logger.error("[RESEND] Erro ao enviar e-mail:", {
+        status: response.status,
+        error: errorData,
+      });
+      throw new Error(
+        `Resend API error: ${response.status} — ${errorData?.message || response.statusText}`
+      );
+    }
+
+    const result = await response.json();
+    logger.info("[RESEND] E-mail enviado com sucesso:", {
+      id: result.id,
+      to: emailContent.to,
+    });
+  } catch (error) {
+    // Se falhar o envio real, registra mas não bloqueia o fluxo
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      logger.warn("[RESEND] Serviço indisponível, e-mail não enviado:", {
+        to: emailContent.to,
+        subject: emailContent.subject,
+      });
+      return;
+    }
+    throw error;
+  }
 }
 
 /**
