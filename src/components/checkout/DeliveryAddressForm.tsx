@@ -68,6 +68,11 @@ export function DeliveryAddressForm({
         };
         setAddress(loadedAddress);
         setOriginalAddress(loadedAddress);
+        
+        // Auto-confirm address if it has all required fields
+        if (loadedAddress.street && loadedAddress.city && loadedAddress.state && loadedAddress.zipCode) {
+          onAddressConfirm(loadedAddress);
+        }
       }
     } catch (error) {
       console.error("Error loading profile address:", error);
