@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { TelemedicineIframe } from '@/components/telemedicine/TelemedicineIframe';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -228,12 +227,14 @@ export default function TestSupabase() {
             </div>
 
             <div className="border rounded-lg overflow-hidden" style={{ height: '400px' }}>
-              <TelemedicineIframe 
-                url={iframeUrl}
+              <iframe
+                src={iframeUrl}
                 title="Teste de Iframe"
-                className="h-full"
+                className="w-full h-full border-0"
                 onLoad={() => logger.info('Iframe carregado com sucesso')}
                 onError={() => logger.warn('Erro ao carregar iframe')}
+                allow="camera; microphone; fullscreen; display-capture"
+                sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox"
               />
             </div>
 

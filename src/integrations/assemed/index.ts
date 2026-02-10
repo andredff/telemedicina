@@ -8,7 +8,7 @@ export { assemedMockClient } from "./mockClient";
 export {
   getAssemedCredentials,
   getAssemedUrls,
-  getWaitingRoomUrl,
+  getWhiteLabelConsultationUrl,
   hasCredentials,
   TELEMEDICINA_IFRAME_URL,
 } from "./config";

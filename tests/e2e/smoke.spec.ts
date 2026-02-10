@@ -30,7 +30,7 @@ test("Login paciente e acesso a Dashboard/Pedidos", async ({ page }) => {
   await expect(page.getByText(/Olá,/)).toBeVisible();
 
   await page.goto("/orders");
-  await expect(page.getByRole("heading", { name: /Pedidos/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Meus Pedidos/i })).toBeVisible();
 });
 
 test("Login admin e acesso a Admin Orders/Reports/Users", async ({ page }) => {
@@ -38,13 +38,17 @@ test("Login admin e acesso a Admin Orders/Reports/Users", async ({ page }) => {
   await expect(page).toHaveURL(/\/dashboard/);
 
   await page.goto("/admin/pedidos");
-  await expect(page.getByRole("heading", { name: /Pedidos/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Gerenciamento de Pedidos/i })
+  ).toBeVisible();
 
   await page.goto("/admin/relatorios");
   await expect(page.getByRole("heading", { name: /Relat/i })).toBeVisible();
 
   await page.goto("/admin/usuarios");
-  await expect(page.getByRole("heading", { name: /Usu/i })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /Gerenciamento de Usuários/i })
+  ).toBeVisible();
 });
 
 test("Profile settings", async ({ page }) => {
@@ -54,14 +58,27 @@ test("Profile settings", async ({ page }) => {
 });
 
 test("Fluxo de compra básico (sem pagamento real)", async ({ page }) => {
+  // Seed minimal cart to avoid redirect to /cart.
+  await page.addInitScript(() => {
+    localStorage.setItem(
+      "cart",
+      JSON.stringify([
+        {
+          id: "med-e2e-1",
+          name: "Dipirona (Teste)",
+          dosage: "500mg",
+          frequency: "1x ao dia",
+          duration: "7 dias",
+          price: 9.9,
+          inStock: true,
+          prescriptionId: "rx-e2e-1",
+          quantity: 1,
+        },
+      ])
+    );
+  });
+
   await login(page, patientEmail, patientPassword);
-  await page.goto("/medicamentos");
-
-  const firstCard = page.locator("article, .card, [data-card]").first();
-  if (await firstCard.count()) {
-    await firstCard.click({ trial: true }).catch(() => {});
-  }
-
   await page.goto("/checkout/medication");
-  await expect(page.getByRole("heading", { name: /Checkout|Finalizar/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Finalizar Compra/i })).toBeVisible();
 });

@@ -2,26 +2,25 @@ import { useState } from "react";
 import { Loader2, AlertCircle, RefreshCw, X, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { getWhiteLabelConsultationUrl, TELEMEDICINA_IFRAME_URL } from "@/integrations/assemed/config";
+import { getWhiteLabelConsultationUrl } from "@/integrations/assemed/config";
 
-interface TelemedicineWhiteLabelFrameProps {
+interface TelemedicineFrameProps {
   accessToken: string;
   tipoConsulta?: "imediata" | "agendada";
   onClose?: () => void;
   title?: string;
 }
 
-export function TelemedicineWhiteLabelFrame({
+export function TelemedicineFrame({
   accessToken,
   tipoConsulta = "imediata",
   onClose,
   title = "Telemedicina Novità",
-}: TelemedicineWhiteLabelFrameProps) {
+}: TelemedicineFrameProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [key, setKey] = useState(0);
 
-  // Gera a URL autenticada para o iframe
   const iframeUrl = getWhiteLabelConsultationUrl(accessToken, tipoConsulta);
 
   const handleLoad = () => {
@@ -118,39 +117,4 @@ export function TelemedicineWhiteLabelFrame({
       />
     </div>
   );
-}
-
-/**
- * Hook para gerenciar a teleconsulta white-label
- */
-export function useTelemedicineWhiteLabel() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [tipoConsulta, setTipoConsulta] = useState<"imediata" | "agendada">("imediata");
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-
-  const openImediate = (token: string) => {
-    setAccessToken(token);
-    setTipoConsulta("imediata");
-    setIsOpen(true);
-  };
-
-  const openSchedule = (token: string) => {
-    setAccessToken(token);
-    setTipoConsulta("agendada");
-    setIsOpen(true);
-  };
-
-  const close = () => {
-    setIsOpen(false);
-    setAccessToken(null);
-  };
-
-  return {
-    isOpen,
-    tipoConsulta,
-    accessToken,
-    openImediate,
-    openSchedule,
-    close,
-  };
 }

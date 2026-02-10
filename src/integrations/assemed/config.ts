@@ -77,18 +77,6 @@ export function getWhiteLabelConsultationUrl(
 }
 
 /**
- * Monta a URL da sala de espera para teleconsulta (Assemed)
- */
-export function getWaitingRoomUrl(
-  atendimentoId: number,
-  pacienteToken: string,
-  isSandbox: boolean = true
-): string {
-  const urls = getAssemedUrls(isSandbox);
-  return `${urls.appUrl}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(pacienteToken)}`;
-}
-
-/**
  * Verifica se as credenciais estão configuradas
  */
 export function hasCredentials(): boolean {

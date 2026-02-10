@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Video,
-  History,
-  Stethoscope,
   ArrowLeft,
   Heart,
   LogOut,
@@ -11,26 +8,20 @@ import {
   ShoppingCart,
   AlertCircle,
   CheckCircle,
+  Video,
+  Calendar,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import {
-  TelemedicineIframe,
-  AccessBlockedModal,
-  SpecialtyCard,
-  ConsultationCard,
-  TestRegisterPatient,
-} from "@/components/telemedicine";
-import { useTelemedicine } from "@/hooks/use-telemedicine";
+import { TelemedicineFrame, AccessBlockedModal } from "@/components/telemedicine";
+import { useSubscriptionStatus, useCanAccessTelemedicine } from "@/hooks/use-telemedicine";
+import { useAssemedAuth } from "@/hooks/useAssemedAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import type { User } from "@supabase/supabase-js";
-import type { Specialty } from "@/integrations/assemed";
 
 interface UserProfile {
   full_name: string;
@@ -44,35 +35,29 @@ interface UserProfile {
 const Telemedicine = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { authenticate, isAuthenticating } = useAssemedAuth();
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [showBlockedModal, setShowBlockedModal] = useState(false);
-  const [activeTab, setActiveTab] = useState("nova-consulta");
-  const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | null>(null);
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [tipoConsulta, setTipoConsulta] = useState<"imediata" | "agendada">("imediata");
 
-  // Hook de telemedicina
+  // Subscription checks
   const {
-    subscription,
-    isSubscriptionLoading,
-    canAccessTelemedicine,
-    accessDenialReason,
-    accessDenialMessage,
-    specialties,
-    isSpecialtiesLoading,
-    consultations,
-    isConsultationsLoading,
-    startNewConsultation,
-    isStartingConsultation,
-    cancelActiveConsultation,
-    activeConsultation,
-    setActiveConsultation,
-    activeConsultationStatus,
-    iframeUrl,
-  } = useTelemedicine({
-    userId: user?.id || null,
-    userProfile: profile,
-  });
+    data: subscription,
+    isLoading: isSubscriptionLoading,
+  } = useSubscriptionStatus(user?.id || null);
+
+  const {
+    data: accessCheck,
+    isLoading: isAccessCheckLoading,
+  } = useCanAccessTelemedicine(user?.id || null);
+
+  const canAccess = accessCheck?.canAccess === true;
+  const accessDenialReason = accessCheck?.reason;
+  const accessDenialMessage = accessCheck?.message;
+  const isCheckingAccess = isSubscriptionLoading || isAccessCheckLoading;
 
   // Busca o perfil do usuário
   const fetchProfile = async (userId: string) => {
@@ -84,7 +69,6 @@ const Telemedicine = () => {
         .single();
 
       if (!error && data) {
-        // Buscar CPF e outros dados do user_metadata
         const { data: userData } = await supabase.auth.getUser();
         const metadata = userData.user?.user_metadata;
 
@@ -132,49 +116,62 @@ const Telemedicine = () => {
 
   // Mostra modal de bloqueio se não pode acessar
   useEffect(() => {
-    if (!isSubscriptionLoading && !canAccessTelemedicine && !loading) {
+    if (!isCheckingAccess && !canAccess && !loading) {
       setShowBlockedModal(true);
     }
-  }, [isSubscriptionLoading, canAccessTelemedicine, loading]);
-
-  // Muda para aba de consulta ativa quando inicia uma consulta
-  useEffect(() => {
-    if (activeConsultation?.success) {
-      setActiveTab("consulta-ativa");
-    }
-  }, [activeConsultation]);
+  }, [isCheckingAccess, canAccess, loading]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
 
-  const handleSelectSpecialty = async (specialty: Specialty) => {
-    if (!canAccessTelemedicine) {
+  const handleStartConsultation = async (tipo: "imediata" | "agendada") => {
+    if (!canAccess) {
       setShowBlockedModal(true);
       return;
     }
 
-    setSelectedSpecialty(specialty);
-
-    const result = await startNewConsultation(
-      specialty.id,
-      specialty.tipoProfissionalId
-    );
-
-    if (!result.success) {
-      // Mostra mensagem de erro específica
+    if (!profile?.cpf) {
       toast({
-        title: "Não foi possível iniciar a consulta",
-        description: result.error || "Ocorreu um erro ao tentar iniciar a consulta.",
+        title: "CPF necessário",
+        description: "É necessário ter CPF cadastrado no perfil para acessar a telemedicina.",
+        variant: "destructive",
+      });
+      navigate("/perfil");
+      return;
+    }
+
+    const cpf = profile.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) {
+      toast({
+        title: "CPF inválido",
+        description: "O CPF cadastrado no perfil é inválido. Por favor, atualize seus dados.",
+        variant: "destructive",
+      });
+      navigate("/perfil");
+      return;
+    }
+
+    toast({
+      title: "Autenticando...",
+      description: tipo === "imediata"
+        ? "Preparando consulta imediata..."
+        : "Preparando agendamento de consulta...",
+    });
+
+    try {
+      const token = await authenticate(cpf, profile);
+      setAccessToken(token);
+      setTipoConsulta(tipo);
+    } catch (error: unknown) {
+      logger.error("Erro ao acessar telemedicina:", error);
+      toast({
+        title: "Erro ao acessar telemedicina",
+        description: error instanceof Error ? error.message : "Não foi possível acessar a telemedicina. Tente novamente.",
         variant: "destructive",
       });
     }
-  };
-
-  const handleCancelConsultation = async (consultationId: number) => {
-    await cancelActiveConsultation(consultationId);
-    setActiveTab("nova-consulta");
   };
 
   if (loading) {
@@ -182,6 +179,21 @@ const Telemedicine = () => {
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
+    );
+  }
+
+  // Iframe aberto
+  if (accessToken) {
+    return (
+      <TelemedicineFrame
+        accessToken={accessToken}
+        tipoConsulta={tipoConsulta}
+        onClose={() => {
+          setAccessToken(null);
+          setTipoConsulta("imediata");
+        }}
+        title="Telemedicina Novità Home Care"
+      />
     );
   }
 
@@ -226,9 +238,9 @@ const Telemedicine = () => {
 
       <main className="container mx-auto px-4 py-8">
         {/* Status da assinatura */}
-        {isSubscriptionLoading ? (
+        {isCheckingAccess ? (
           <Skeleton className="h-20 w-full mb-6" />
-        ) : canAccessTelemedicine ? (
+        ) : canAccess ? (
           <Alert className="mb-6 border-primary/20 bg-primary/5">
             <CheckCircle className="h-4 w-4 text-primary" />
             <AlertTitle className="text-primary">Assinatura Ativa</AlertTitle>
@@ -246,8 +258,8 @@ const Telemedicine = () => {
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>
-              {accessDenialReason === "expired" 
-                ? "Assinatura Expirada" 
+              {accessDenialReason === "expired"
+                ? "Assinatura Expirada"
                 : accessDenialReason === "inactive"
                 ? "Assinatura Inativa"
                 : "Acesso Restrito"}
@@ -265,230 +277,57 @@ const Telemedicine = () => {
           </Alert>
         )}
 
-        {/* Botão de teste para cadastrar paciente externo (apenas em desenvolvimento) */}
-        {import.meta.env.DEV && (
-          <div className="mb-6 p-4 border border-dashed border-yellow-500 rounded-lg bg-yellow-50 dark:bg-yellow-950/20">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-yellow-800 dark:text-yellow-200">
-                  🧪 Modo Desenvolvimento
-                </p>
-                <p className="text-xs text-yellow-600 dark:text-yellow-400">
-                  Cadastre um paciente de teste na API Assemed para testar o login externo
-                </p>
-              </div>
-              <TestRegisterPatient
-                defaultName={profile?.full_name}
-                defaultEmail={profile?.email}
-                defaultPhone={profile?.phone}
-                defaultCpf={profile?.cpf}
-                defaultBirthDate={profile?.birth_date}
-                defaultGender={profile?.gender}
-              />
-            </div>
+        {/* Opções de consulta */}
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-heading font-semibold mb-2">
+              Iniciar Teleconsulta
+            </h2>
+            <p className="text-muted-foreground">
+              Escolha o tipo de atendimento desejado
+            </p>
           </div>
-        )}
 
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="nova-consulta" className="gap-2">
-              <Stethoscope className="h-4 w-4" />
-              <span className="hidden sm:inline">Nova Consulta</span>
-              <span className="sm:hidden">Nova</span>
-            </TabsTrigger>
-            <TabsTrigger value="consulta-ativa" className="gap-2" disabled={!activeConsultation}>
-              <Video className="h-4 w-4" />
-              <span className="hidden sm:inline">Consulta Ativa</span>
-              <span className="sm:hidden">Ativa</span>
-              {activeConsultation && (
-                <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                  1
-                </Badge>
-              )}
-            </TabsTrigger>
-            <TabsTrigger value="historico" className="gap-2">
-              <History className="h-4 w-4" />
-              <span className="hidden sm:inline">Histórico</span>
-              <span className="sm:hidden">Histórico</span>
-            </TabsTrigger>
-          </TabsList>
-
-          {/* Nova Consulta */}
-          <TabsContent value="nova-consulta">
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-heading font-semibold mb-2">
-                  Escolha uma Especialidade
-                </h2>
-                <p className="text-muted-foreground">
-                  Selecione o tipo de consulta que deseja realizar
-                </p>
-              </div>
-
-              {isSpecialtiesLoading ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-64" />
-                  ))}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card
+              className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
+              onClick={() => handleStartConsultation("imediata")}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors shrink-0">
+                  {isAuthenticating && tipoConsulta === "imediata" ? (
+                    <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-primary" />
+                  ) : (
+                    <Video className="h-7 w-7 text-primary" />
+                  )}
                 </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {specialties.map((specialty) => (
-                    <SpecialtyCard
-                      key={specialty.id}
-                      specialty={specialty}
-                      onSelect={handleSelectSpecialty}
-                      isLoading={
-                        isStartingConsultation &&
-                        selectedSpecialty?.id === specialty.id
-                      }
-                      disabled={!canAccessTelemedicine || isStartingConsultation}
-                    />
-                  ))}
+                <div>
+                  <p className="font-semibold text-foreground text-lg">Consulta Imediata</p>
+                  <p className="text-sm text-muted-foreground">Atendimento com clínico geral 24h, sem necessidade de agendamento</p>
                 </div>
-              )}
+              </CardContent>
+            </Card>
 
-              {/* Fallback se não houver especialidades */}
-              {!isSpecialtiesLoading && specialties.length === 0 && (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <Stethoscope className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground text-center">
-                      Nenhuma especialidade disponível no momento
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-
-          {/* Consulta Ativa */}
-          <TabsContent value="consulta-ativa">
-            {activeConsultation?.success ? (
-              <div className="space-y-4">
-                {/* Status da consulta */}
-                <Card>
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <CardTitle>Consulta #{activeConsultation.consultationId}</CardTitle>
-                        <CardDescription>
-                          {selectedSpecialty?.nome || "Clínico Geral"}
-                        </CardDescription>
-                      </div>
-                      <Badge
-                        variant={
-                          activeConsultationStatus === "EM_ATENDIMENTO"
-                            ? "default"
-                            : "secondary"
-                        }
-                      >
-                        {activeConsultationStatus === "EM_ATENDIMENTO"
-                          ? "Em Atendimento"
-                          : activeConsultationStatus === "CONCLUIDO"
-                          ? "Concluída"
-                          : "Aguardando"}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="flex gap-2">
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        handleCancelConsultation(activeConsultation.consultationId!)
-                      }
-                    >
-                      Cancelar Consulta
-                    </Button>
-                    {activeConsultation.waitingRoomUrl && (
-                      <Button
-                        onClick={() =>
-                          window.open(activeConsultation.waitingRoomUrl, "_blank")
-                        }
-                      >
-                        Abrir em Nova Aba
-                      </Button>
-                    )}
-                  </CardContent>
-                </Card>
-
-                {/* iFrame da consulta */}
-                {activeConsultation.waitingRoomUrl && (
-                  <div className="relative bg-card rounded-lg border overflow-hidden">
-                    <TelemedicineIframe
-                      url={activeConsultation.waitingRoomUrl}
-                      title="Sala de Consulta"
-                      className="min-h-[600px]"
-                    />
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Video className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground text-center mb-4">
-                    Você não possui nenhuma consulta ativa no momento
-                  </p>
-                  <Button onClick={() => setActiveTab("nova-consulta")}>
-                    Iniciar Nova Consulta
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </TabsContent>
-
-          {/* Histórico */}
-          <TabsContent value="historico">
-            <div className="space-y-6">
-              <div>
-                <h2 className="text-xl font-heading font-semibold mb-2">
-                  Histórico de Consultas
-                </h2>
-                <p className="text-muted-foreground">
-                  Veja todas as suas consultas anteriores
-                </p>
-              </div>
-
-              {isConsultationsLoading ? (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-40" />
-                  ))}
+            <Card
+              className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
+              onClick={() => handleStartConsultation("agendada")}
+            >
+              <CardContent className="p-6 flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors shrink-0">
+                  {isAuthenticating && tipoConsulta === "agendada" ? (
+                    <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-accent" />
+                  ) : (
+                    <Calendar className="h-7 w-7 text-accent" />
+                  )}
                 </div>
-              ) : consultations.length > 0 ? (
-                <div className="space-y-4">
-                  {consultations.map((consultation) => (
-                    <ConsultationCard
-                      key={consultation.id}
-                      consultation={consultation}
-                      onJoin={(c) => {
-                        setActiveConsultation({
-                          success: true,
-                          consultationId: c.id,
-                          waitingRoomUrl: `${iframeUrl}sala-espera-externa/${c.id}?token=${c.pacienteToken}`,
-                          pacienteToken: c.pacienteToken,
-                        });
-                        setActiveTab("consulta-ativa");
-                      }}
-                      onCancel={handleCancelConsultation}
-                    />
-                  ))}
+                <div>
+                  <p className="font-semibold text-foreground text-lg">Agendar Consulta</p>
+                  <p className="text-sm text-muted-foreground">Escolha especialidade, data e horário para sua consulta</p>
                 </div>
-              ) : (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <History className="h-12 w-12 text-muted-foreground mb-4" />
-                    <p className="text-muted-foreground text-center">
-                      Você ainda não realizou nenhuma consulta
-                    </p>
-                  </CardContent>
-                </Card>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </main>
 
       {/* Modal de acesso bloqueado */}
