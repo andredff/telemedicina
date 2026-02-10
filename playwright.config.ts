@@ -2,7 +2,7 @@ import { defineConfig } from "@playwright/test";
 
 const baseURL =
   process.env.BASE_URL ||
-  "http://novita.migrai.com.br.s3-website-us-east-1.amazonaws.com";
+  "http://localhost:5173";
 
 export default defineConfig({
   testDir: "tests/e2e",

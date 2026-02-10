@@ -1,79 +1,53 @@
-import { getCieloCredentials, getCieloUrls, getServerUrl } from "./config";
+import { getServerUrl } from "./config";
 import { cieloMockClient } from "./mockClient";
 import type {
   CreateSaleRequest,
   CreateRecurrentSaleRequest,
   SaleResponse,
-  CieloError,
   RecurrenceInterval,
   DeactivateRecurrenceResponse,
 } from "./types";
 
+function isLocalhostUrl(url: string): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
+  } catch {
+    // Non-URL strings (e.g. relative paths) are treated as non-localhost.
+    return false;
+  }
+}
+
 class CieloClient {
-  private merchantId: string;
-  private merchantKey: string;
-  private transactionalUrl: string;
-  private queryUrl: string;
   private useMock: boolean;
   private useLocalServer: boolean;
   private localServerUrl: string;
 
   constructor() {
-    const credentials = getCieloCredentials();
-    const urls = getCieloUrls(credentials.isSandbox);
     const serverUrl = getServerUrl();
 
-    this.merchantId = credentials.merchantId;
-    this.merchantKey = credentials.merchantKey;
-    this.transactionalUrl = urls.transactionalUrl;
-    this.queryUrl = urls.queryUrl;
     this.localServerUrl = serverUrl;
 
-    const hasCredentials = !!this.merchantId && !!this.merchantKey;
-    this.useLocalServer = hasCredentials && !!serverUrl;
+    const serverConfigured = !!serverUrl;
+    const serverIsLocalhost = isLocalhostUrl(serverUrl);
+    const canUseServer = serverConfigured && (import.meta.env.DEV || !serverIsLocalhost);
+    this.useLocalServer = canUseServer;
 
     // Browser cannot call Cielo API directly (CORS).
-    // Without a local proxy server, fall back to mock even if credentials exist.
-    this.useMock = !hasCredentials || (!this.useLocalServer && import.meta.env.DEV);
+    // Without a proxy server, always fall back to mock.
+    const forceMock = import.meta.env.VITE_CIELO_FORCE_MOCK === "true";
+    this.useMock = forceMock || !this.useLocalServer;
 
     if (this.useMock) {
-      console.info("[Cielo] Usando modo MOCK para testes locais.");
+      console.info("[Cielo] Usando modo MOCK (pagamento simulado).");
+      if (!forceMock && serverConfigured && serverIsLocalhost && import.meta.env.PROD) {
+        // In production builds, "localhost" is never reachable from end-user browsers.
+        console.warn("[Cielo] Servidor de pagamento aponta para localhost em produção. Ajuste VITE_LOCAL_SERVER_URL ou use um backend/edge function.");
+      }
     } else if (this.useLocalServer) {
-      console.info(`[Cielo] Usando servidor local: ${this.localServerUrl}`);
+      console.info(`[Cielo] Usando proxy de pagamento: ${this.localServerUrl}`);
     }
-  }
-
-  private getHeaders(): HeadersInit {
-    return {
-      "Content-Type": "application/json",
-      MerchantId: this.merchantId,
-      MerchantKey: this.merchantKey,
-    };
-  }
-
-  private async request<T>(
-    url: string,
-    options: RequestInit
-  ): Promise<T> {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        ...this.getHeaders(),
-        ...options.headers,
-      },
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      const errors = data as CieloError[];
-      throw new CieloApiError(
-        errors.map((e) => e.Message).join(", "),
-        errors
-      );
-    }
-
-    return data as T;
   }
 
   private async localRequest<T>(
@@ -139,10 +113,7 @@ class CieloClient {
       });
     }
 
-    return this.request<SaleResponse>(`${this.transactionalUrl}/1/sales/`, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    throw new Error("Cielo proxy server not configured");
   }
 
   /**
@@ -163,13 +134,7 @@ class CieloClient {
       });
     }
 
-    const url = amount
-      ? `${this.transactionalUrl}/1/sales/${paymentId}/capture?amount=${amount}`
-      : `${this.transactionalUrl}/1/sales/${paymentId}/capture`;
-
-    return this.request<SaleResponse>(url, {
-      method: "PUT",
-    });
+    throw new Error("Cielo proxy server not configured");
   }
 
   /**
@@ -190,13 +155,7 @@ class CieloClient {
       });
     }
 
-    const url = amount
-      ? `${this.transactionalUrl}/1/sales/${paymentId}/void?amount=${amount}`
-      : `${this.transactionalUrl}/1/sales/${paymentId}/void`;
-
-    return this.request<SaleResponse>(url, {
-      method: "PUT",
-    });
+    throw new Error("Cielo proxy server not configured");
   }
 
   /**
@@ -211,12 +170,7 @@ class CieloClient {
       return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}`);
     }
 
-    return this.request<SaleResponse>(
-      `${this.queryUrl}/1/sales/${paymentId}`,
-      {
-        method: "GET",
-      }
-    );
+    throw new Error("Cielo proxy server not configured");
   }
 
   /**
@@ -226,12 +180,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.getSaleByOrderId(merchantOrderId);
     }
-    return this.request<SaleResponse>(
-      `${this.queryUrl}/1/sales?merchantOrderId=${merchantOrderId}`,
-      {
-        method: "GET",
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("getSaleByOrderId is not available without a proxy server implementation");
   }
 
   // ==========================================
@@ -277,10 +227,7 @@ class CieloClient {
       });
     }
 
-    return this.request<SaleResponse>(`${this.transactionalUrl}/1/sales/`, {
-      method: "POST",
-      body: JSON.stringify(request),
-    });
+    throw new Error("Cielo proxy server not configured");
   }
 
   /**
@@ -290,12 +237,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.getRecurrence(recurrentPaymentId);
     }
-    return this.request<SaleResponse>(
-      `${this.queryUrl}/1/RecurrentPayment/${recurrentPaymentId}`,
-      {
-        method: "GET",
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("getRecurrence is not available without a proxy server implementation");
   }
 
   /**
@@ -308,13 +251,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.updateRecurrenceAmount(recurrentPaymentId, amount);
     }
-    await this.request(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/Amount`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ Amount: amount }),
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("updateRecurrenceAmount is not available without a proxy server implementation");
   }
 
   /**
@@ -327,13 +265,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.updateRecurrenceNextDate(recurrentPaymentId, nextPaymentDate);
     }
-    await this.request(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/NextPaymentDate`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ NextPaymentDate: nextPaymentDate }),
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("updateRecurrenceNextDate is not available without a proxy server implementation");
   }
 
   /**
@@ -346,13 +279,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.updateRecurrenceInterval(recurrentPaymentId, interval);
     }
-    await this.request(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/Interval`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ Interval: interval }),
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("updateRecurrenceInterval is not available without a proxy server implementation");
   }
 
   /**
@@ -365,13 +293,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.updateRecurrenceEndDate(recurrentPaymentId, endDate);
     }
-    await this.request(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/EndDate`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ EndDate: endDate }),
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("updateRecurrenceEndDate is not available without a proxy server implementation");
   }
 
   /**
@@ -383,12 +306,8 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.deactivateRecurrence(recurrentPaymentId);
     }
-    return this.request<DeactivateRecurrenceResponse>(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/Deactivate`,
-      {
-        method: "PUT",
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("deactivateRecurrence is not available without a proxy server implementation");
   }
 
   /**
@@ -400,22 +319,15 @@ class CieloClient {
     if (this.useMock) {
       return cieloMockClient.reactivateRecurrence(recurrentPaymentId);
     }
-    return this.request<DeactivateRecurrenceResponse>(
-      `${this.transactionalUrl}/1/RecurrentPayment/${recurrentPaymentId}/Reactivate`,
-      {
-        method: "PUT",
-      }
-    );
+    // Not used in the current UI. Implement on the proxy server if needed.
+    throw new Error("reactivateRecurrence is not available without a proxy server implementation");
   }
 }
 
 export class CieloApiError extends Error {
-  errors: CieloError[];
-
-  constructor(message: string, errors: CieloError[]) {
+  constructor(message: string) {
     super(message);
     this.name = "CieloApiError";
-    this.errors = errors;
   }
 }
 

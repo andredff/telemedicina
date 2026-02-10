@@ -2,13 +2,16 @@
 // Executa junto com Supabase Local
 
 const path = require("path");
-require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
+const dotenv = require("dotenv");
+// Load developer secrets from `.env.local` first (gitignored), then defaults from `.env`.
+dotenv.config({ path: path.resolve(__dirname, "..", ".env.local") });
+dotenv.config({ path: path.resolve(__dirname, "..", ".env"), override: false });
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+const PORT = process.env.PORT || 5174;
 
 // Middleware
 app.use(cors());

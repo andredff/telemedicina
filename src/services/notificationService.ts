@@ -114,7 +114,9 @@ async function sendEmailViaResend(emailContent: {
     "Novità Telemedicina <onboarding@resend.dev>";
 
   const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === "true";
-  const localServerUrl = import.meta.env.VITE_LOCAL_SERVER_URL || "http://localhost:3001";
+  const localServerUrl =
+    import.meta.env.VITE_LOCAL_SERVER_URL ||
+    (import.meta.env.DEV ? "http://localhost:5174" : "");
   const baseUrl = useLocalServer ? localServerUrl : "";
 
   try {

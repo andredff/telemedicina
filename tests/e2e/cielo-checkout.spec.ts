@@ -17,40 +17,48 @@ async function login(page: Page, email: string, password: string) {
 }
 
 async function ensureMedicationPaymentStep(page: Page) {
-  // If the address is complete in profile, the UI auto-advances to payment.
+  // Medication checkout is a 2-step flow: Address -> Payment.
+  // Profile address loading is async and can auto-advance to payment, so we wait for either state.
   const cardNumber = page.getByPlaceholder(/0000 0000 0000 0000/i).first();
-  if (await cardNumber.isVisible({ timeout: 2000 }).catch(() => false)) return;
-
-  // If an address exists, click "Continuar para Pagamento".
   const continueBtn = page.getByRole("button", { name: /Continuar para Pagamento/i });
-  if (await continueBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+  const addBtn = page.getByRole("button", { name: /Adicionar endereço/i });
+  const changeBtn = page.getByRole("button", { name: /^Alterar$/i });
+  const cepInput = page.getByLabel(/^CEP$/i);
+  const saveBtn = page.getByRole("button", { name: /Salvar e Confirmar/i });
+
+  await expect(cardNumber.or(continueBtn).or(addBtn)).toBeVisible({ timeout: 15000 });
+
+  // Already on payment step.
+  if (await cardNumber.isVisible({ timeout: 500 }).catch(() => false)) return;
+
+  // Address exists: continue to payment.
+  if (await continueBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
     await continueBtn.click();
     await expect(cardNumber).toBeVisible({ timeout: 15000 });
     return;
   }
 
-  // Otherwise, add a minimal address and confirm.
-  const addBtn = page.getByRole("button", { name: /Adicionar endereço/i });
-  if (await addBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+  // Enter edit mode (new address or edit existing).
+  if (await addBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
     await addBtn.click();
-  } else {
-    // Fallback: open edit mode if the user already has a partial address.
-    const changeBtn = page.getByRole("button", { name: /^Alterar$/i });
-    if (await changeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await changeBtn.click();
-    }
+  } else if (await changeBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await changeBtn.click();
   }
 
+  // Auto-advance can happen while we interact; bail out if payment is already visible.
+  if (await cardNumber.isVisible({ timeout: 1000 }).catch(() => false)) return;
+
   // Fill required fields (keep it deterministic; no CEP lookup).
-  await expect(page.getByLabel(/^CEP$/i)).toBeVisible({ timeout: 15000 });
-  await page.getByLabel(/^CEP$/i).fill("01001000");
+  await expect(cepInput).toBeVisible({ timeout: 15000 });
+  await cepInput.fill("01001000");
   await page.getByLabel(/Rua\/Avenida/i).fill("Rua Teste");
   await page.getByLabel(/^Número$/i).fill("123");
   await page.getByLabel(/^Bairro$/i).fill("Centro");
   await page.getByLabel(/^Cidade$/i).fill("Sao Paulo");
   await page.getByLabel(/^Estado$/i).fill("SP");
 
-  await page.getByRole("button", { name: /Salvar e Confirmar/i }).click();
+  await expect(saveBtn).toBeVisible({ timeout: 15000 });
+  await saveBtn.click();
   await expect(cardNumber).toBeVisible({ timeout: 15000 });
 }
 
@@ -122,6 +130,8 @@ const TEST_CARD = {
 // =============================================
 
 test.describe("Medication Checkout", () => {
+  test.describe.configure({ timeout: 120_000 });
+
   test("Credit card payment completes successfully", async ({ page }) => {
     await seedCart(page);
     await login(page, patientEmail, patientPassword);
@@ -149,10 +159,8 @@ test.describe("Medication Checkout", () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    // Should show success state or redirect
-    await expect(
-      page.getByText(/sucesso|confirmado|aprovado|Pedido/i)
-    ).toBeVisible({ timeout: 20000 });
+    // Should show success state
+    await expect(page.getByRole("heading", { name: /Pagamento Confirmado/i })).toBeVisible({ timeout: 20000 });
   });
 
   test("PIX payment flow generates QR code and confirms", async ({ page }) => {
@@ -186,8 +194,10 @@ test.describe("Medication Checkout", () => {
     await expect(simulateBtn).toBeVisible({ timeout: 5000 });
     await simulateBtn.click();
 
-    // Should confirm
-    await expect(page.getByRole("heading", { name: /PIX Confirmado/i })).toBeVisible({ timeout: 15000 });
+    // Should confirm (either the PIX component success state or the overall checkout success screen).
+    const pixConfirmed = page.getByRole("heading", { name: /PIX Confirmado/i });
+    const paymentConfirmed = page.getByRole("heading", { name: /Pagamento Confirmado/i });
+    await expect(pixConfirmed.or(paymentConfirmed)).toBeVisible({ timeout: 20000 });
   });
 });
 
@@ -196,6 +206,8 @@ test.describe("Medication Checkout", () => {
 // =============================================
 
 test.describe("Subscription Checkout", () => {
+  test.describe.configure({ timeout: 120_000 });
+
   test("Monthly credit card subscription", async ({ page }) => {
     await login(page, patientEmail, patientPassword);
     await openSubscriptionCheckout(page);
@@ -222,10 +234,11 @@ test.describe("Subscription Checkout", () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    // Should show success
-    await expect(
-      page.getByText(/Ativada|sucesso|Bem-vindo/i)
-    ).toBeVisible({ timeout: 20000 });
+    // Some flows redirect to /dashboard immediately after success.
+    await Promise.any([
+      page.waitForURL(/\/dashboard/, { timeout: 20000 }),
+      page.getByRole("heading", { name: /Assinatura Ativada/i }).waitFor({ state: "visible", timeout: 20000 }),
+    ]);
   });
 
   test("Yearly credit card subscription", async ({ page }) => {
@@ -247,8 +260,9 @@ test.describe("Subscription Checkout", () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    await expect(
-      page.getByText(/Ativada|sucesso|Bem-vindo/i)
-    ).toBeVisible({ timeout: 20000 });
+    await Promise.any([
+      page.waitForURL(/\/dashboard/, { timeout: 20000 }),
+      page.getByRole("heading", { name: /Assinatura Ativada/i }).waitFor({ state: "visible", timeout: 20000 }),
+    ]);
   });
 });

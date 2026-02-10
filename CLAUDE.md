@@ -13,12 +13,22 @@ The source of truth for MVP scope and acceptance is `ESCOPO_FECHADO.md`.
 ## Development Commands
 
 ```bash
-npm run dev          # Start dev server on port 8080
+npm run dev          # Start Vite dev server on port 5173
 npm run build        # Production build
 npm run build:dev    # Development build
 npm run lint         # Run ESLint
 npm run preview      # Preview production build
+node server/cielo-server.js  # Start Cielo payment server on port 5174
 ```
+
+## Development Ports
+
+| Service             | Port | Notes                              |
+|---------------------|------|------------------------------------|
+| Vite Dev Server     | 5173 | Frontend (React SPA)               |
+| Cielo Payment Server| 5174 | Express server for payment gateway |
+
+These ports were chosen to avoid conflicts with common services (3000, 3001, 3002, 8080). Do NOT change them to common ports.
 
 ## Tech Stack
 

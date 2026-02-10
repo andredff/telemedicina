@@ -557,7 +557,7 @@ npm run lint    # Verificar lint
 ### TC-111 [P0] Cielo - pagamento cartao (mock vs real)
 **Verificar:**
 - Mock: funciona sem credenciais (cartao teste → aprovado/negado)
-- Local server: funciona via proxy (porta 3002)
+- Local server: funciona via proxy (porta 5174)
 - Producao: Edge Function `cielo-payment` funciona
 
 ### TC-112 [P1] Cielo - webhook de pagamento

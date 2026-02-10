@@ -16,7 +16,7 @@ export default defineConfig(({ mode }) => {
   return {
     server: {
       host: "::",
-      port: 8080,
+      port: 5173,
       proxy: {
         // Proxy para API Assemed - remove apenas "/api/assemed" e mantém o resto
         // Ex: /api/assemed/api/Auth/login-externo -> /api/Auth/login-externo

@@ -79,10 +79,10 @@ export default function AdminSupport() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      open: { text: 'Aberto', color: 'bg-blue-100 text-blue-800' },
-      in_progress: { text: 'Em Progresso', color: 'bg-yellow-100 text-yellow-800' },
-      closed: { text: 'Fechado', color: 'bg-green-100 text-green-800' },
-      pending: { text: 'Pendente', color: 'bg-gray-100 text-gray-800' }
+      open: { text: 'Aberto', color: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' },
+      in_progress: { text: 'Em Progresso', color: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' },
+      closed: { text: 'Fechado', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
+      pending: { text: 'Pendente', color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' }
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || 
@@ -90,7 +90,7 @@ export default function AdminSupport() {
     
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
-        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: config.color.split(' ')[0].replace('bg-', '').replace('text-', '') }}></div>
+        <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
         {config.text}
       </div>
     );
@@ -98,9 +98,9 @@ export default function AdminSupport() {
 
   const getPriorityBadge = (priority: string) => {
     const priorityConfig = {
-      high: { text: 'Alta', color: 'bg-red-100 text-red-800' },
-      medium: { text: 'Média', color: 'bg-yellow-100 text-yellow-800' },
-      low: { text: 'Baixa', color: 'bg-green-100 text-green-800' }
+      high: { text: 'Alta', color: 'bg-red-100 text-red-800', dot: 'bg-red-500' },
+      medium: { text: 'Média', color: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' },
+      low: { text: 'Baixa', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' }
     };
     
     const config = priorityConfig[priority as keyof typeof priorityConfig] || 
@@ -108,7 +108,7 @@ export default function AdminSupport() {
     
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
-        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: config.color.split(' ')[0].replace('bg-', '').replace('text-', '') }}></div>
+        <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
         {config.text}
       </div>
     );

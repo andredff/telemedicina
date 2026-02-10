@@ -28,7 +28,7 @@ export default function TestSupabase() {
   const shortcutUrls = [
     { label: 'Exemplo', url: 'https://example.com' },
     { label: 'Google', url: 'https://www.google.com' },
-    { label: 'Telemedicina Local', url: 'http://localhost:8080/telemedicina' },
+    { label: 'Telemedicina Local', url: 'http://localhost:5173/telemedicina' },
     { label: 'API Assemed (mock)', url: 'https://api.assemed.com.br/sala-espera/123' },
   ];
 

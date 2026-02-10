@@ -124,6 +124,7 @@ export default function AdminContent() {
     }
     
     setIsDialogOpen(false);
+    setEditingPost(null);
   };
 
   const handleDeletePost = (postId: string) => {
@@ -136,9 +137,9 @@ export default function AdminContent() {
 
   const getStatusBadge = (status: string) => {
     const statusConfig = {
-      published: { text: 'Publicado', color: 'bg-green-100 text-green-800' },
-      draft: { text: 'Rascunho', color: 'bg-gray-100 text-gray-800' },
-      scheduled: { text: 'Agendado', color: 'bg-blue-100 text-blue-800' }
+      published: { text: 'Publicado', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
+      draft: { text: 'Rascunho', color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' },
+      scheduled: { text: 'Agendado', color: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' }
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || 
@@ -146,11 +147,22 @@ export default function AdminContent() {
     
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
-        <div className="h-2 w-2 rounded-full" style={{ backgroundColor: config.color.split(' ')[0].replace('bg-', '').replace('text-', '') }}></div>
+        <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
         {config.text}
       </div>
     );
   };
+
+  const buildEmptyPost = (): BlogPost => ({
+    id: '',
+    title: '',
+    category: '',
+    status: 'draft',
+    author: '',
+    date: new Date().toISOString().split('T')[0],
+    views: 0,
+    content: '',
+  });
 
   return (
     <div className="space-y-6">
@@ -183,16 +195,26 @@ export default function AdminContent() {
           </SelectContent>
         </Select>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) setEditingPost(null);
+          }}
+        >
           <DialogTrigger asChild>
-            <Button>
+            <Button
+              onClick={() => {
+                setEditingPost(buildEmptyPost());
+              }}
+            >
               <Plus className="h-4 w-4 mr-2" />
               Novo Post
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>{editingPost ? 'Editar Post' : 'Novo Post'}</DialogTitle>
+              <DialogTitle>{editingPost?.id ? 'Editar Post' : 'Novo Post'}</DialogTitle>
             </DialogHeader>
             <div className="space-y-4 py-4">
               <div>

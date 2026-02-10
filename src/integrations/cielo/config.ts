@@ -19,24 +19,17 @@ export const CIELO_CONFIG = {
   },
 };
 
-// Server URL for local development
-// Only returns a URL if explicitly configured via VITE_LOCAL_SERVER_URL or VITE_USE_LOCAL_SERVER
+// Server URL (proxy) for local development and optional production backends.
+// Never defaults to localhost in production builds.
 export const getServerUrl = () => {
   if (import.meta.env.VITE_LOCAL_SERVER_URL) {
     return import.meta.env.VITE_LOCAL_SERVER_URL;
   }
-  if (import.meta.env.VITE_USE_LOCAL_SERVER === "true") {
-    return "http://localhost:3002";
+  if (import.meta.env.DEV && import.meta.env.VITE_USE_LOCAL_SERVER === "true") {
+    return "http://localhost:5174";
   }
   return "";
 };
-
-// Credenciais são carregadas das variáveis de ambiente
-export const getCieloCredentials = () => ({
-  merchantId: import.meta.env.VITE_CIELO_MERCHANT_ID || "",
-  merchantKey: import.meta.env.VITE_CIELO_MERCHANT_KEY || "",
-  isSandbox: import.meta.env.VITE_CIELO_SANDBOX === "true",
-});
 
 export const getCieloUrls = (isSandbox: boolean) => {
   return isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
