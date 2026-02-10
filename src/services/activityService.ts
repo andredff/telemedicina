@@ -9,6 +9,13 @@ export interface Activity {
   icon: string;
 }
 
+type OrderLike = {
+  id: string;
+  status: string;
+  created_at: string;
+  total_amount?: number | null;
+};
+
 export async function getRecentActivities(userId: string, limit: number = 10): Promise<Activity[]> {
   const activities: Activity[] = [];
 
@@ -27,7 +34,7 @@ export async function getRecentActivities(userId: string, limit: number = 10): P
         .order("created_at", { ascending: false })
         .limit(limit);
 
-      ordersData?.forEach((o: any) => {
+      ordersData?.forEach((o: OrderLike) => {
         const statusMap: Record<string, string> = {
           pending: "Pendente",
           processing: "Em preparação",
@@ -45,7 +52,7 @@ export async function getRecentActivities(userId: string, limit: number = 10): P
         });
       });
     } else {
-      orders?.forEach((o: any) => {
+      orders?.forEach((o: OrderLike) => {
         const statusMap: Record<string, string> = {
           pending: "Pendente",
           processing: "Em preparação",

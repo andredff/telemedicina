@@ -285,11 +285,9 @@ class CieloMockClient {
     await simulateNetworkDelay();
 
     const sale = mockDatabase.sales.get(paymentId);
-    if (!sale) {
-      throw new Error("Transação não encontrada");
-    }
+    if (sale) return sale;
 
-    return sale;
+    throw new Error("Transação não encontrada");
   }
 
   async getSaleByOrderId(merchantOrderId: string): Promise<SaleResponse> {

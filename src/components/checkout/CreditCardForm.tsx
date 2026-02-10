@@ -141,9 +141,9 @@ export function CreditCardForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Número do Cartão</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <div className="relative">
+                    <CreditCard className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <FormControl>
                       <Input
                         {...field}
                         placeholder="0000 0000 0000 0000"
@@ -153,13 +153,13 @@ export function CreditCardForm({
                           field.onChange(formatCardNumber(e.target.value));
                         }}
                       />
-                      {detectedBrand && (
-                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                          <CardBrandFlag brand={detectedBrand} />
-                        </div>
-                      )}
-                    </div>
-                  </FormControl>
+                    </FormControl>
+                    {detectedBrand && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                        <CardBrandFlag brand={detectedBrand} />
+                      </div>
+                    )}
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -171,9 +171,9 @@ export function CreditCardForm({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Nome do Titular</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <div className="relative">
+                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <FormControl>
                       <Input
                         {...field}
                         placeholder="Como está impresso no cartão"
@@ -182,8 +182,8 @@ export function CreditCardForm({
                           field.onChange(e.target.value.toUpperCase());
                         }}
                       />
-                    </div>
-                  </FormControl>
+                    </FormControl>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -196,9 +196,9 @@ export function CreditCardForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Validade</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <FormControl>
                         <Input
                           {...field}
                           placeholder="MM/AAAA"
@@ -208,8 +208,8 @@ export function CreditCardForm({
                             field.onChange(formatExpirationDate(e.target.value));
                           }}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -221,9 +221,9 @@ export function CreditCardForm({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>CVV</FormLabel>
-                    <FormControl>
-                      <div className="relative">
-                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <FormControl>
                         <Input
                           {...field}
                           type="password"
@@ -234,8 +234,8 @@ export function CreditCardForm({
                             field.onChange(e.target.value.replace(/\D/g, ""));
                           }}
                         />
-                      </div>
-                    </FormControl>
+                      </FormControl>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

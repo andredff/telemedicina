@@ -1,17 +1,14 @@
 // Admin client for Supabase with additional admin functionalities
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
+import { logger } from "@/lib/logger";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
-// Debug: log environment variables
-console.log('[AdminClient] VITE_SUPABASE_URL:', SUPABASE_URL);
-console.log('[AdminClient] VITE_SUPABASE_PUBLISHABLE_KEY:', SUPABASE_PUBLISHABLE_KEY ? '***' : 'undefined');
-
 // Check if Supabase is configured
-const isSupabaseConfigured = SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY;
-console.log('[AdminClient] isSupabaseConfigured:', isSupabaseConfigured);
+const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
+const CAN_USE_MOCKS = import.meta.env.DEV;
 
 export const supabaseAdmin = isSupabaseConfigured 
   ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -22,8 +19,9 @@ export const supabaseAdmin = isSupabaseConfigured
       }
     })
   : null;
-
-console.log('[AdminClient] supabaseAdmin initialized:', !!supabaseAdmin);
+if (import.meta.env.DEV) {
+  logger.info("[AdminClient] init", { isSupabaseConfigured, hasClient: Boolean(supabaseAdmin) });
+}
 
 // RBAC (Role-Based Access Control) utility functions
 export const RBAC = {
@@ -40,9 +38,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        console.log('[RBAC] Supabase not configured, using mock admin access');
-        // For testing: allow admin access for any authenticated user
-        return requiredRole === this.ROLES.ADMIN;
+        return CAN_USE_MOCKS ? requiredRole === this.ROLES.ADMIN : false;
       }
       
       const { data, error } = await supabaseAdmin
@@ -54,9 +50,8 @@ export const RBAC = {
       if (error) throw error;
       return data?.role === requiredRole;
     } catch (error) {
-      console.error('Error checking role:', error);
-      // Fallback to mock admin access for testing
-      return requiredRole === this.ROLES.ADMIN;
+      logger.error("[RBAC] Error checking role", error);
+      return CAN_USE_MOCKS ? requiredRole === this.ROLES.ADMIN : false;
     }
   },
   
@@ -65,8 +60,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        console.log('[RBAC] Supabase not configured, using mock admin access');
-        return roles.includes(this.ROLES.ADMIN);
+        return CAN_USE_MOCKS ? roles.includes(this.ROLES.ADMIN) : false;
       }
       
       const { data, error } = await supabaseAdmin
@@ -78,9 +72,8 @@ export const RBAC = {
       if (error) throw error;
       return roles.includes(data?.role);
     } catch (error) {
-      console.error('Error checking roles:', error);
-      // Fallback to mock admin access for testing
-      return roles.includes(this.ROLES.ADMIN);
+      logger.error("[RBAC] Error checking roles", error);
+      return CAN_USE_MOCKS ? roles.includes(this.ROLES.ADMIN) : false;
     }
   },
   
@@ -94,8 +87,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        console.log('[RBAC] Supabase not configured, returning mock admin role');
-        return this.ROLES.ADMIN;
+        return CAN_USE_MOCKS ? this.ROLES.ADMIN : null;
       }
       
       const { data, error } = await supabaseAdmin
@@ -107,19 +99,22 @@ export const RBAC = {
       if (error) throw error;
       return data?.role || null;
     } catch (error) {
-      console.error('Error getting user role:', error);
-      // Fallback to mock admin role for testing
-      return this.ROLES.ADMIN;
+      logger.error("[RBAC] Error getting user role", error);
+      return CAN_USE_MOCKS ? this.ROLES.ADMIN : null;
     }
   },
   
   // Update user role (admin only)
   async updateUserRole(userId: string, newRole: string, adminUserId: string): Promise<boolean> {
     try {
+      if (!supabaseAdmin) {
+        return false;
+      }
+
       // Check if the requesting user is an admin
       const isAdmin = await this.isAdmin(adminUserId);
       if (!isAdmin) {
-        console.error('Only admins can update user roles');
+        logger.error("[RBAC] Only admins can update user roles");
         return false;
       }
       
@@ -131,7 +126,7 @@ export const RBAC = {
       if (error) throw error;
       return true;
     } catch (error) {
-      console.error('Error updating user role:', error);
+      logger.error("[RBAC] Error updating user role", error);
       return false;
     }
   }
@@ -257,8 +252,9 @@ export const AdminQueries = {
   // Get all users
   async getAllUsers() {
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, returning mock users');
-      return { data: mockUsers, error: null };
+      return CAN_USE_MOCKS
+        ? { data: mockUsers, error: null }
+        : { data: [], error: new Error("Supabase admin client not configured") };
     }
     
     try {
@@ -267,30 +263,23 @@ export const AdminQueries = {
         .select('*')
         .order('created_at', { ascending: false });
       
-      // If database is empty or table doesn't exist, use mock data
-      if (!result.data || result.data.length === 0 || result.error) {
-        console.log('[AdminQueries] Database empty or error, returning mock users');
-        return { data: mockUsers, error: null };
-      }
-      
-      return result;
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
     } catch (error) {
-      console.error('Error fetching users:', error);
-      return { data: mockUsers, error: null };
+      logger.error("[AdminQueries] Error fetching users", error);
+      return CAN_USE_MOCKS ? { data: mockUsers, error: null } : { data: [], error: error as Error };
     }
   },
   
   // Get all orders
   async getAllOrders() {
-    console.log('[AdminQueries] getAllOrders chamado');
-    
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, returning mock orders');
-      return { data: mockOrders, error: null };
+      return CAN_USE_MOCKS
+        ? { data: mockOrders, error: null }
+        : { data: [], error: new Error("Supabase admin client not configured") };
     }
     
     try {
-      console.log('[AdminQueries] Buscando pedidos do Supabase...');
       // Join orders with profiles to get customer name and email
       const result = await supabaseAdmin
         .from('orders')
@@ -303,35 +292,25 @@ export const AdminQueries = {
         `)
         .order('created_at', { ascending: false });
       
-      console.log('[AdminQueries] result.data:', result.data);
-      console.log('[AdminQueries] result.error:', result.error);
-      console.log('[AdminQueries] result.data?.length:', result.data?.length);
-      
-      // If database is empty or table doesn't exist, use mock data
-      if (!result.data || result.data.length === 0 || result.error) {
-        console.log('[AdminQueries] Database empty or error, returning mock orders');
-        return { data: mockOrders, error: null };
-      }
+      if (result.error) return { data: [], error: result.error };
       
       // Transform the data to include customer and customer_email from profiles
-      const ordersWithCustomer = result.data.map(order => ({
+      const ordersWithCustomer = (result.data || []).map((order: Record<string, unknown>) => ({
         ...order,
-        customer: order.profiles?.full_name || 'Cliente Desconhecido',
-        customer_email: order.profiles?.email || 'email@exemplo.com',
+        customer: (order as { profiles?: { full_name?: string } }).profiles?.full_name || 'Cliente Desconhecido',
+        customer_email: (order as { profiles?: { email?: string } }).profiles?.email || null,
       }));
       
-      console.log('[AdminQueries] returning', ordersWithCustomer.length, 'orders');
       return { data: ordersWithCustomer, error: null };
     } catch (error) {
-      console.error('[AdminQueries] Error fetching orders:', error);
-      return { data: mockOrders, error: null };
+      logger.error("[AdminQueries] Error fetching orders", error);
+      return CAN_USE_MOCKS ? { data: mockOrders, error: null } : { data: [], error: error as Error };
     }
   },
   
   // Get order by ID
   async getOrderById(orderId: string) {
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, searching mock orders');
       const order = mockOrders.find(o => o.id === orderId);
       return { data: order || null, error: null };
     }
@@ -364,7 +343,7 @@ export const AdminQueries = {
       
       return { data: null, error: null };
     } catch (error) {
-      console.error('Error fetching order:', error);
+      logger.error("[AdminQueries] Error fetching order", error);
       const order = mockOrders.find(o => o.id === orderId);
       return { data: order || null, error: null };
     }
@@ -372,11 +351,7 @@ export const AdminQueries = {
   
   // Update order status
   async updateOrderStatus(orderId: string, status: string) {
-    console.log('[AdminQueries] updateOrderStatus chamado:', orderId, status);
-    console.log('[AdminQueries] supabaseAdmin configurado:', !!supabaseAdmin);
-    
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase não configurado, usando mock');
       const orderIndex = mockOrders.findIndex(o => o.id === orderId);
       if (orderIndex >= 0) {
         mockOrders[orderIndex].status = status;
@@ -385,36 +360,16 @@ export const AdminQueries = {
     }
     
     try {
-      console.log('[AdminQueries] Fazendo update no Supabase para:', orderId);
-      const { data, error } = await supabaseAdmin
+      const { error } = await supabaseAdmin
         .from('orders')
         .update({ status })
         .eq('id', orderId)
-        .select();
-      
-      console.log('[AdminQueries] Data retornado:', JSON.stringify(data, null, 2));
-      console.log('[AdminQueries] Erro do Supabase:', error);
-      
-      if (error) {
-        console.error('[AdminQueries] Detalhes do erro:', JSON.stringify(error, null, 2));
-        throw error;
-      }
-      
-      console.log('[AdminQueries] Update realizado com sucesso');
-      
-      // Verificar se o update foi persistido
-      console.log('[AdminQueries] Verificando se o update foi persistido...');
-      const verifyResult = await supabaseAdmin
-        .from('orders')
-        .select('status')
-        .eq('id', orderId)
-        .single();
-      
-      console.log('[AdminQueries] Status no banco após update:', verifyResult.data);
-      
+        .select("id");
+
+      if (error) throw error;
       return { error: null };
     } catch (error) {
-      console.error('[AdminQueries] Erro ao atualizar status:', error);
+      logger.error("[AdminQueries] Error updating order status", error);
       return { error };
     }
   },
@@ -441,7 +396,7 @@ export const AdminQueries = {
       if (error) throw error;
       return { error: null };
     } catch (error) {
-      console.error('[AdminQueries] Erro ao atualizar tracking:', error);
+      logger.error("[AdminQueries] Error updating tracking", error);
       return { error };
     }
   },
@@ -449,7 +404,6 @@ export const AdminQueries = {
   // Get orders by user ID
   async getOrdersByUserId(userId: string) {
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, searching mock orders');
       const userOrders = mockOrders.filter(o => o.user_id === userId);
       return { data: userOrders, error: null };
     }
@@ -463,7 +417,7 @@ export const AdminQueries = {
       
       return { data: result.data || [], error: null };
     } catch (error) {
-      console.error('Error fetching user orders:', error);
+      logger.error("[AdminQueries] Error fetching user orders", error);
       return { data: [], error: null };
     }
   },
@@ -471,39 +425,41 @@ export const AdminQueries = {
   // Get all prescriptions
   async getAllPrescriptions() {
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, returning mock prescriptions');
-      return { data: mockPrescriptions, error: null };
+      return CAN_USE_MOCKS
+        ? { data: mockPrescriptions, error: null }
+        : { data: [], error: new Error("Supabase admin client not configured") };
     }
     
     try {
       const result = await supabaseAdmin
         .from('prescriptions')
-        .select('*')
+        .select('*, medications(*)')
         .order('created_at', { ascending: false });
       
-      // If database is empty or table doesn't exist, use mock data
-      if (!result.data || result.data.length === 0 || result.error) {
-        console.log('[AdminQueries] Database empty or error, returning mock prescriptions');
-        return { data: mockPrescriptions, error: null };
-      }
-      
-      return result;
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
     } catch (error) {
-      console.error('Error fetching prescriptions:', error);
-      return { data: mockPrescriptions, error: null };
+      logger.error("[AdminQueries] Error fetching prescriptions", error);
+      return CAN_USE_MOCKS ? { data: mockPrescriptions, error: null } : { data: [], error: error as Error };
     }
   },
   
   // Get dashboard metrics
   async getDashboardMetrics() {
     if (!supabaseAdmin) {
-      console.log('[AdminQueries] Supabase not configured, returning mock metrics');
-      return {
-        totalUsers: mockUsers.length,
-        totalOrders: mockOrders.length,
-        totalPrescriptions: mockPrescriptions.length,
-        activeSubscriptions: 1
-      };
+      return CAN_USE_MOCKS
+        ? {
+            totalUsers: mockUsers.length,
+            totalOrders: mockOrders.length,
+            totalPrescriptions: mockPrescriptions.length,
+            activeSubscriptions: 1
+          }
+        : {
+            totalUsers: 0,
+            totalOrders: 0,
+            totalPrescriptions: 0,
+            activeSubscriptions: 0
+          };
     }
     
     try {
@@ -542,13 +498,20 @@ export const AdminQueries = {
         activeSubscriptions: subscriptions.count || 0
       };
     } catch (error) {
-      console.error('Error getting dashboard metrics:', error);
-      return {
-        totalUsers: mockUsers.length,
-        totalOrders: mockOrders.length,
-        totalPrescriptions: mockPrescriptions.length,
-        activeSubscriptions: 1
-      };
+      logger.error("[AdminQueries] Error getting dashboard metrics", error);
+      return CAN_USE_MOCKS
+        ? {
+            totalUsers: mockUsers.length,
+            totalOrders: mockOrders.length,
+            totalPrescriptions: mockPrescriptions.length,
+            activeSubscriptions: 1
+          }
+        : {
+            totalUsers: 0,
+            totalOrders: 0,
+            totalPrescriptions: 0,
+            activeSubscriptions: 0
+          };
     }
   }
 };

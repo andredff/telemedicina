@@ -20,10 +20,13 @@ export const CIELO_CONFIG = {
 };
 
 // Server URL for local development
+// Only returns a URL if explicitly configured via VITE_LOCAL_SERVER_URL or VITE_USE_LOCAL_SERVER
 export const getServerUrl = () => {
-  // Use local server if running in development
-  if (import.meta.env.DEV || import.meta.env.VITE_USE_LOCAL_SERVER === "true") {
-    return import.meta.env.VITE_LOCAL_SERVER_URL || "http://localhost:3001";
+  if (import.meta.env.VITE_LOCAL_SERVER_URL) {
+    return import.meta.env.VITE_LOCAL_SERVER_URL;
+  }
+  if (import.meta.env.VITE_USE_LOCAL_SERVER === "true") {
+    return "http://localhost:3002";
   }
   return "";
 };

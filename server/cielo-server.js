@@ -1,13 +1,14 @@
 // Cielo Payment Server - Local Development
 // Executa junto com Supabase Local
 
-require("dotenv").config();
+const path = require("path");
+require("dotenv").config({ path: path.resolve(__dirname, "..", ".env") });
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // Middleware
 app.use(cors());
@@ -25,60 +26,14 @@ if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
 // Cielo Configuration - API 3.0
 const CIELO_CONFIG = {
   sandbox: {
-    // Sandbox uses old API 1.x format
-    oauthUrl: "https://authsandbox.cielo.com.br/connect/oauth2/token",
     transactionalUrl: "https://apisandbox.cieloecommerce.cielo.com.br/1/sales",
     queryUrl: "https://apiquerysandbox.cieloecommerce.cielo.com.br/1/sales",
   },
   production: {
-    // Production uses old API 1.x format (OAuth not accessible)
-    oauthUrl: "https://auth.cielo.com.br/connect/oauth2/token",
     transactionalUrl: "https://api.cieloecommerce.cielo.com.br/1/sales",
     queryUrl: "https://apiquery.cieloecommerce.cielo.com.br/1/sales",
   },
 };
-
-// Get OAuth2 access token
-let cachedToken = null;
-let tokenExpiry = 0;
-
-async function getAccessToken(credentials, cieloUrls) {
-  // Return cached token if still valid
-  if (cachedToken && Date.now() < tokenExpiry) {
-    return cachedToken;
-  }
-  
-  try {
-    const response = await fetch(cieloUrls.oauthUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-      },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: credentials.merchantId,
-        client_key: credentials.merchantKey,
-      }),
-    });
-    
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("OAuth error:", errorText);
-      throw new Error(`OAuth failed: ${errorText}`);
-    }
-    
-    const data = await response.json();
-    cachedToken = data.access_token;
-    // Token expires in 3600 seconds, refresh at 3000s
-    tokenExpiry = Date.now() + (data.expires_in || 3600) * 1000 - 60000;
-    
-    console.log("[Cielo] OAuth token obtained successfully");
-    return cachedToken;
-  } catch (error) {
-    console.error("[Cielo] OAuth token error:", error);
-    throw error;
-  }
-}
 
 // Get Cielo credentials from environment
 const getCieloCredentials = () => ({
@@ -86,6 +41,24 @@ const getCieloCredentials = () => ({
   merchantKey: process.env.CIELO_MERCHANT_KEY || "",
   isSandbox: process.env.CIELO_SANDBOX === "true",
 });
+
+function redactSensitive(value) {
+  if (!value || typeof value !== "object") return value;
+
+  const cloned = Array.isArray(value) ? [...value] : { ...value };
+
+  if (cloned?.Payment?.CreditCard) {
+    const cc = cloned.Payment.CreditCard;
+    const number = typeof cc.CardNumber === "string" ? cc.CardNumber : "";
+    cloned.Payment.CreditCard = {
+      ...cc,
+      CardNumber: number ? `${number.slice(0, 6)}******${number.slice(-4)}` : "",
+      SecurityCode: cc.SecurityCode ? "***" : cc.SecurityCode,
+    };
+  }
+
+  return cloned;
+}
 
 // Build Cielo request
 function buildCieloRequest(request) {
@@ -110,7 +83,36 @@ function buildCieloRequest(request) {
           }
         : undefined,
     },
-    Payment: {
+  };
+
+  // PIX: pagamento único, sem cartão
+  if (request.paymentType === "pix") {
+    const providerFromEnv = process.env.CIELO_PIX_PROVIDER || "";
+    const provider = providerFromEnv || (request.isSandbox ? "" : "Cielo2");
+    const expirationSecondsRaw = process.env.CIELO_PIX_QRCODE_EXPIRATION || "";
+    const expirationSecondsParsed = Number.parseInt(expirationSecondsRaw, 10);
+    const expirationSeconds = Number.isNaN(expirationSecondsParsed)
+      ? provider
+        ? 1800
+        : NaN
+      : expirationSecondsParsed;
+
+    const payment = {
+      Type: "Pix",
+      Amount: request.amountInCents,
+      Installments: 1,
+    };
+
+    if (provider) payment.Provider = provider;
+    if (!Number.isNaN(expirationSeconds) && expirationSeconds > 0 && provider) {
+      // New PIX provider supports configurable expiration.
+      payment.QrCode = { Expiration: expirationSeconds };
+    }
+
+    baseRequest.Payment = payment;
+  } else {
+    // Cartão (simples ou recorrente)
+    baseRequest.Payment = {
       Type: "CreditCard",
       Amount: request.amountInCents,
       Installments: request.installments,
@@ -124,8 +126,8 @@ function buildCieloRequest(request) {
         Brand: request.card.brand,
         SaveCard: request.paymentType === "recurrent",
       },
-    },
-  };
+    };
+  }
 
   if (request.paymentType === "recurrent") {
     baseRequest.Payment.RecurrentPayment = {
@@ -165,15 +167,19 @@ app.post("/api/cielo/payment", async (req, res) => {
       return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
     }
 
-    if (!orderId || !customer || !card || !amountInCents) {
+    if (!orderId || !customer || !amountInCents) {
+      return res.status(400).json({ success: false, message: "Missing required fields" });
+    }
+
+    if (paymentType !== "pix" && !card) {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
     const cieloUrls = credentials.isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
-    const cieloRequest = buildCieloRequest({ orderId, customer, card, amountInCents, installments, paymentType, interval, startDate, endDate });
+    const cieloRequest = buildCieloRequest({ orderId, customer, card, amountInCents, installments, paymentType, interval, startDate, endDate, isSandbox: credentials.isSandbox });
 
     console.log("Processing payment for order:", orderId);
-    console.log("Cielo request:", JSON.stringify(cieloRequest, null, 2));
+    console.log("Cielo request:", JSON.stringify(redactSensitive(cieloRequest), null, 2));
     
     // Using old API 1.x format (works without OAuth)
     const response = await fetch(`${cieloUrls.transactionalUrl}`, {
@@ -188,7 +194,7 @@ app.post("/api/cielo/payment", async (req, res) => {
 
     // Log raw response for debugging
     const responseText = await response.text();
-    console.log("Cielo raw response:", responseText);
+    console.log("Cielo response (first 500 chars):", responseText.substring(0, 500));
 
     let cieloResponse;
     try {
@@ -211,7 +217,7 @@ app.post("/api/cielo/payment", async (req, res) => {
 
     // Cielo pode retornar 200 mesmo com erro (ex: credenciais inválidas)
     // A API retorna erros em diferentes formatos
-    const isCieloError = 
+    let isCieloError = 
       cieloResponse.errors || 
       cieloResponse.Message || 
       cieloResponse.returnMessage ||
@@ -295,6 +301,15 @@ app.post("/api/cielo/payment", async (req, res) => {
         .eq("id", orderId);
     }
 
+    // Para PIX, retornamos o objeto no formato da API (inclui QrCodeString/QrCodeBase64Image).
+    if (paymentType === "pix") {
+      return res.json({
+        MerchantOrderId: cieloRequest.MerchantOrderId,
+        Customer: cieloRequest.Customer,
+        Payment: paymentData,
+      });
+    }
+
     res.json(paymentResult);
   } catch (error) {
     console.error("Payment error:", error);
@@ -373,15 +388,12 @@ app.get("/api/cielo/payment/:paymentId", async (req, res) => {
     }
 
     const cieloUrls = credentials.isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
-    
-    // Get OAuth2 token
-    const accessToken = await getAccessToken(credentials, cieloUrls);
 
     const response = await fetch(`${cieloUrls.queryUrl}/${paymentId}`, {
       method: "GET",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
         "MerchantId": credentials.merchantId,
+        "MerchantKey": credentials.merchantKey,
       },
     });
 
@@ -391,14 +403,58 @@ app.get("/api/cielo/payment/:paymentId", async (req, res) => {
       return res.status(400).json({ success: false, message: cieloResponse.Message || "Failed to get payment" });
     }
 
+    const status = cieloResponse?.Payment?.Status ?? -1;
     res.json({
-      success: true,
+      success: status === 1 || status === 2,
       paymentId: cieloResponse.Payment.PaymentId,
-      status: cieloResponse.Payment.Status,
+      status: status,
       message: cieloResponse.Payment.ReturnMessage,
     });
   } catch (error) {
     console.error("Get payment error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// API: Capture Payment
+app.post("/api/cielo/payment/:paymentId/capture", async (req, res) => {
+  try {
+    const credentials = getCieloCredentials();
+    const { paymentId } = req.params;
+    const { amount } = req.body;
+
+    if (!credentials.merchantId || !credentials.merchantKey) {
+      return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
+    }
+
+    const cieloUrls = credentials.isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
+    const url = amount
+      ? `${cieloUrls.transactionalUrl}/${paymentId}/capture?amount=${amount}`
+      : `${cieloUrls.transactionalUrl}/${paymentId}/capture`;
+
+    const response = await fetch(url, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "MerchantId": credentials.merchantId,
+        "MerchantKey": credentials.merchantKey,
+      },
+    });
+
+    const cieloResponse = await response.json();
+    if (!response.ok) {
+      return res.status(400).json({ success: false, message: cieloResponse.Message || "Failed to capture payment" });
+    }
+
+    const status = cieloResponse?.Payment?.Status ?? -1;
+    res.json({
+      success: status === 2,
+      paymentId: cieloResponse.Payment.PaymentId,
+      status: status,
+      message: cieloResponse.Payment.ReturnMessage,
+    });
+  } catch (error) {
+    console.error("Capture payment error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -415,20 +471,17 @@ app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
     }
 
     const cieloUrls = credentials.isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
-    
-    // Get OAuth2 token
-    const accessToken = await getAccessToken(credentials, cieloUrls);
 
     const url = amount
-      ? `${cieloUrls.queryUrl}/${paymentId}/void?amount=${amount}`
-      : `${cieloUrls.queryUrl}/${paymentId}/void`;
+      ? `${cieloUrls.transactionalUrl}/${paymentId}/void?amount=${amount}`
+      : `${cieloUrls.transactionalUrl}/${paymentId}/void`;
 
     const response = await fetch(url, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${accessToken}`,
         "MerchantId": credentials.merchantId,
+        "MerchantKey": credentials.merchantKey,
       },
     });
 
@@ -438,10 +491,11 @@ app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
       return res.status(400).json({ success: false, message: cieloResponse.Message || "Failed to cancel payment" });
     }
 
+    const status = cieloResponse?.Payment?.Status ?? -1;
     res.json({
-      success: true,
+      success: status === 10,
       paymentId: cieloResponse.Payment.PaymentId,
-      status: cieloResponse.Payment.Status,
+      status: status,
       message: cieloResponse.Payment.ReturnMessage,
     });
   } catch (error) {

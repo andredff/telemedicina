@@ -8,7 +8,7 @@ import type {
   PaymentStatus,
 } from "@/integrations/cielo";
 
-export type { CardBrand };
+export type { CardBrand, RecurrenceInterval };
 
 // ==========================================
 // Tipos do Serviço de Pagamento
@@ -408,7 +408,8 @@ function mapPaymentResponse(response: SaleResponse | LocalServerResponse): Payme
   if ('success' in response && !('Payment' in response)) {
     const localResponse = response as LocalServerResponse;
     const status = localResponse.status as PaymentStatus;
-    const isSuccess = localResponse.success === true || status === 1 || status === 2;
+    // `success` no servidor local indica que a request foi processada, não que o pagamento foi confirmado.
+    const isSuccess = status === 1 || status === 2;
     
     return {
       success: isSuccess,

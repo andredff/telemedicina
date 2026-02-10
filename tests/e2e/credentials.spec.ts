@@ -27,6 +27,9 @@ async function login(page: Page, email: string, password: string) {
 }
 
 test("Credenciais de acesso e teste (todos)", async ({ browser }) => {
+  // This test iterates through many accounts and can take a few minutes on a remote baseURL.
+  test.setTimeout(10 * 60_000);
+
   for (const cred of creds) {
     await test.step(`${cred.label}`, async () => {
       const context = await browser.newContext();

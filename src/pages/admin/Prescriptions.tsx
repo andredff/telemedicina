@@ -84,14 +84,14 @@ export default function AdminPrescriptions() {
       // Format prescriptions data to match expected interface
       const formattedPrescriptions = (data || []).map((prescription: Record<string, unknown>) => ({
         id: prescription.id as string,
-        patient: (prescription.patient as string) || 'Paciente Desconhecido',
-        patient_id: prescription.patient_id as string,
+        patient: (prescription.patient_name as string) || (prescription.patient as string) || 'Paciente Desconhecido',
+        patient_id: (prescription.user_id as string) || (prescription.patient_id as string),
         doctor: (prescription.doctor_name as string) || (prescription.doctor as string) || 'Médico Desconhecido',
         doctor_name: prescription.doctor_name as string,
         doctor_crm: prescription.doctor_crm as string,
         date: (prescription.date as string) || (prescription.created_at as string),
         status: (prescription.status as string) || 'pending',
-        medications: (prescription.medications as number | Medication[]) || 1,
+        medications: (prescription.medications as number | Medication[]) || 0,
         expires_at: prescription.expires_at as string,
         created_at: prescription.created_at as string,
         notes: prescription.notes as string,
@@ -122,14 +122,12 @@ export default function AdminPrescriptions() {
   const getStatusBadge = (status: string) => {
     const statusConfig = {
       pending: { text: 'Pendente', color: 'bg-yellow-100 text-yellow-800', icon: <Clock className="h-4 w-4" /> },
-      approved: { text: 'Aprovada', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
-      active: { text: 'Ativa', color: 'bg-blue-100 text-blue-800', icon: <CheckCircle2 className="h-4 w-4" /> },
-      rejected: { text: 'Rejeitada', color: 'bg-red-100 text-red-800', icon: <AlertCircle className="h-4 w-4" /> },
-      expired: { text: 'Expirada', color: 'bg-gray-100 text-gray-800', icon: <AlertCircle className="h-4 w-4" /> }
+      partial: { text: 'Parcial', color: 'bg-orange-100 text-orange-800', icon: <AlertCircle className="h-4 w-4" /> },
+      completed: { text: 'Completa', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
     };
     
     const config = statusConfig[status as keyof typeof statusConfig] || 
-                   statusConfig.pending;
+      statusConfig.pending;
     
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
@@ -212,10 +210,8 @@ export default function AdminPrescriptions() {
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="approved">Aprovada</SelectItem>
-            <SelectItem value="active">Ativa</SelectItem>
-            <SelectItem value="rejected">Rejeitada</SelectItem>
-            <SelectItem value="expired">Expirada</SelectItem>
+            <SelectItem value="partial">Parcial</SelectItem>
+            <SelectItem value="completed">Completa</SelectItem>
           </SelectContent>
         </Select>
         
@@ -307,10 +303,8 @@ export default function AdminPrescriptions() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="pending">Pendente</SelectItem>
-                          <SelectItem value="approved">Aprovar</SelectItem>
-                          <SelectItem value="active">Ativar</SelectItem>
-                          <SelectItem value="rejected">Rejeitar</SelectItem>
-                          <SelectItem value="expired">Expirar</SelectItem>
+                          <SelectItem value="partial">Parcial</SelectItem>
+                          <SelectItem value="completed">Completa</SelectItem>
                         </SelectContent>
                       </Select>
                       <Button 
@@ -353,23 +347,23 @@ export default function AdminPrescriptions() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Aprovadas/Ativas</CardTitle>
-            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Parciais</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">
-              {prescriptions.filter(p => p.status === 'approved' || p.status === 'active').length}
+              {prescriptions.filter(p => p.status === 'partial').length}
             </div>
           </CardContent>
         </Card>
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Rejeitadas</CardTitle>
-            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Completas</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{prescriptions.filter(p => p.status === 'rejected').length}</div>
+            <div className="text-2xl font-bold">{prescriptions.filter(p => p.status === 'completed').length}</div>
           </CardContent>
         </Card>
       </div>

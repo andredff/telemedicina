@@ -8,8 +8,13 @@ import {
   getPixPaymentStatus,
   confirmPixPayment,
   type CustomerData,
+  type PaymentResult,
   toCents,
 } from "@/services/paymentService";
+
+type PixGenerator = (orderId: string, customer: CustomerData, amountInCents: number) => Promise<PaymentResult>;
+type PixStatusChecker = (paymentId: string) => Promise<PaymentResult>;
+type PixConfirmer = (paymentId: string) => Promise<PaymentResult>;
 
 interface PixPaymentFormProps {
   total: number;
@@ -18,6 +23,9 @@ interface PixPaymentFormProps {
   onSuccess: (paymentId: string) => void;
   isLoading?: boolean;
   setIsLoading?: (loading: boolean) => void;
+  generatePayment?: PixGenerator;
+  checkStatus?: PixStatusChecker;
+  confirmPayment?: PixConfirmer;
 }
 
 type PixState = "idle" | "generating" | "waiting" | "confirmed" | "expired" | "error";
@@ -29,6 +37,9 @@ export function PixPaymentForm({
   onSuccess,
   isLoading = false,
   setIsLoading,
+  generatePayment = processMedicationPixPayment,
+  checkStatus = getPixPaymentStatus,
+  confirmPayment = confirmPixPayment,
 }: PixPaymentFormProps) {
   const [pixState, setPixState] = useState<PixState>("idle");
   const [paymentId, setPaymentId] = useState<string | null>(null);
@@ -59,7 +70,7 @@ export function PixPaymentForm({
     if (pixState !== "waiting" || !paymentId) return;
 
     const interval = setInterval(async () => {
-      const status = await getPixPaymentStatus(paymentId);
+      const status = await checkStatus(paymentId);
       if (status.success) {
         setPixState("confirmed");
         onSuccess(paymentId);
@@ -68,14 +79,14 @@ export function PixPaymentForm({
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [pixState, paymentId, onSuccess]);
+  }, [pixState, paymentId, onSuccess, checkStatus]);
 
   const generatePix = useCallback(async () => {
     setPixState("generating");
     setIsLoading?.(true);
 
     try {
-      const result = await processMedicationPixPayment(
+      const result = await generatePayment(
         orderId,
         customer,
         toCents(total)
@@ -97,7 +108,7 @@ export function PixPaymentForm({
     } finally {
       setIsLoading?.(false);
     }
-  }, [orderId, customer, total, setIsLoading]);
+  }, [orderId, customer, total, setIsLoading, generatePayment]);
 
   const handleCopyCode = () => {
     if (pixCode) {
@@ -109,7 +120,7 @@ export function PixPaymentForm({
   const handleSimulatePayment = async () => {
     if (!paymentId) return;
     setIsLoading?.(true);
-    const result = await confirmPixPayment(paymentId);
+    const result = await confirmPayment(paymentId);
     setIsLoading?.(false);
     if (result.success) {
       setPixState("confirmed");

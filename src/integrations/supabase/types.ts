@@ -647,6 +647,7 @@ export type Database = {
           created_at: string
           expires_at: string | null
           id: string
+          payment_id: string | null
           plan_id: string
           specialist_consultations_used: number | null
           started_at: string | null
@@ -660,6 +661,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          payment_id?: string | null
           plan_id: string
           specialist_consultations_used?: number | null
           started_at?: string | null
@@ -673,6 +675,7 @@ export type Database = {
           created_at?: string
           expires_at?: string | null
           id?: string
+          payment_id?: string | null
           plan_id?: string
           specialist_consultations_used?: number | null
           started_at?: string | null

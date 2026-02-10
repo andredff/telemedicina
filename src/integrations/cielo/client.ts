@@ -27,14 +27,17 @@ class CieloClient {
     this.merchantKey = credentials.merchantKey;
     this.transactionalUrl = urls.transactionalUrl;
     this.queryUrl = urls.queryUrl;
-    this.useMock = !this.merchantId || !this.merchantKey;
-    this.useLocalServer = !!serverUrl && !this.useMock;
     this.localServerUrl = serverUrl;
 
+    const hasCredentials = !!this.merchantId && !!this.merchantKey;
+    this.useLocalServer = hasCredentials && !!serverUrl;
+
+    // Browser cannot call Cielo API directly (CORS).
+    // Without a local proxy server, fall back to mock even if credentials exist.
+    this.useMock = !hasCredentials || (!this.useLocalServer && import.meta.env.DEV);
+
     if (this.useMock) {
-      console.info(
-        "[Cielo] Credenciais não configuradas. Usando modo MOCK para testes locais."
-      );
+      console.info("[Cielo] Usando modo MOCK para testes locais.");
     } else if (this.useLocalServer) {
       console.info(`[Cielo] Usando servidor local: ${this.localServerUrl}`);
     }

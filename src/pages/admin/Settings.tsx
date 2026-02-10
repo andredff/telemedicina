@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Settings, CreditCard, Bell, Shield, Globe, Save } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { logger } from "@/lib/logger";
 
 export default function AdminSettings() {
   const [settings, setSettings] = useState({
@@ -37,7 +38,7 @@ export default function AdminSettings() {
 
   const handleSaveSettings = () => {
     // In a real app, this would save settings to the database
-    logger.log('Settings saved:', settings);
+    logger.info("[AdminSettings] Settings saved", settings);
     toast({
       title: 'Sucesso',
       description: 'Configurações salvas com sucesso'

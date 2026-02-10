@@ -32,7 +32,7 @@ interface PaymentRequest {
       zipCode: string;
     };
   };
-  card: {
+  card?: {
     cardNumber: string;
     holder: string;
     expirationDate: string;
@@ -41,7 +41,7 @@ interface PaymentRequest {
   };
   amountInCents: number;
   installments: number;
-  paymentType: "credit_card" | "recurrent";
+  paymentType: "credit_card" | "recurrent" | "pix";
   interval?: "Monthly" | "Bimonthly" | "Quarterly" | "SemiAnnual" | "Annual";
   startDate?: string;
   endDate?: string;
@@ -77,9 +77,23 @@ serve(async (req: Request) => {
 
     const request: PaymentRequest = await req.json();
 
-    if (!request.orderId || !request.customer || !request.card || !request.amountInCents) {
+    if (!request.orderId || !request.customer || !request.amountInCents) {
       return new Response(
         JSON.stringify({ success: false, message: "Missing required fields" }),
+        { status: 400, headers }
+      );
+    }
+
+    if (request.paymentType !== "pix" && !request.card) {
+      return new Response(
+        JSON.stringify({ success: false, message: "Card data required for credit card payments" }),
+        { status: 400, headers }
+      );
+    }
+
+    if (request.paymentType === "pix" && !request.customer.cpf) {
+      return new Response(
+        JSON.stringify({ success: false, message: "CPF required for PIX payments" }),
         { status: 400, headers }
       );
     }
@@ -119,7 +133,7 @@ serve(async (req: Request) => {
       );
     }
 
-    const paymentResult = {
+    const paymentResult: Record<string, unknown> = {
       success: true,
       paymentId: cieloResponse.Payment.PaymentId,
       authorizationCode: cieloResponse.Payment.AuthorizationCode,
@@ -129,6 +143,13 @@ serve(async (req: Request) => {
       tid: cieloResponse.Payment.Tid,
       recurrentPaymentId: cieloResponse.Payment.RecurrentPayment?.RecurrentPaymentId,
     };
+
+    // PIX-specific response fields
+    if (request.paymentType === "pix") {
+      paymentResult.qrCodeBase64Image = cieloResponse.Payment.QrCodeBase64Image;
+      paymentResult.qrCodeString = cieloResponse.Payment.QrCodeString;
+      paymentResult.expirationDate = cieloResponse.Payment.ExpirationDate;
+    }
 
     await supabase.from("payment_logs").insert({
       order_id: request.orderId,
@@ -140,14 +161,24 @@ serve(async (req: Request) => {
       created_at: new Date().toISOString(),
     });
 
-    if (paymentResult.status === 1 || paymentResult.status === 2) {
+    // Update order: for credit card (authorized/confirmed) or PIX (pending)
+    const cieloStatus = cieloResponse.Payment.Status;
+    if (cieloStatus === 1 || cieloStatus === 2 || cieloStatus === 12) {
+      const updateData: Record<string, unknown> = {
+        payment_id: cieloResponse.Payment.PaymentId,
+        payment_status: getOrderStatusFromCieloStatus(cieloStatus),
+        updated_at: new Date().toISOString(),
+      };
+
+      // Store PIX data for frontend polling
+      if (request.paymentType === "pix") {
+        updateData.pix_qr_code = cieloResponse.Payment.QrCodeString;
+        updateData.pix_expires_at = cieloResponse.Payment.ExpirationDate;
+      }
+
       await supabase
         .from("orders")
-        .update({
-          payment_id: cieloResponse.Payment.PaymentId,
-          payment_status: getOrderStatusFromCieloStatus(cieloResponse.Payment.Status),
-          updated_at: new Date().toISOString(),
-        })
+        .update(updateData)
         .eq("id", request.orderId);
     }
 
@@ -165,27 +196,40 @@ serve(async (req: Request) => {
 });
 
 function buildCieloRequest(request: PaymentRequest) {
+  const customer: Record<string, unknown> = {
+    Name: request.customer.name,
+    Email: request.customer.email,
+    Identity: request.customer.cpf,
+    IdentityType: request.customer.cpf ? "CPF" : undefined,
+    Birthdate: request.customer.birthdate,
+    Address: request.customer.address
+      ? {
+          Street: request.customer.address.street,
+          Number: request.customer.address.number,
+          Complement: request.customer.address.complement,
+          District: request.customer.address.district,
+          City: request.customer.address.city,
+          State: request.customer.address.state,
+          ZipCode: request.customer.address.zipCode.replace(/\D/g, ""),
+          Country: "BRA",
+        }
+      : undefined,
+  };
+
+  if (request.paymentType === "pix") {
+    return {
+      MerchantOrderId: request.orderId,
+      Customer: customer,
+      Payment: {
+        Type: "Pix",
+        Amount: request.amountInCents,
+      },
+    };
+  }
+
   const baseRequest: Record<string, unknown> = {
     MerchantOrderId: request.orderId,
-    Customer: {
-      Name: request.customer.name,
-      Email: request.customer.email,
-      Identity: request.customer.cpf,
-      IdentityType: request.customer.cpf ? "CPF" : undefined,
-      Birthdate: request.customer.birthdate,
-      Address: request.customer.address
-        ? {
-            Street: request.customer.address.street,
-            Number: request.customer.address.number,
-            Complement: request.customer.address.complement,
-            District: request.customer.address.district,
-            City: request.customer.address.city,
-            State: request.customer.address.state,
-            ZipCode: request.customer.address.zipCode.replace(/\D/g, ""),
-            Country: "BRA",
-          }
-        : undefined,
-    },
+    Customer: customer,
     Payment: {
       Type: "CreditCard",
       Amount: request.amountInCents,
@@ -193,11 +237,11 @@ function buildCieloRequest(request: PaymentRequest) {
       Capture: true,
       SoftDescriptor: "NOVITA",
       CreditCard: {
-        CardNumber: request.card.cardNumber.replace(/\s/g, ""),
-        Holder: request.card.holder,
-        ExpirationDate: request.card.expirationDate,
-        SecurityCode: request.card.securityCode,
-        Brand: request.card.brand,
+        CardNumber: request.card!.cardNumber.replace(/\s/g, ""),
+        Holder: request.card!.holder,
+        ExpirationDate: request.card!.expirationDate,
+        SecurityCode: request.card!.securityCode,
+        Brand: request.card!.brand,
         SaveCard: request.paymentType === "recurrent",
       },
     },

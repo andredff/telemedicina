@@ -541,9 +541,7 @@ export default function AdminOrders() {
                             {new Date(notification.sentAt).toLocaleString('pt-BR')}
                           </p>
                         </div>
-                        <Badge variant={notification.status === 'sent' ? 'default' : 'destructive'}>
-                          {notification.status}
-                        </Badge>
+                        <Badge variant="outline">{notification.status}</Badge>
                       </div>
                     ))}
                   </div>

@@ -132,15 +132,9 @@ export function MedicationCheckout({
         delivery_address: params.deliveryAddress,
         payment_id: params.paymentId,
         payment_method: params.paymentMethod || "credit_card",
-        payment_status: params.paymentStatus,
-        pix_qr_code: params.pixQrCode || null,
-        pix_qr_code_url: params.pixQrCodeUrl || null,
-        pix_expires_at: params.pixExpiresAt || null,
         installments: parseInt(installments),
         shipping_cost: shipping,
         subtotal: subtotal,
-        customer_name: customer.name || null,
-        customer_email: customer.email || null,
       };
 
       const { data, error } = await supabase

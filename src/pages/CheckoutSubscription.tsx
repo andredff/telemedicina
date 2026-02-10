@@ -190,6 +190,7 @@ const CheckoutSubscription = () => {
           .from("user_subscriptions")
           .update({
             plan_id: plan.id,
+            payment_id: recurrentPaymentId,
             started_at: new Date().toISOString(),
             expires_at: expiresAt.toISOString(),
             billing_cycle: billingCycle,
@@ -218,6 +219,7 @@ const CheckoutSubscription = () => {
           .insert({
             user_id: user.id,
             plan_id: plan.id,
+            payment_id: recurrentPaymentId,
             status: "active",
             started_at: new Date().toISOString(),
             expires_at: expiresAt.toISOString(),

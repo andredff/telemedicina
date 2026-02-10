@@ -24,7 +24,6 @@ import {
   DialogContent, 
   DialogHeader, 
   DialogTitle, 
-  DialogTrigger 
 } from '@/components/ui/dialog';
 import {
   Card,
@@ -32,7 +31,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Plus, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users } from 'lucide-react';
+import { Search, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users, RefreshCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface User {
@@ -63,17 +62,13 @@ export default function AdminUsers() {
       
       if (error) throw error;
       
-      // Mock data already includes role, but for real Supabase data we need to fetch it
-      const usersWithRoles = await Promise.all((data || []).map(async (user: Record<string, unknown>) => {
-        const role = (user.role as string) || await RBAC.getUserRole(user.id as string) || 'patient';
-        return { 
-          id: user.id as string,
-          email: user.email as string,
-          full_name: (user.full_name as string) || (user.email as string),
-          role: role,
-          created_at: user.created_at as string,
-          last_login: user.last_login
-        };
+      const usersWithRoles = (data || []).map((user: Record<string, unknown>) => ({ 
+        id: user.id as string,
+        email: user.email as string,
+        full_name: (user.full_name as string) || (user.email as string),
+        role: (user.role as string) || 'patient',
+        created_at: user.created_at as string,
+        last_login: user.last_login as string | undefined,
       }));
       
       setUsers(usersWithRoles);
@@ -104,12 +99,17 @@ export default function AdminUsers() {
   const handleSaveUser = async () => {
     try {
       if (!editingUser) return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        throw new Error("Usuário não autenticado");
+      }
       
       // Update user role
       const success = await RBAC.updateUserRole(
         editingUser.id,
         editingUser.role,
-        (await supabase.auth.getUser()).data.user?.id || ''
+        user.id
       );
       
       if (success) {
@@ -195,16 +195,21 @@ export default function AdminUsers() {
           </SelectContent>
         </Select>
         
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Usuário
-            </Button>
-          </DialogTrigger>
+        <Button variant="outline" onClick={fetchUsers} className="gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Atualizar
+        </Button>
+
+        <Dialog
+          open={isDialogOpen}
+          onOpenChange={(open) => {
+            setIsDialogOpen(open);
+            if (!open) setEditingUser(null);
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</DialogTitle>
+              <DialogTitle>Editar Usuário</DialogTitle>
             </DialogHeader>
             {editingUser && (
               <div className="space-y-4 py-4">
@@ -304,6 +309,8 @@ export default function AdminUsers() {
                         variant="outline"
                         size="sm"
                         className="text-red-500 hover:text-red-700"
+                        disabled
+                        title="Remoção de usuário não implementada neste MVP"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -358,15 +365,6 @@ export default function AdminUsers() {
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
-}
-
-// Helper Card component for the summary section
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
-  return (
-    <div className={`border rounded-lg p-4 ${className}`}>
-      {children}
     </div>
   );
 }

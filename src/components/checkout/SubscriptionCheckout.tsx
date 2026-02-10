@@ -64,9 +64,13 @@ export function SubscriptionCheckout({
 
   const interval: RecurrenceInterval = billingCycle === "yearly" ? "Annual" : "Monthly";
 
-  const generateSubscriptionId = () => {
-    return `SUB-${plan.id.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
+  const handleBillingCycleChange = (value: string) => {
+    const cycle = value as "monthly" | "yearly";
+    setBillingCycle(cycle);
   };
+
+  const generateSubscriptionId = () =>
+    `SUB-${plan.id.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
 
   const handlePayment = async (cardData: CardData) => {
     setIsLoading(true);
@@ -203,7 +207,7 @@ export function SubscriptionCheckout({
             <Label className="text-sm font-medium">Ciclo de cobrança</Label>
             <RadioGroup
               value={billingCycle}
-              onValueChange={(value) => setBillingCycle(value as "monthly" | "yearly")}
+              onValueChange={handleBillingCycleChange}
               className="grid grid-cols-2 gap-4"
             >
               <Label

@@ -74,6 +74,7 @@ export interface RecurrentPayment {
 
 export interface Payment {
   Type: "CreditCard" | "DebitCard" | "Pix" | "Boleto";
+  Provider?: string;
   Amount: number; // Em centavos (R$ 15,70 = 1570)
   Installments: number;
   Capture?: boolean;
@@ -81,6 +82,10 @@ export interface Payment {
   CreditCard?: CreditCard;
   Recurrent?: boolean; // Para recorrência própria
   RecurrentPayment?: RecurrentPayment; // Para recorrência programada
+  // PIX: na integração mais recente, a expiração pode ser configurada via Payment.QrCode.Expiration (segundos).
+  QrCode?: {
+    Expiration?: number;
+  };
 }
 
 // Request Types
