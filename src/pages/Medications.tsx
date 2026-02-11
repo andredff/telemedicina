@@ -98,7 +98,7 @@ const Medications = () => {
     {
       icon: RefreshCw,
       title: "Entrega Programada",
-      description: "Para medicamentos de uso contínuo, programe entregas automáticas mensais."
+      description: "Para medicamentos de uso contínuo, programe entregas automáticas periódicas."
     },
     {
       icon: Package,
@@ -113,7 +113,7 @@ const Medications = () => {
     {
       icon: Truck,
       title: "Frete Grátis",
-      description: "Entrega gratuita para assinantes em toda a região do Distrito Federal."
+      description: "Entrega gratuita para assinantes em toda a região do Distrito Federal e entorno."
     }
   ];
 
@@ -135,8 +135,8 @@ const Medications = () => {
     },
     {
       number: "4",
-      title: "Finalize a compra",
-      description: "Escolha os medicamentos, pague e aguarde a entrega em casa."
+      title: "Finalize o pedido",
+      description: "Aceite os termos de uso, selecine o(s) medicamento(s), efeture o pagamento e aguarde a entrega no conforto do seu lar."
     }
   ];
 
@@ -161,8 +161,8 @@ const Medications = () => {
               </h1>
               
               <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
-                Após sua consulta online, compre os medicamentos prescritos diretamente 
-                pela plataforma e receba em até 24 horas, sem sair de casa.
+                Após sua consulta online, tenha os medicamentos prescritos dispensados diretamente 
+                pela plataforma e os receba em até 24 horas, sem sair de casa.
               </p>
 
               {/* Prescription Code Search */}
@@ -174,7 +174,7 @@ const Medications = () => {
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="code" className="text-sm text-muted-foreground">
-                      Código da receita (recebido por SMS/e-mail)
+                      Código da receita (recebido por e-mail)
                     </Label>
                     <div className="flex gap-3 relative">
                       <div className="flex-1 relative">
@@ -214,7 +214,7 @@ const Medications = () => {
                   <div className="flex items-start gap-2 text-sm text-muted-foreground">
                     <AlertCircle className="h-4 w-4 flex-shrink-0 mt-0.5" />
                     <span>
-                      Este serviço é exclusivo para pacientes da Novità Telemedicina. 
+                      Este serviço é exclusivo para pacientes da Novità Telemedicina residentes no DF e entorno. 
                       <Button 
                         variant="link" 
                         className="h-auto p-0 text-primary"
@@ -328,16 +328,16 @@ const Medications = () => {
               </h2>
               
               <p className="text-lg text-muted-foreground leading-relaxed">
-                Se você usa medicamentos regularmente, ative a entrega programada e receba 
-                automaticamente todo mês, sem precisar lembrar de fazer o pedido.
+                Se você faz uso de medicamentos regularmente, ative a entrega programada e os receba 
+                automática e periodicamente, sem precisar lembrar de fazer o pedido.
               </p>
 
               <ul className="space-y-4">
                 {[
                   "Escolha a frequência: mensal, bimestral ou trimestral",
-                  "Descontos progressivos quanto mais meses contratar",
+                  "Descontos progressivos, a depender da quantidade dispensada",
                   "Cancele ou altere a qualquer momento",
-                  "Notificação antes de cada entrega",
+                  "Notificações enviadas a cada entrega",
                 ].map((item) => (
                   <li key={item} className="flex items-center gap-3">
                     <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center">
@@ -394,7 +394,7 @@ const Medications = () => {
                 <Button 
                   size="lg"
                   variant="outline"
-                  className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+                  className="border-primary-foreground/30 text-foreground hover:bg-primary-foreground/10"
                   onClick={() => navigate("/auth")}
                 >
                   Fazer Login
