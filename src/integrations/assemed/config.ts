@@ -25,6 +25,10 @@ export const TELEMEDICINA_IFRAME_URL =
   import.meta.env.VITE_TELEMEDICINA_IFRAME_URL ||
   "https://telemedicina.novitahomecare.com.br/";
 
+// Sala padrão da White Label (quando configurada, prioriza URL `?sala=...`)
+const TELEMEDICINA_WL_SALA_ID =
+  import.meta.env.VITE_TELEMEDICINA_WL_SALA_ID || "1773";
+
 /**
  * Obtém as credenciais da API Assemed das variáveis de ambiente
  */
@@ -64,16 +68,28 @@ export function getWhiteLabelConsultationUrl(
   accessToken: string,
   tipoConsulta: "imediata" | "agendada" = "imediata"
 ): string {
-  const baseUrl = TELEMEDICINA_IFRAME_URL.replace(/\/$/, "");
-  
+  const baseUrl = TELEMEDICINA_IFRAME_URL.trim();
+  const baseWithoutQuery = baseUrl.split("?")[0].replace(/\/$/, "");
+
+  // Compatibilidade com WL real da Novità: https://telemedicina... ?sala=XXXX
+  const salaInUrlMatch = baseUrl.match(/[?&]sala=([^&#]+)/i);
+  const salaInUrl = salaInUrlMatch?.[1]
+    ? decodeURIComponent(salaInUrlMatch[1])
+    : "";
+  const salaId = TELEMEDICINA_WL_SALA_ID.trim() || salaInUrl;
+
+  if (salaId) {
+    return `${baseWithoutQuery}?sala=${encodeURIComponent(salaId)}`;
+  }
+
   // Remove o Bearer prefix se existir
   const token = accessToken.replace(/^Bearer\s+/i, "");
-  
-  // A URL white-label aceita o token via query param
+
+  // Fallback legado: rota por token na query string
   if (tipoConsulta === "imediata") {
-    return `${baseUrl}/consulta-imediata?token=${encodeURIComponent(token)}`;
+    return `${baseWithoutQuery}/consulta-imediata?token=${encodeURIComponent(token)}`;
   }
-  return `${baseUrl}/agendar-consulta?token=${encodeURIComponent(token)}`;
+  return `${baseWithoutQuery}/agendar-consulta?token=${encodeURIComponent(token)}`;
 }
 
 /**

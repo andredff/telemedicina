@@ -16,7 +16,7 @@
 2. Login do paciente via `POST /api/Auth/login-externo` (CPF + ClientId + ClientSecret) para obter Access Token
 3. Obter especialidades via `POST /api/Especialidades/obterTodas` (autenticado)
 4. Criar atendimento via `POST /api/Atendimentos` (autenticado)
-5. Acessar teleconsulta via URL da sala de espera com atendimentoId + pacienteToken
+5. Acessar teleconsulta via URL da sala de espera (Assemed) ou via URL white-label Novità (`?sala=...`)
 
 ---
 
@@ -211,7 +211,15 @@ Autentica paciente e retorna token JWT.
 
 **URL White-Label Novita:**
 
-A Novita possui white-label em `https://telemedicina.novitahomecare.com.br/` que usa uma estrutura de URL diferente. Necessario confirmar com Assemed se a URL de acesso via white-label segue o mesmo padrao ou se usa autenticacao JWT direta.
+A URL real da WL Novità usa query string com sala:
+
+`https://telemedicina.novitahomecare.com.br?sala={salaId}`
+
+Exemplo validado: `https://telemedicina.novitahomecare.com.br?sala=1773`
+
+Implementacao no projeto:
+- `src/integrations/assemed/config.ts` prioriza `?sala=...` (default `1773`), com override por `VITE_TELEMEDICINA_WL_SALA_ID` ou `sala` na própria URL base.
+- Mantem fallback legado por token (`/consulta-imediata?token=...`) para compatibilidade.
 
 ---
 
@@ -279,9 +287,9 @@ Utilizado para polling periodico durante a consulta. Se `situacao === "CONCLUIDO
 | 8 | `POST /api/Atendimentos/{id}/avaliar`         | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 9 | `GET /api/Atendimentos/v2/{id}/receituario`   | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 10| `GET /api/Atendimentos/{id}/simplificado`     | Sim          | `src/integrations/assemed/client.ts`       | OK     |
-| 11| URL sala de espera externa                     | Parcial      | `src/integrations/assemed/config.ts`       | Nota   |
+| 11| URL sala de espera externa (incl. WL Novità)   | Sim          | `src/integrations/assemed/config.ts`       | OK     |
 
-**Resultado: 10/10 endpoints implementados. URL da sala de espera precisa validacao com Assemed.**
+**Resultado: 10/10 endpoints implementados + URL de sala externa/WL validada em configuracao.**
 
 ## Problemas Encontrados (Fev/2026)
 

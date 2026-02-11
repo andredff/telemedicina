@@ -71,11 +71,14 @@ const Telemedicine = () => {
       if (!error && data) {
         const { data: userData } = await supabase.auth.getUser();
         const metadata = userData.user?.user_metadata;
+        const identity = userData.user?.identities?.[0];
+        const identityCpf = identity?.identity_data?.cpf as string | undefined;
+        const cpf = (metadata?.cpf as string | undefined) || identityCpf || "";
 
         setProfile({
           full_name: data.full_name,
           email: data.email,
-          cpf: metadata?.cpf || "",
+          cpf,
           phone: metadata?.phone || "",
           birth_date: metadata?.birth_date || "",
           gender: metadata?.gender || "M",

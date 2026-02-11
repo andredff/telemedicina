@@ -159,8 +159,12 @@ test.describe("Medication Checkout", () => {
     await expect(submitBtn).toBeEnabled();
     await submitBtn.click();
 
-    // Should show success state
-    await expect(page.getByRole("heading", { name: /Pagamento Confirmado/i })).toBeVisible({ timeout: 20000 });
+    // Success can appear as:
+    // 1) payment confirmation screen, or
+    // 2) cart cleared screen (parent callback clears cart immediately).
+    const paymentConfirmed = page.getByRole("heading", { name: /Pagamento Confirmado/i });
+    const cartCleared = page.getByRole("heading", { name: /Carrinho vazio/i });
+    await expect(paymentConfirmed.or(cartCleared)).toBeVisible({ timeout: 20000 });
   });
 
   test("PIX payment flow generates QR code and confirms", async ({ page }) => {

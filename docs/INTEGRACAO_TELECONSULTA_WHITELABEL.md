@@ -11,7 +11,7 @@ Implementada a funcionalidade de abrir o iframe da plataforma white-label **http
 
 Componente principal que gerencia:
 - ✅ Exibição do iframe white-label em tela cheia
-- ✅ Autenticação automática via token na URL
+- ✅ Abertura via URL WL real (`?sala=...`) quando configurada
 - ✅ Suporte a "Consulta Imediata" e "Agendar Consulta"
 - ✅ Header com botão de fechar e link para abrir em nova aba
 - ✅ Loading spinner durante carregamento
@@ -30,8 +30,8 @@ export function getWhiteLabelConsultationUrl(
 ```
 
 **URLs geradas:**
-- Consulta Imediata: `https://telemedicina.novitahomecare.com.br/consulta-imediata?token={accessToken}`
-- Agendar Consulta: `https://telemedicina.novitahomecare.com.br/agendar-consulta?token={accessToken}`
+- Com sala WL configurada: `https://telemedicina.novitahomecare.com.br?sala={salaId}`
+- Fallback legado: `https://telemedicina.novitahomecare.com.br/consulta-imediata?token={accessToken}` ou `.../agendar-consulta?token={accessToken}`
 
 ### 3. Hook `useTelemedicineWhiteLabel`
 **Localização:** `src/components/telemedicine/TelemedicineWhiteLabelFrame.tsx`
@@ -63,9 +63,9 @@ const {
    ↓
 6. Se necessário, cadastra o paciente na plataforma
    ↓
-7. Abre iframe white-label com token na URL
+7. Abre iframe white-label na URL de WL (preferencialmente `?sala=...`)
    ↓
-8. Plataforma white-label valida token e exibe conteúdo
+8. Plataforma white-label carrega o app da Assemed em iFrame interno
 ```
 
 ## 📱 Integração no Dashboard
@@ -96,9 +96,10 @@ Se nenhuma fonte tiver o CPF, o usuário será direcionado para completar o cada
 A URL base é configurável via variável de ambiente:
 ```env
 VITE_TELEMEDICINA_IFRAME_URL=https://telemedicina.novitahomecare.com.br/
+VITE_TELEMEDICINA_WL_SALA_ID=1773
 ```
 
-Valor padrão: `https://telemedicina.novitahomecare.com.br/`
+Valor padrão: `https://telemedicina.novitahomecare.com.br/` com sala WL `1773`
 
 ## 🔐 Permissões do Iframe
 
@@ -123,7 +124,7 @@ Valor padrão: `https://telemedicina.novitahomecare.com.br/`
 - O token expira após tempo definido pela API Assemed
 - O paciente é automaticamente cadastrado se não existir
 - O iframe requer permissões de câmera/microfone do navegador
-- A plataforma white-label deve suportar autenticação via token na URL
+- Em WL Novità, o formato recomendado é `?sala=...`; token na URL fica como fallback legado
 - Compatível com navegadores modernos (Chrome, Firefox, Safari, Edge)
 - O sistema tolera ausência da coluna `cpf` na tabela `profiles`
 
