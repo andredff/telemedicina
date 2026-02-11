@@ -67,7 +67,7 @@ export const DIFERENCIAIS = {
 };
 
 export const ESPECIALIDADES = {
-  title: 'Nossas Especialidades Médicas',
+  title: 'Especialidades Médicas',
   items: [
     'Cardiologia',
     'Dermatologia',
@@ -107,8 +107,8 @@ export const POR_QUE_NOVITA = {
     },
     {
       icon: 'Building2',
-      title: 'Estrutura Consolidada',
-      description: 'Protocolos clínicos bem definidos e 15 anos de experiência em atendimento a pacientes das mais variadas complexidades',
+      title: 'Check Up em domicílio',
+      description: 'Check up gratuito (Planos Ouro e Diamante) com coleta de exame de sangue em domicílio por laboratório renomado e especializado, sem você precisar sair de casa.',
     },
     {
       icon: 'Heart',

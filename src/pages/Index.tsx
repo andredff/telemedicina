@@ -29,6 +29,8 @@ import {
   Activity,
   LucideIcon,
   Truck,
+  Crown,
+  Gem,
 } from "lucide-react";
 import {
   HERO_CONTENT,
@@ -40,7 +42,7 @@ import {
   MISSAO_VISAO_VALORES,
   CONTATO,
 } from "@/data/landingContent";
-import { INDIVIDUAL_PLANS, formatPrice } from "@/data/plansData";
+import { INDIVIDUAL_PLANS, COLETIVO_PLANS, formatPrice, getPlanColor } from "@/data/plansData";
 import ambulanciaImage from "@/assets/ambulancia-novita.jpg";
 
 // Icon mapping for dynamic icon rendering
@@ -61,6 +63,15 @@ const ICON_MAP: Record<string, LucideIcon> = {
 function getIcon(iconName: string): LucideIcon {
   return ICON_MAP[iconName] ?? Award;
 }
+
+// Ícone do plano baseado no tipo
+const getPlanIcon = (planType: string): LucideIcon => {
+  if (planType.includes('platina')) return Gem;
+  if (planType.includes('ouro')) return Crown;
+  if (planType.includes('prata')) return Star;
+  if (planType.includes('bronze')) return Shield;
+  return Shield;
+};
 
 // Reusable service card data type
 interface ServiceItem {
@@ -323,50 +334,6 @@ function Index(): JSX.Element {
         </div>
       </section>
 
-      {/* Telemedicina Section */}
-      <section id="telemedicina" className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-6">
-              <Video className="h-4 w-4" />
-              <span>Telemedicina</span>
-            </div>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
-              Consultas Médicas Online 24h
-            </h2>
-            <p className="text-muted-foreground text-lg">
-              Por menos de R$ 1,00 por dia você terá consultas médicas 24h por dia, 7 dias por semana.
-              <br />
-              <a 
-                href="/planos" 
-                className="text-primary font-semibold hover:underline inline-flex items-center gap-1 mt-2"
-                onClick={(e) => { e.preventDefault(); navigate("/planos"); }}
-              >
-                Planos de Telemedicina
-                <ArrowRight className="h-4 w-4" />
-              </a>
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {TELEMEDICINA_SERVICES.map((service) => (
-              <ServiceCard key={service.title} service={service} />
-            ))}
-          </div>
-
-          <div className="text-center mt-12">
-            <Button
-              size="lg"
-              className="gradient-hero text-primary-foreground shadow-glow"
-              onClick={() => navigate("/planos")}
-            >
-              Ver Planos de Telemedicina
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </div>
-        </div>
-      </section>
-
       {/* Nossos Diferenciais Section - Briefing */}
       <section id="diferenciais" className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
@@ -417,7 +384,7 @@ function Index(): JSX.Element {
               {ESPECIALIDADES.title}
             </h2>
             <p className="text-muted-foreground text-lg">
-              Contamos com médicos especialistas em diversas áreas da saúde para atender você e sua família.
+              Contamos com médicos especialistas em diversas áreas da saúde para atender você e sua família. Confira abaixo algumas especialidades.
             </p>
           </div>
 
@@ -432,12 +399,198 @@ function Index(): JSX.Element {
               </div>
             ))}
           </div>
+          
+        </div>
+
+      {/* CTA Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <div className="max-w-3xl mx-auto text-center space-y-8">
+
+            <Button
+              size="lg"
+              className="gradient-hero text-primary-foreground shadow-glow hover:shadow-elevated transition-all"
+              onClick={() => navigate("/planos")}
+            >
+              Ver Planos de Telemedicina
+              <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </div>
+        </div>
+      </section>
+
+      </section>
+      
+
+      {/* Planos Telemedicina Preview - Atualizado com dados do briefing */}
+      <section className="py-20 section-bg-light">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-2xl mx-auto mb-16">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+              Planos de <span className="gradient-text">Telemedicina</span>
+            </h2>
+            <p className="text-muted-foreground text-lg">
+              Planos a partir de R$ {formatPrice(INDIVIDUAL_PLANS[0].price_monthly)}/mês com consultas ilimitadas com clínico geral 24h.
+            </p>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {INDIVIDUAL_PLANS.map((plan) => (
+              <Card
+                key={plan.id}
+                className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 ${
+                  plan.highlight ? "border-primary shadow-glow" : ""
+                }`}
+              >
+                {plan.highlight && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                    <span className="gradient-hero text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                      Mais Popular
+                    </span>
+                  </div>
+                )}
+                <CardContent className="p-6 flex flex-col h-full">
+                  <div className="flex-1 space-y-6">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                        {(() => {
+                          const IconComponent = getPlanIcon(plan.type);
+                          return <IconComponent className="h-6 w-6 text-primary" />;
+                        })()}
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-heading font-bold text-foreground">{plan.name}</h3>
+                        <p className="text-sm text-muted-foreground">{plan.shortDescription}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-sm text-muted-foreground">R$</span>
+                      <span className="text-4xl font-heading font-bold text-foreground">{formatPrice(plan.price_monthly)}</span>
+                      <span className="text-sm text-muted-foreground">/mês</span>
+                    </div>
+
+                    <ul className="space-y-3">
+                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                        Clínico geral 24h ilimitado
+                      </li>
+                      {plan.specialist_consultations_per_year > 0 && (
+                        <li className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                          Inclui {plan.specialist_consultations_per_year} consultas com especialista(s)/ano
+                        </li>
+                      )}
+                      {plan.checkups_per_year > 0 && (
+                        <li className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                          Check-up anual incluso
+                        </li>
+                      )}
+                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                        Receitas, atestados e pedidos de exames digitais
+                      </li>
+                    </ul>
+                  </div>
+
+                  <Button
+                    className={`w-full mt-6 ${plan.highlight ? "gradient-hero text-primary-foreground" : ""}`}
+                    variant={plan.highlight ? "default" : "outline"}
+                    onClick={() => navigate("/planos")}
+                  >
+                    Escolher Plano
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Planos Familiares */}
+          <div className="mt-16 pt-12 border-t border-border/50">
+            <div className="text-center max-w-2xl mx-auto mb-12">
+              <h3 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-4">
+                Planos <span className="gradient-text">Familiares</span>
+              </h3>
+              <p className="text-muted-foreground text-lg">
+                Proteja você e sua família com até 3 pessoas pelos mesmos preços acessíveis
+              </p>
+            </div>
+
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {COLETIVO_PLANS.map((plan) => (
+                <Card
+                  key={plan.id}
+                  className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 ${
+                    plan.highlight ? "border-primary shadow-glow" : ""
+                  }`}
+                >
+                  {plan.highlight && (
+                    <div className="absolute -top-3 left-1/2 -translate-x-1/2">
+                      <span className="gradient-hero text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
+                        Mais Popular
+                      </span>
+                    </div>
+                  )}
+                  <CardContent className="p-6 flex flex-col h-full">
+                    <div className="flex-1 space-y-6">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getPlanColor(plan.type)} flex items-center justify-center text-white`}>
+                          {(() => {
+                            const IconComponent = getPlanIcon(plan.type);
+                            return <IconComponent className="h-6 w-6" />;
+                          })()}
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-heading font-bold text-foreground">{plan.name}</h3>
+                          <p className="text-sm text-muted-foreground">{plan.shortDescription}</p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-baseline gap-1">
+                        <span className="text-sm text-muted-foreground">R$</span>
+                        <span className="text-4xl font-heading font-bold text-foreground">{formatPrice(plan.price_monthly)}</span>
+                        <span className="text-sm text-muted-foreground">/mês</span>
+                      </div>
+
+                      <ul className="space-y-3">
+                        {plan.features.map((feature, index) => (
+                          <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                            <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                            <span>{feature}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <Button
+                      className={`w-full mt-6 ${plan.highlight ? "gradient-hero text-primary-foreground" : ""}`}
+                      variant={plan.highlight ? "default" : "outline"}
+                      onClick={() => navigate("/planos")}
+                    >
+                      Escolher Plano
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </div>
+
+          <div className="text-center mt-8">
+            <Button
+              variant="outline"
+              onClick={() => navigate("/planos")}
+            >
+              Ver Todos os Planos
+              <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </section>
 
 
       {/* UTI Móvel Section */}
-      <section className="py-20">
+      <section className="py-0 pb-20">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative order-2 lg:order-1">
@@ -481,94 +634,6 @@ function Index(): JSX.Element {
         </div>
       </section>
 
-      {/* Planos Telemedicina Preview - Atualizado com dados do briefing */}
-      {/* <section className="py-20 section-bg-light">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
-              Planos de <span className="gradient-text">Telemedicina</span>
-            </h2>
-            <p className="text-muted-foreground text-lg">
-              Planos a partir de R$ {formatPrice(INDIVIDUAL_PLANS[0].price_monthly)}/mês com consultas ilimitadas com clínico geral 24h.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {INDIVIDUAL_PLANS.map((plan) => (
-              <Card
-                key={plan.id}
-                className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 ${
-                  plan.highlight ? "border-primary shadow-glow" : ""
-                }`}
-              >
-                {plan.highlight && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                    <span className="gradient-hero text-primary-foreground text-xs font-semibold px-3 py-1 rounded-full">
-                      Mais Popular
-                    </span>
-                  </div>
-                )}
-                <CardContent className="p-6 space-y-6">
-                  <div>
-                    <h3 className="text-xl font-heading font-bold text-foreground">{plan.name}</h3>
-                    <p className="text-sm text-muted-foreground mt-1">{plan.shortDescription}</p>
-                  </div>
-
-                  <div className="flex items-baseline gap-1">
-                    <span className="text-sm text-muted-foreground">R$</span>
-                    <span className="text-4xl font-heading font-bold text-foreground">{formatPrice(plan.price_monthly)}</span>
-                    <span className="text-sm text-muted-foreground">/mês</span>
-                  </div>
-
-                  <ul className="space-y-3">
-                    <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                      Clínico geral 24h ilimitado
-                    </li>
-                    {plan.specialist_consultations_per_year > 0 && (
-                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        {plan.specialist_consultations_per_year} especialista(s)/ano
-                      </li>
-                    )}
-                    {plan.checkups_per_year > 0 && (
-                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        Check-up anual incluso
-                      </li>
-                    )}
-                    <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                      Receitas digitais
-                    </li>
-                  </ul>
-
-                  <Button
-                    className={`w-full ${plan.highlight ? "gradient-hero text-primary-foreground" : ""}`}
-                    variant={plan.highlight ? "default" : "outline"}
-                    onClick={() => navigate("/planos")}
-                  >
-                    Escolher Plano
-                  </Button>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-
-          <div className="text-center mt-8">
-            <p className="text-muted-foreground mb-4">
-              Também oferecemos planos familiares para até 3 pessoas!
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => navigate("/planos")}
-            >
-              Ver Todos os Planos
-              <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </section> */}
 
       {/* Stats Section */}
       {/* <section className="py-16 gradient-hero">

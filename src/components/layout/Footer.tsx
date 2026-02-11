@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
-import { Heart, Phone, Mail, MapPin, Instagram, Facebook, Linkedin, Twitter, LucideIcon } from "lucide-react";
+import { Phone, Mail, MapPin, Instagram, Facebook, Linkedin, Twitter, LucideIcon } from "lucide-react";
+import LogoNovita from "@/assets/logo-novita.png";
 import { CONTATO, REDES_SOCIAIS, ESPECIALIDADES } from "@/data/landingContent";
 
 // Navigation links data
@@ -46,13 +47,11 @@ function Footer(): JSX.Element {
           {/* Column 1: Brand */}
           <div className="space-y-6">
             <div className="flex items-center gap-3">
-              <div className="gradient-hero rounded-xl p-2.5">
-                <Heart className="h-6 w-6 text-primary-foreground" fill="currentColor" />
-              </div>
-              <div>
-                <h2 className="text-xl font-heading font-bold">Novità</h2>
-                <p className="text-xs text-background/60">Home Care & Telemedicina</p>
-              </div>
+              <img 
+                src={LogoNovita} 
+                alt="Novità" 
+                className="h-16 w-auto"
+              />
             </div>
             <p className="text-background/70 text-sm leading-relaxed">
               Cuidamos da sua saúde com excelência há mais de 15 anos. Oferecemos serviços de Home Care e
@@ -146,7 +145,7 @@ function Footer(): JSX.Element {
             {/* Google Maps Embed */}
             <div className="rounded-xl overflow-hidden border border-background/20 shadow-lg">
               <iframe
-                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3839.3!2d-47.8832!3d-15.7891!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935a3ae5f36d9bf9%3A0xb6a4e0de7b3ed3c3!2sEd.%20Bras%C3%ADlia%20R%C3%A1dio%20Center!5e0!3m2!1spt-BR!2sbr!4v1704729600000!5m2!1spt-BR!2sbr"
+                src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3839.3!2d-47.8881195!3d-15.7840301!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935a3b8f15b986ad%3A0xd79269115c934594!2sEdif%C3%ADcio%20Bras%C3%ADlia%20Radio%20Center!5e0!3m2!1spt-BR!2sbr!4v1704729600000!5m2!1spt-BR!2sbr"
                 className="w-full h-[140px] block"
                 style={{ border: 0 }}
                 allowFullScreen

@@ -1,4 +1,5 @@
-import { ShoppingCart, User, LogOut, Heart, Settings, CreditCard, HelpCircle, Package } from "lucide-react";
+import { ShoppingCart, User, LogOut, Settings, CreditCard, HelpCircle, Package } from "lucide-react";
+import LogoNovita from "@/assets/logo-novita.png";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import {
@@ -35,13 +36,11 @@ const Header = ({ isAuthenticated = false, onLogout, cartItemsCount = 0 }: Heade
           className="flex items-center gap-3 cursor-pointer"
           onClick={() => navigate(isAuthenticated ? "/dashboard" : "/")}
         >
-          <div className="gradient-hero rounded-xl p-2">
-            <Heart className="h-5 w-5 text-primary-foreground" fill="currentColor" />
-          </div>
-          <div>
-            <h1 className="text-lg font-heading font-bold text-foreground">Novità</h1>
-            <p className="text-xs text-primary -mt-0.5">Telemedicina</p>
-          </div>
+          <img 
+            src={LogoNovita} 
+            alt="Novità" 
+            className="h-10 w-auto"
+          />
         </div>
 
         <nav className="flex items-center gap-2">

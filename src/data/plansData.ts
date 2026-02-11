@@ -28,9 +28,8 @@ export const SINGLE_CONSULTATION_PRICES = {
 
 // Benefícios base do Bronze (comum a todos os planos)
 const BASE_BRONZE_FEATURES = [
-  'Consultas ilimitadas com clínico geral, sem agendamento',
-  'Atendimento 24h por dia, 7 dias por semana',
-  'Receitas e atestados médicos digitais com validade CFM',
+  'Consultas ilimitadas com clínico geral, 24H',
+  'Receitas, atestados e pedidos de exames digitais',
   'Descontos em medicamentos',
   'Programa "Medicamento em Casa" (DF e entorno)',
 ];
@@ -60,7 +59,7 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     shortDescription: 'Consulta garantida com especialista',
     price_monthly: 49.90,
     price_yearly: 49.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 538,92/ano = R$ 44,91/mês
-    specialist_consultations_per_year: 1,
+    specialist_consultations_per_year: 2,
     checkups_per_year: 0,
     max_dependents: 0,
     features: [
@@ -77,14 +76,14 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     shortDescription: 'Maiores cuidados em saúde',
     price_monthly: 79.90,
     price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
-    specialist_consultations_per_year: 2,
+    specialist_consultations_per_year: 3,
     checkups_per_year: 1,
     max_dependents: 0,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
-      '1 check-up anual (sorologia)',
+      '1 check-up anual',
     ],
   },
   {
@@ -102,7 +101,7 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     features: [
       ...BASE_BRONZE_FEATURES,
       '4 consultas com médico especialista por ano',
-      '1 check-up anual (sorologia)',
+      'Inclui 1 check-up anual',
     ],
   },
 ];
@@ -133,15 +132,15 @@ export const COLETIVO_PLANS: PlanData[] = [
     category: 'coletivo',
     description: 'Consultas com especialista para toda a família',
     shortDescription: 'Especialista incluído - até 3 pessoas',
-    price_monthly: 109.90,
-    price_yearly: 109.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.186,92/ano = R$ 98,91/mês
+    price_monthly: 129.90,
+    price_yearly: 129.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.186,92/ano = R$ 98,91/mês
     specialist_consultations_per_year: 2,
     checkups_per_year: 0,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
+      'Inclui 4 consultas com médico especialista por ano',
       'Até 3 beneficiários (titular + 2 dependentes)',
-      '2 consultas com médico especialista por ano',
     ],
   },
   {
@@ -151,17 +150,18 @@ export const COLETIVO_PLANS: PlanData[] = [
     category: 'coletivo',
     description: 'Maiores cuidados em saúde para toda a família',
     shortDescription: 'Check-up incluído - até 3 pessoas',
-    price_monthly: 159.90,
-    price_yearly: 159.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.726,92/ano = R$ 143,91/mês
+    price_monthly: 209.90,
+    price_yearly: 209.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.726,92/ano = R$ 143,91/mês
     specialist_consultations_per_year: 4,
     checkups_per_year: 2,
     max_dependents: 2,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
+      'Inclui 6 consultas com médico especialista por ano',
+      '2 check-ups anuais',
       'Até 3 beneficiários (titular + 2 dependentes)',
-      '4 consultas com médico especialista por ano',
-      '2 check-ups anuais (sorologia)',
+
     ],
   },
   {
@@ -171,16 +171,16 @@ export const COLETIVO_PLANS: PlanData[] = [
     category: 'coletivo',
     description: 'O melhor plano para toda a família',
     shortDescription: 'Plano completo - até 3 pessoas',
-    price_monthly: 199.90,
-    price_yearly: 199.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
+    price_monthly: 259.90,
+    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
     specialist_consultations_per_year: 6,
     checkups_per_year: 2,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
+      'Inclui 8 consultas com médico especialista por ano',
+      '2 check-ups anuais',
       'Até 3 beneficiários (titular + 2 dependentes)',
-      '6 consultas com médico especialista por ano',
-      '2 check-ups anuais (sorologia)',
     ],
   },
 ];

@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Menu, X, Heart, Phone, User, LogOut } from "lucide-react";
+import { Menu, X, Phone, User, LogOut } from "lucide-react";
+import LogoNovita from "@/assets/logo-novita.png";
 import { supabase } from "@/integrations/supabase/client";
 
 const PublicHeader = () => {
@@ -27,7 +28,7 @@ const PublicHeader = () => {
 
   const navLinks = [
     { href: "/", label: "Início" },
-    { href: "/sobre", label: "Sobre" },
+    { href: "/sobre", label: "Telemedicina" },
     { href: "/planos", label: "Planos" },
     { href: "/como-funciona", label: "Como Funciona" },
     { href: "/medicamentos", label: "Medicamentos" },
@@ -48,17 +49,11 @@ const PublicHeader = () => {
         <div className="flex h-20 items-center justify-between px-4">
           {/* Logo */}
           <Link to="/" className="flex items-center gap-3 group">
-            <div className="relative">
-              <div className="absolute inset-0 gradient-hero rounded-xl blur-lg opacity-30 group-hover:opacity-50 transition-opacity" />
-              <div className="relative gradient-hero rounded-xl p-2.5">
-                <Heart className="h-6 w-6 text-primary-foreground" fill="currentColor" />
-              </div>
-            </div>
-            <div>
-              <h1 className="text-2xl font-heading font-bold text-foreground tracking-tight">
-                Novità
-              </h1>
-            </div>
+            <img 
+              src={LogoNovita} 
+              alt="Novità" 
+              className="h-16 w-auto"
+            />
           </Link>
 
           {/* Desktop Navigation */}
@@ -80,13 +75,13 @@ const PublicHeader = () => {
 
           {/* Desktop CTA */}
           <div className="hidden lg:flex items-center gap-3">
-            <a 
+            {/* <a 
               href="tel:+556133333333" 
               className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
             >
               <Phone className="h-4 w-4" />
               <span>(61) 3333-3333</span>
-            </a>
+            </a> */}
             
             {isAuthenticated ? (
               <>
