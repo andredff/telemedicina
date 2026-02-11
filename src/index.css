@@ -6,16 +6,58 @@
 
 @layer base {
   :root {
-    /* Cores do Briefing Novità */
-    /* Primária: #EDAF00 = hsl(44, 100%, 46%) */
-    /* Secundária: #CC9B00 = hsl(46, 100%, 40%) */
-    /* Texto: #4B4B4B = hsl(0, 0%, 29%) */
-    /* Link: #A67705 = hsl(43, 93%, 34%) */
-    /* Destaque: #CAB772 = hsl(49, 44%, 62%) */
-    /* Cinza: #B1B1B1 = hsl(0, 0%, 69%) */
-    /* Fundo claro: #F9F9F9 = hsl(0, 0%, 98%) */
-    /* Branco: #FFFFFF */
+    /* Design System Novità - Extended */
+    
+    /* Colors */
+    --color-primary: #EDAF00;
+    --color-secondary: #CC9B00;
+    --color-text: #4B4B4B;
+    --color-accent: #A67705;
+    --color-highlight: #CAB772;
+    --color-gray: #B1B1B1;
+    --color-bg-light: #F9F9F9;
+    --color-white: #FFFFFF;
+    
+    /* CSS Variables from Design System */
+    --e-global-color-primary: #EDAF00;
+    --e-global-color-secondary: #CC9B00;
+    --e-global-color-text: #4B4B4B;
+    --e-global-color-accent: #A67705;
+    --e-global-color-9c3c7f1: #CAB772;
+    --e-global-color-80d8cec: #B1B1B1;
+    --e-global-color-8094073: #F9F9F9;
+    --e-global-color-5b75fab: #FFFFFF;
+    
+    /* Typography - Primary (Headings) */
+    --e-global-typography-primary-font-family: "Roboto";
+    --e-global-typography-primary-font-size: 35px;
+    --e-global-typography-primary-font-weight: 800;
+    
+    /* Typography - Secondary */
+    --e-global-typography-secondary-font-family: "Poppins";
+    --e-global-typography-secondary-font-size: 14px;
+    --e-global-typography-secondary-font-weight: 400;
+    
+    /* Typography - Text */
+    --e-global-typography-text-font-family: "Poppins";
+    --e-global-typography-text-font-size: 14px;
+    --e-global-typography-text-font-weight: 400;
+    
+    /* Typography - Accent */
+    --e-global-typography-accent-font-family: "Poppins";
+    --e-global-typography-accent-font-size: 16px;
+    --e-global-typography-accent-font-weight: 500;
+    
+    /* Typography - Custom */
+    --e-global-typography-a73b7bf-font-family: "Poppins";
+    --e-global-typography-a73b7bf-font-size: 26px;
+    --e-global-typography-a73b7bf-font-weight: 800;
+    
+    --e-global-typography-c63d052-font-family: "Poppins";
+    --e-global-typography-c63d052-font-size: 18px;
+    --e-global-typography-c63d052-font-weight: 700;
 
+    /* Light CSS HSL values for Tailwind */
     --background: 0 0% 98%;
     --foreground: 0 0% 29%;
 
@@ -57,9 +99,9 @@
     --novita-white: 0 0% 100%;            /* #FFFFFF */
 
     /* Gradients */
-    --gradient-hero: linear-gradient(135deg, hsl(44 100% 46%), hsl(46 100% 40%));
-    --gradient-card: linear-gradient(180deg, hsl(0 0% 100%) 0%, hsl(0 0% 98%) 100%);
-    --gradient-accent: linear-gradient(135deg, hsl(44 100% 46%), hsl(49 44% 62%));
+    --gradient-hero: linear-gradient(135deg, #EDAF00, #CC9B00);
+    --gradient-card: linear-gradient(180deg, #FFFFFF 0%, #F9F9F9 100%);
+    --gradient-accent: linear-gradient(135deg, #EDAF00, #CAB772);
 
     /* Shadows */
     --shadow-soft: 0 2px 8px hsl(0 0% 29% / 0.06);
@@ -106,22 +148,24 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'Poppins', sans-serif;
+    font-family: 'Poppins', var(--e-global-typography-secondary-font-family, sans-serif);
     font-size: 14px;
     font-weight: 400;
   }
 
   h1, h2, h3, h4, h5, h6 {
-    font-family: 'Roboto', sans-serif;
+    font-family: 'Roboto', var(--e-global-typography-primary-font-family, sans-serif);
     font-weight: 800;
   }
 
   h1 {
     font-size: 35px;
+    font-weight: 800;
   }
 
   h2 {
     font-size: 26px;
+    font-weight: 800;
   }
 
   h3 {
@@ -130,21 +174,21 @@
   }
 
   a {
-    color: hsl(var(--novita-link));
+    color: var(--novita-link, var(--color-accent, #A67705));
   }
 
   a:hover {
-    color: hsl(var(--novita-primary));
+    color: var(--novita-primary, var(--color-primary, #EDAF00));
   }
 }
 
 @layer components {
   .gradient-hero {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    background: var(--gradient-hero, linear-gradient(135deg, #EDAF00, #CC9B00));
   }
   
   .gradient-text {
-    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    background: var(--gradient-accent, linear-gradient(135deg, #EDAF00, #CAB772));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -208,5 +252,14 @@
     to {
       opacity: 1;
     }
+  }
+
+  /* Section Background Colors */
+  .section-bg-light {
+    background-color: var(--e-global-color-8094073);
+  }
+
+  .section-bg-white {
+    background-color: var(--e-global-color-5b75fab);
   }
 }

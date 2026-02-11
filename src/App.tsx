@@ -22,6 +22,7 @@ import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
 import CheckoutMedication from "./pages/CheckoutMedication";
 import Telemedicine from "./pages/Telemedicine";
+import Sobre from "./pages/Sobre";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/Dashboard";
@@ -48,6 +49,7 @@ const App = () => (
         <BrowserRouter>
           <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/sobre" element={<Sobre />} />
           <Route path="/planos" element={<Plans />} />
           <Route path="/como-funciona" element={<HowItWorks />} />
           <Route path="/medicamentos" element={<Medications />} />

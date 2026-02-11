@@ -27,6 +27,7 @@ const PublicHeader = () => {
 
   const navLinks = [
     { href: "/", label: "Início" },
+    { href: "/sobre", label: "Sobre" },
     { href: "/planos", label: "Planos" },
     { href: "/como-funciona", label: "Como Funciona" },
     { href: "/medicamentos", label: "Medicamentos" },

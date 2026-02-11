@@ -10,11 +10,13 @@ export const HERO_CONTENT = {
   ],
   cta: 'Saiba Mais',
   ctaSecondary: 'Ver Planos',
+  planosUrl: '/planos', // Link para página de planos da Novità
 };
 
 export const SOBRE_EMPRESA = {
   title: 'Cuidado de Excelência no Conforto do Seu Lar, agora também via telemedicina',
-  text: `Reunimos uma equipe multidisciplinar altamente qualificada e todos os recursos necessários para um tratamento eficaz. Oferecemos planos de cuidados personalizado que priorizam a qualidade de vida, a recuperação e o calor humano em ambiente familiar. Oferecemos, também, planos de telemedicina, individual e familiar, com consultas médicas, incluindo várias especialidades médicas e check up incluso.`,
+  text: `Reunimos uma equipe multidisciplinar altamente qualificada e todos os recursos necessários para um tratamento eficaz. Oferecemos planos de cuidados personalizado que priorizam a qualidade de vida, a recuperação e o calor humano em ambiente familiar. Oferecemos, também, {{planos_link}} com consultas médicas, incluindo várias especialidades médicas e check up incluso.`,
+  planosLinkText: 'planos de telemedicina',
 };
 
 export const QUEM_SOMOS = {
@@ -39,22 +41,22 @@ export const DIFERENCIAIS = {
     {
       icon: 'Clock',
       title: '15 Anos de Experiência',
-      description: '1500+ pacientes assistidos, 30.000+ consultas médicas realizadas presencialmente, 400.000+ sessões de fisioterapia, fonoaudiologia, psicologia etc.',
+      description: '1500+ pacientes assistidos, 30.000+ consultas médicas realizadas, 400.000+ sessões de fisioterapia, fonoaudiologia, psicologia etc.',
     },
     {
       icon: 'Building',
       title: 'Sede e Farmácia Próprias',
-      description: 'Estrutura modernizada com UTI Móvel totalmente equipada, uma das mais modernas do mercado',
+      description: 'Nova Sede, moderna e com farmácia própria, localizada no coração de Brasília.',
     },
     {
       icon: 'FileCheck',
       title: 'Prontuário Eletrônico',
-      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica via assinatura eletrônica com protocolo ICP-Brasil)',
+      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica e pedido de exame via assinatura eletrônica com protocolo ICP-Brasil)',
     },
     {
       icon: 'Shield',
-      title: 'Protocolos Clínicos Seguros',
-      description: 'Suporte em evidências conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1.348/2022',
+      title: 'PPortal de Telemedicina',
+      description: 'Telemedicina avançada, consulta com especialistas e suporte em evidências conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1.348/2022',
     },
     {
       icon: 'Star',

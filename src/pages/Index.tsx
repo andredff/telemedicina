@@ -92,19 +92,19 @@ function ServiceCard({ service }: { service: ServiceItem }): JSX.Element {
 // Service data arrays
 const HOME_CARE_SERVICES: ServiceItem[] = [
   {
+    icon: Home,
+    title: "Atenção Domiciliar",
+    description: "Desde atendimentos pontuais a internações domiciliares de alta complexidade, sejam recém-nascidos ou em estágio final de vida, com todo o suporte necessário.",
+  },
+  {
     icon: Users,
     title: "Equipe Multidisciplinar",
-    description: "Médicos, enfermeiros, fisioterapeutas, nutricionistas, fonoaudiólogos, psicólogos e terapeutas ocupacionais.",
+    description: "Médicos, enfermeiros, fisioterapeutas, nutricionistas, fonoaudiólogos, psicólogos e outros profissionais de saúde.",
   },
   {
     icon: Clock,
     title: "Atendimento 24/7",
     description: "Atuamos 24 horas por dia, 7 dias por semana, 365 dias por ano para garantir seu cuidado.",
-  },
-  {
-    icon: Home,
-    title: "Internação Domiciliar",
-    description: "Pacientes de alta complexidade, desde recém-nascidos até idosos, com todo suporte necessário.",
   },
   {
     icon: Ambulance,
@@ -220,7 +220,7 @@ function Index(): JSX.Element {
       </section>
 
       {/* Sobre a Empresa Section - Briefing */}
-      <section className="py-20 bg-muted/30">
+      <section className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
@@ -237,20 +237,34 @@ function Index(): JSX.Element {
               </h2>
 
               <p className="text-muted-foreground leading-relaxed text-lg">
-                {SOBRE_EMPRESA.text}
+                {SOBRE_EMPRESA.text.split('{{planos_link}}').map((part, index, arr) => (
+                  <>
+                    {part}
+                    {index < arr.length - 1 && (
+                      <a
+                        href="/planos"
+                        className="text-primary font-semibold hover:underline inline-flex items-center gap-1"
+                        onClick={(e) => { e.preventDefault(); navigate('/planos'); }}
+                      >
+                        {SOBRE_EMPRESA.planosLinkText}
+                        <ArrowRight className="h-4 w-4" />
+                      </a>
+                    )}
+                  </>
+                ))}
               </p>
 
               {/* Missão, Visão, Valores */}
               <div className="grid grid-cols-3 gap-4 pt-4">
+              <div className="text-center p-4 bg-card rounded-xl border border-border/50">
+                  <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
+                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.missao.title}</p>
+                  <p className="text-sm font-semibold text-foreground">Excelência</p>
+                </div>
                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Target className="h-8 w-8 text-primary mx-auto mb-2" />
                   <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.visao.title}</p>
                   <p className="text-sm font-semibold text-foreground">Referência Nacional</p>
-                </div>
-                <div className="text-center p-4 bg-card rounded-xl border border-border/50">
-                  <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.missao.title}</p>
-                  <p className="text-sm font-semibold text-foreground">Excelência</p>
                 </div>
                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Award className="h-8 w-8 text-primary mx-auto mb-2" />
@@ -274,7 +288,7 @@ function Index(): JSX.Element {
             </div>
 
             <div className="space-y-6">
-              {QUEM_SOMOS.paragraphs.slice(0, 3).map((paragraph, index) => (
+              {QUEM_SOMOS.paragraphs.slice(0, 4).map((paragraph, index) => (
                 <p key={index} className="text-muted-foreground leading-relaxed">
                   {paragraph}
                 </p>
@@ -285,7 +299,7 @@ function Index(): JSX.Element {
       </section>
 
       {/* Home Care Section */}
-      <section id="homecare" className="py-20 bg-muted/30">
+      <section id="homecare" className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-6">
@@ -322,7 +336,15 @@ function Index(): JSX.Element {
             </h2>
             <p className="text-muted-foreground text-lg">
               Por menos de R$ 1,00 por dia você terá consultas médicas 24h por dia, 7 dias por semana.
-              A qualidade Novità agora no mundo digital.
+              <br />
+              <a 
+                href="/planos" 
+                className="text-primary font-semibold hover:underline inline-flex items-center gap-1 mt-2"
+                onClick={(e) => { e.preventDefault(); navigate("/planos"); }}
+              >
+                Planos de Telemedicina
+                <ArrowRight className="h-4 w-4" />
+              </a>
             </p>
           </div>
 
@@ -346,15 +368,14 @@ function Index(): JSX.Element {
       </section>
 
       {/* Nossos Diferenciais Section - Briefing */}
-      <section id="diferenciais" className="py-20 bg-muted/30">
+      <section id="diferenciais" className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-3xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
               {DIFERENCIAIS.title}
             </h2>
             <p className="text-muted-foreground text-lg">
-              Selo de qualidade com avaliação máxima e acreditação da ANS,
-              com 98,3% de conformidade na prestação de serviços.
+              Excelência e experiência aliadas à tecnologia de ponta.
             </p>
           </div>
 
@@ -414,40 +435,6 @@ function Index(): JSX.Element {
         </div>
       </section>
 
-      {/* Por que usar Novità Section - Nova seção do briefing */}
-      <section className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
-              {POR_QUE_NOVITA.title}
-            </h2>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {POR_QUE_NOVITA.items.map((item, index) => {
-              const IconComponent = getIcon(item.icon);
-              return (
-                <Card
-                  key={item.title}
-                  className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all duration-300 group"
-                >
-                  <CardContent className="p-6 space-y-4">
-                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                      <IconComponent className="h-7 w-7 text-primary" />
-                    </div>
-                    <h3 className="text-lg font-heading font-semibold text-foreground">
-                      {item.title}
-                    </h3>
-                    <p className="text-muted-foreground text-sm leading-relaxed">
-                      {item.description}
-                    </p>
-                  </CardContent>
-                </Card>
-              );
-            })}
-          </div>
-        </div>
-      </section>
 
       {/* UTI Móvel Section */}
       <section className="py-20">
@@ -495,7 +482,7 @@ function Index(): JSX.Element {
       </section>
 
       {/* Planos Telemedicina Preview - Atualizado com dados do briefing */}
-      <section className="py-20 bg-muted/30">
+      {/* <section className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
@@ -581,10 +568,10 @@ function Index(): JSX.Element {
             </Button>
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Stats Section */}
-      <section className="py-16 gradient-hero">
+      {/* <section className="py-16 gradient-hero">
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
             {STATS.map((stat) => (
@@ -597,10 +584,10 @@ function Index(): JSX.Element {
             ))}
           </div>
         </div>
-      </section>
+      </section> */}
 
       {/* Contact Section - Atualizado com dados do briefing */}
-      <section id="contato" className="py-20">
+      {/* <section id="contato" className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
@@ -648,7 +635,7 @@ function Index(): JSX.Element {
           </div>
 
           {/* Google Maps Embed */}
-          <div className="mt-12 max-w-4xl mx-auto">
+          {/* <div className="mt-12 max-w-4xl mx-auto">
             <div className="rounded-2xl overflow-hidden shadow-card border border-border/50">
               <iframe
                 src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d3839.3!2d-47.8832!3d-15.7891!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x935a3ae5f36d9bf9%3A0xb6a4e0de7b3ed3c3!2sEd.%20Bras%C3%ADlia%20R%C3%A1dio%20Center!5e0!3m2!1spt-BR!2sbr!4v1704729600000!5m2!1spt-BR!2sbr"
@@ -662,8 +649,8 @@ function Index(): JSX.Element {
               />
             </div>
           </div>
-        </div>
-      </section>
+        </div> */}
+      {/* </section>  */}
 
       <Footer />
     </div>
