@@ -28,9 +28,9 @@ const HowItWorks = () => {
       title: "Cadastre-se na Plataforma",
       description: "Crie sua conta em poucos minutos informando seus dados básicos. Escolha o plano que melhor atende às suas necessidades ou opte por uma consulta avulsa.",
       details: [
-        "Cadastro rápido com CPF, e-mail e telefone",
-        "Escolha entre planos mensais ou anuais",
-        "Adicione dependentes no plano familiar",
+        "Cadastro rápido com CPF, data de nascimento, e-mail e telefone",
+        "Escolha entre planos individuais ou coletivos, mensais ou anuais",
+        "Adicione dependentes no plano familiar, se for o caso",
         "Pagamento seguro via cartão ou PIX"
       ]
     },
@@ -50,11 +50,11 @@ const HowItWorks = () => {
       icon: FileText,
       number: "03",
       title: "Receba sua Receita Digital",
-      description: "Ao final da consulta, receba sua receita médica digital ou atestado diretamente no celular via SMS e e-mail, com código de validação único.",
+      description: "Ao final da consulta, receba sua receita médica, pedido de exame ou atestado diretamente em seu e-mail, com código de validação único.",
       details: [
-        "Receita com assinatura digital do médico",
+        "Receita, pedido de exame e atestado com assinatura digital do médico",
         "QR Code para validação em farmácias",
-        "Código de protocolo enviado por SMS",
+        "Código de protocolo enviado por e-mail",
         "Acesso ao histórico na área do paciente"
       ]
     },
@@ -62,7 +62,7 @@ const HowItWorks = () => {
       icon: Truck,
       number: "04",
       title: "Medicamentos em Casa",
-      description: "Compre os medicamentos prescritos diretamente pela plataforma com descontos exclusivos e receba em até 24 horas no conforto do seu lar.",
+      description: "Adquira os medicamentos prescritos diretamente pela plataforma com descontos exclusivos e receba em até 24 horas no conforto do seu lar.",
       details: [
         "Descontos exclusivos para assinantes",
         "Entrega em até 24 horas úteis",
@@ -86,7 +86,7 @@ const HowItWorks = () => {
     {
       icon: Smartphone,
       title: "100% Digital",
-      description: "Tudo pelo celular ou computador. Sem filas, sem deslocamento, sem burocracia."
+      description: "Tudo pelo celular ou computador. Sem filas, sem deslocamento, sem carência, sem burocracia."
     },
     {
       icon: CreditCard,
@@ -101,7 +101,7 @@ const HowItWorks = () => {
     {
       icon: CalendarCheck,
       title: "Entrega Programada",
-      description: "Para medicamentos de uso contínuo, programe entregas automáticas mensais."
+      description: "Para medicamentos de uso contínuo, programe entregas automáticas periódicas, quando e como precisar."
     }
   ];
 
@@ -246,7 +246,7 @@ const HowItWorks = () => {
                 <Button 
                   size="lg"
                   variant="outline"
-                  className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+                  className="border-primary-foreground/30 text-foreground hover:bg-primary-foreground/10"
                   onClick={() => navigate("/auth")}
                 >
                   Criar Conta Gratuita
