@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Check, Star, Users, ArrowRight, HelpCircle, Gem, Crown, LucideIcon } from "lucide-react";
+import { Check, Star, Users, ArrowRight, HelpCircle, Gem, Crown, Award, Clock, Building, FileCheck, Shield, LucideIcon } from "lucide-react";
 import {
   Accordion,
   AccordionContent,
@@ -24,7 +24,8 @@ import {
   getPlanColor,
   PlanData,
 } from "@/data/plansData";
-import { FAQ_ITEMS } from "@/data/landingContent";
+import { FAQ_ITEMS, DIFERENCIAIS } from "@/data/landingContent";
+
 
 // Plan icon mapping based on plan type
 const PLAN_ICONS: Record<string, LucideIcon> = {
@@ -41,6 +42,20 @@ function getPlanIcon(type: string): JSX.Element {
   return <IconComponent className="h-5 w-5" />;
 }
 
+// Icon mapping for DIFERENCIAIS section
+const DIFERENCIAIS_ICONS: Record<string, LucideIcon> = {
+  Award: Award,
+  Clock: Clock,
+  Building: Building,
+  FileCheck: FileCheck,
+  Shield: Shield,
+  Star: Star,
+};
+
+function getDiferenciaisIcon(iconName: string): LucideIcon {
+  return DIFERENCIAIS_ICONS[iconName] || Star;
+}
+
 // Reusable feature list item component
 function FeatureItem({ text, highlighted = false }: { text: string; highlighted?: boolean }): JSX.Element {
   return (
@@ -53,14 +68,6 @@ function FeatureItem({ text, highlighted = false }: { text: string; highlighted?
   );
 }
 
-// Base features included in all plans
-const BASE_PLAN_FEATURES = [
-  "Consultas ilimitadas com clínico geral 24h",
-  "Receitas e atestados digitais CFM",
-  "Descontos em medicamentos",
-  'Programa "Medicamento em Casa"*',
-];
-
 // Single consultation options data
 const SINGLE_CONSULTATION_OPTIONS = [
   {
@@ -71,7 +78,7 @@ const SINGLE_CONSULTATION_OPTIONS = [
   },
   {
     title: "Consulta Avulsa - Especialista",
-    description: "Consulta pontual com médico especialista, sem compromisso.",
+    description: "Consulta pontual com médico especialista.",
     priceKey: "especialista" as const,
     authParam: "avulsa-especialista",
   },
@@ -221,27 +228,12 @@ function Plans(): JSX.Element {
                   </div>
 
                   <ul className="space-y-3 mb-6 flex-1">
-                    {BASE_PLAN_FEATURES.map((feature) => (
-                      <FeatureItem key={feature} text={feature} />
+                    {plan.features.map((feature, index) => (
+                      <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                        <span>{feature}</span>
+                      </li>
                     ))}
-                    {plan.specialist_consultations_per_year > 0 && (
-                      <FeatureItem
-                        text={`${plan.specialist_consultations_per_year} consulta(s) com especialista/ano`}
-                        highlighted
-                      />
-                    )}
-                    {plan.checkups_per_year > 0 && (
-                      <FeatureItem
-                        text={`${plan.checkups_per_year} check-up(s) anual(ais) (sorologia)`}
-                        highlighted
-                      />
-                    )}
-                    {plan.max_dependents > 0 && (
-                      <FeatureItem
-                        text={`Até ${plan.max_dependents + 1} beneficiários`}
-                        highlighted
-                      />
-                    )}
                   </ul>
 
                   <Button
@@ -307,7 +299,7 @@ function Plans(): JSX.Element {
       </section>
 
       {/* FAQ Section */}
-      <section className="py-20 bg-muted/30">
+      <section className="py-10 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-12">
             <div className="inline-flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-full text-sm font-medium mb-4">
