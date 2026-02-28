@@ -162,14 +162,14 @@ function ConsultationHistoryCard({
             <p className="text-muted-foreground text-xs mb-0.5">Especialidade</p>
             <p className="font-medium">{consultation.especialidadeNome || "—"}</p>
           </div>
-          {normalizedStatus !== "CANCELADO" && (
-            <div>
-              <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
-              <p className="font-medium">
-                {consultation.profissionalNome || "Aguardando..."}
-              </p>
-            </div>
-          )}
+          <div>
+            <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
+            <p className="font-medium">
+              {normalizedStatus === "CANCELADO"
+                ? "Consulta cancelada"
+                : consultation.profissionalNome || "Aguardando..."}
+            </p>
+          </div>
           <div>
             <p className="text-muted-foreground text-xs mb-0.5">Data</p>
             <p className="font-medium">{formatDate(consultation.dataHoraCriacao)}</p>
@@ -190,7 +190,7 @@ function ConsultationHistoryCard({
               {normalizedStatus === "AGUARDANDO" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Entrar na Fila
+                  Entrar na sala
                 </>
               ) : (
                 <>
@@ -520,6 +520,32 @@ const Teleconsultas = () => {
     navigate("/auth");
   };
 
+  // ── Auto-select clínico geral when specialties are loaded ──────────────────
+  // Used for direct consultation flow (without modal)
+  const [isAutoSelecting, setIsAutoSelecting] = useState(false);
+
+  useEffect(() => {
+    // When specialties are loaded and we started a new consultation flow, auto-select clínico geral
+    if (step === "selecting_specialty" && specialties.length > 0 && isAutoSelecting) {
+      // Find "Clínico Geral" (case insensitive)
+      const clinicoGeral = specialties.find((s) => {
+        const nome = s.nome.toLowerCase();
+        return nome.includes("cl") && nome.includes("geral");
+      });
+
+      if (clinicoGeral) {
+        setSelectedSpecialtyName(clinicoGeral.nome);
+        createConsultation(clinicoGeral);
+      } else if (specialties.length > 0) {
+        // Fallback: use first available specialty
+        setSelectedSpecialtyName(specialties[0].nome);
+        createConsultation(specialties[0]);
+      }
+      
+      setIsAutoSelecting(false);
+    }
+  }, [step, specialties, isAutoSelecting, createConsultation]);
+
   // ── Start new consultation flow ───────────────────────────────────────────
 
   const handleStartNewConsultation = async () => {
@@ -554,7 +580,25 @@ const Teleconsultas = () => {
       return;
     }
 
-    setShowSpecialtyModal(true);
+    // Verifica se já existe consulta em andamento
+    const activeConsultations = consultations.filter(
+      (c) =>
+        normalizeConsultationStatus(c) === "AGUARDANDO" ||
+        normalizeConsultationStatus(c) === "EM_ATENDIMENTO"
+    );
+
+    if (activeConsultations.length > 0) {
+      toast({
+        title: "Consulta em andamento",
+        description:
+          "Você já possui uma consulta em andamento. Aguarde o atendimento ser concluído ou cancele-o antes de iniciar uma nova consulta.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Inicia o fluxo diretamente com clínico geral (sem modal)
+    setIsAutoSelecting(true);
     await startConsultationFlow(cpf, profile);
   };
 
@@ -609,9 +653,9 @@ const Teleconsultas = () => {
     }
   }, [closeConsultation, loadConsultations, accessToken]);
 
-  // ── Render: full-screen iframe for active consultation ────────────────────
+  // ── Render: new consultation - show iframe inline ────────────────────────────
 
-  if (activeConsultation) {
+  if (activeConsultation && activeConsultation.pacienteToken) {
     return (
       <ConsultationIframe
         atendimentoId={activeConsultation.id}
@@ -622,7 +666,9 @@ const Teleconsultas = () => {
     );
   }
 
-  if (joiningConsultation) {
+  // ── Render: full-screen iframe for joining existing consultation ───────────
+
+  if (joiningConsultation && joiningConsultation.pacienteToken) {
     return (
       <ConsultationIframe
         atendimentoId={joiningConsultation.id}
