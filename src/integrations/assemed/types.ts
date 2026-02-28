@@ -139,7 +139,7 @@ export interface Consultation {
   dataHoraCriacao: string;
   dataHoraInicio: string | null;
   dataHoraFim: string | null;
-  pacienteToken: string;
+  pacienteToken: string | null;
 }
 
 /**

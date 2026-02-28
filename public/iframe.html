@@ -247,14 +247,7 @@
     .enter-button.hidden {
       display: none;
     }
-    
-    /* Iframe container for actual consultation */
-    .consultation-frame {
-      width: 100%;
-      height: 100%;
-      border: none;
-    }
-    
+
     .hidden {
       display: none;
     }
@@ -376,9 +369,10 @@
       </div>
     </div>
     
-    <!-- Iframe para a consulta real quando conectado -->
-    <iframe id="consultationFrame" class="consultation-frame hidden" allow="camera; microphone; fullscreen; display-capture"></iframe>
   </div>
+
+  <!-- Iframe para a consulta real quando conectado -->
+  <iframe id="consultationFrame" style="display:none;width:100%;height:100%;border:none;position:fixed;inset:0;z-index:10;" allow="camera; microphone; fullscreen; display-capture"></iframe>
   
   <script>
     // Recebe parâmetros da URL
@@ -390,8 +384,7 @@
     const isSandbox = params.get('sandbox') === 'true';
     
     // Atualiza UI com informações
-    document.getElementById('consultationType').textContent = 
-      tipo === 'imediata' ? 'Consulta Imediata' : 'Consulta Agendada';
+    document.getElementById('consultationType').textContent = especialidade;
     document.getElementById('specialtyText').textContent = especialidade;
     
     if (atendimentoId) {
@@ -417,10 +410,9 @@
       if (consultationUrl) {
         const waitingRoom = document.getElementById('waitingRoom');
         const consultationFrame = document.getElementById('consultationFrame');
-        
         consultationFrame.src = consultationUrl;
-        consultationFrame.classList.remove('hidden');
-        waitingRoom.classList.add('hidden');
+        consultationFrame.style.display = 'block';
+        waitingRoom.style.display = 'none';
       }
     }
     

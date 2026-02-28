@@ -1,5 +1,43 @@
 import { useState, useCallback } from "react";
 import { assemedClient, AssemedApiError } from "@/integrations/assemed/client";
+
+/**
+ * Transforma mensagens de erro técnicas da API Assemed em mensagens amigáveis para o usuário.
+ */
+function humanizeAssemedError(message: string): string {
+  const lower = message.toLowerCase();
+
+  if (
+    lower.includes("consulta não finalizada") ||
+    lower.includes("consulta nao finalizada") ||
+    lower.includes("atendimento não finalizado") ||
+    lower.includes("existe uma consulta")
+  ) {
+    return "Você já possui uma consulta em andamento. Aguarde o atendimento ser concluído ou cancele-o antes de iniciar uma nova consulta.";
+  }
+
+  if (lower.includes("não cadastrado") || lower.includes("nao cadastrado") || lower.includes("not found") || lower.includes("404")) {
+    return "Paciente não encontrado. Tente novamente.";
+  }
+
+  if (
+    lower.includes("invalid access token") ||
+    (lower.includes("token") && (lower.includes("expirado") || lower.includes("inválido") || lower.includes("invalido") || lower.includes("invalid")))
+  ) {
+    return "Token de acesso inválido ou expirado. Por favor, tente novamente.";
+  }
+
+  if (lower.includes("unauthorized") || lower.includes("401")) {
+    return "Acesso não autorizado. Verifique suas credenciais.";
+  }
+
+  if (lower.includes("network") || lower.includes("failed to fetch") || lower.includes("load failed")) {
+    return "Erro de conexão. Verifique sua internet e tente novamente.";
+  }
+
+  // Retorna a mensagem original se não houver tradução conhecida
+  return message;
+}
 import type {
   Consultation,
   Specialty,
@@ -58,7 +96,7 @@ export function useAssemedConsultation() {
     setState((prev) => ({ ...prev, step }));
 
   const setError = (error: string) =>
-    setState((prev) => ({ ...prev, step: "error", error }));
+    setState((prev) => ({ ...prev, step: "error", error: humanizeAssemedError(error) }));
 
   /**
    * Autentica silenciosamente (sem abrir seleção de especialidade).

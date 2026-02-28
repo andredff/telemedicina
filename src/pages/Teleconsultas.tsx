@@ -20,11 +20,19 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
+import { useSubscription } from "@/hooks/useSubscription";
 import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
@@ -154,12 +162,14 @@ function ConsultationHistoryCard({
             <p className="text-muted-foreground text-xs mb-0.5">Especialidade</p>
             <p className="font-medium">{consultation.especialidadeNome || "—"}</p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
-            <p className="font-medium">
-              {consultation.profissionalNome || "Aguardando..."}
-            </p>
-          </div>
+          {normalizedStatus !== "CANCELADO" && (
+            <div>
+              <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
+              <p className="font-medium">
+                {consultation.profissionalNome || "Aguardando..."}
+              </p>
+            </div>
+          )}
           <div>
             <p className="text-muted-foreground text-xs mb-0.5">Data</p>
             <p className="font-medium">{formatDate(consultation.dataHoraCriacao)}</p>
@@ -301,11 +311,12 @@ function ConsultationIframe({
   const [isLoading, setIsLoading] = useState(true);
   const isSandbox = getIsSandbox();
 
+  const safeToken = pacienteToken || "";
   const iframePageUrl = `/iframe.html?atendimentoId=${atendimentoId}&token=${encodeURIComponent(
-    pacienteToken
+    safeToken
   )}&especialidade=${encodeURIComponent(especialidade)}&sandbox=${isSandbox}&tipo=imediata`;
 
-  const consultationUrl = buildConsultationUrl(atendimentoId, pacienteToken);
+  const consultationUrl = buildConsultationUrl(atendimentoId, safeToken);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -391,11 +402,15 @@ const Teleconsultas = () => {
   const [hasLoadedConsultations, setHasLoadedConsultations] = useState(false);
   const [joiningConsultation, setJoiningConsultation] =
     useState<Consultation | null>(null);
+  const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
+  const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("Consulta Imediata");
+
+  const { isActive: hasActivePlan } = useSubscription();
 
   const {
     step,
     accessToken,
-    specialties,
+    specialties: rawSpecialties,
     activeConsultation,
     consultations,
     isLoadingConsultations,
@@ -409,6 +424,18 @@ const Teleconsultas = () => {
     resetFlow,
     backToSpecialtySelection,
   } = useAssemedConsultation();
+
+  // Se o usuário tem plano ativo, clínico geral é incluído (preço = 0)
+  const specialties = hasActivePlan
+    ? rawSpecialties.map((s) => {
+        const nomeLower = s.nome.toLowerCase();
+        const isClinicoGeral =
+          (nomeLower.includes("cl") && nomeLower.includes("geral")) ||
+          nomeLower.includes("clínico") ||
+          nomeLower.includes("clinico");
+        return isClinicoGeral ? { ...s, precoConsulta: 0 } : s;
+      })
+    : rawSpecialties;
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -527,12 +554,37 @@ const Teleconsultas = () => {
       return;
     }
 
+    setShowSpecialtyModal(true);
     await startConsultationFlow(cpf, profile);
+  };
+
+  const handleSelectSpecialty = async (specialty: Specialty) => {
+    setSelectedSpecialtyName(specialty.nome);
+    setShowSpecialtyModal(false);
+    await createConsultation(specialty);
+  };
+
+  const handleCloseSpecialtyModal = () => {
+    setShowSpecialtyModal(false);
+    resetFlow();
   };
 
   // ── Join existing consultation ────────────────────────────────────────────
 
-  const handleJoinConsultation = (consultation: Consultation) => {
+  const handleJoinConsultation = async (consultation: Consultation) => {
+    // Se o token estiver ausente, busca detalhes atualizados da consulta
+    if (!consultation.pacienteToken) {
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        const fresh = await assemedClient.getConsultation(consultation.id);
+        if (fresh && fresh.pacienteToken) {
+          setJoiningConsultation(fresh);
+          return;
+        }
+      } catch {
+        // fallback: usa a consulta original mesmo sem token
+      }
+    }
     setJoiningConsultation(consultation);
   };
 
@@ -564,7 +616,7 @@ const Teleconsultas = () => {
       <ConsultationIframe
         atendimentoId={activeConsultation.id}
         pacienteToken={activeConsultation.pacienteToken}
-        especialidade="Consulta Imediata"
+        especialidade={selectedSpecialtyName}
         onClose={handleCloseIframe}
       />
     );
@@ -636,17 +688,14 @@ const Teleconsultas = () => {
             </div>
             <Button
               onClick={handleStartNewConsultation}
-              disabled={isFlowLoading}
+              disabled={step === "creating_consultation"}
               className="gap-2 shrink-0"
               size="lg"
             >
-              {isFlowLoading ? (
+              {step === "creating_consultation" ? (
                 <>
                   <Loader2 className="h-5 w-5 animate-spin" />
-                  {step === "registering" && "Cadastrando..."}
-                  {step === "authenticating" && "Autenticando..."}
-                  {step === "loading_specialties" && "Carregando..."}
-                  {step === "creating_consultation" && "Criando consulta..."}
+                  Criando consulta...
                 </>
               ) : (
                 <>
@@ -658,8 +707,8 @@ const Teleconsultas = () => {
           </div>
         </div>
 
-        {/* Error alert */}
-        {step === "error" && error && (
+        {/* Error alert (outside modal, e.g. after modal is closed) */}
+        {step === "error" && error && !showSpecialtyModal && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Erro</AlertTitle>
@@ -678,51 +727,89 @@ const Teleconsultas = () => {
           </Alert>
         )}
 
-        {/* Specialty selection panel */}
-        {step === "selecting_specialty" && specialties.length > 0 && (
-          <Card className="mb-8 border-primary/20 bg-primary/5">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-lg">
-                  Escolha a Especialidade
-                </CardTitle>
+        {/* Specialty selection modal */}
+        <Dialog
+          open={showSpecialtyModal}
+          onOpenChange={(open) => {
+            if (!open) handleCloseSpecialtyModal();
+          }}
+        >
+          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Stethoscope className="h-5 w-5 text-primary" />
+                Nova Consulta
+              </DialogTitle>
+              <DialogDescription>
+                Selecione a especialidade para iniciar seu atendimento
+              </DialogDescription>
+            </DialogHeader>
+
+            {/* Loading state inside modal */}
+            {(step === "authenticating" ||
+              step === "registering" ||
+              step === "loading_specialties") && (
+              <div className="flex flex-col items-center justify-center py-10 gap-4">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">
+                  {step === "registering" && "Cadastrando paciente..."}
+                  {step === "authenticating" && "Autenticando..."}
+                  {step === "loading_specialties" && "Carregando especialidades..."}
+                </p>
+              </div>
+            )}
+
+            {/* Error inside modal */}
+            {step === "error" && error && (
+              <div className="space-y-4 py-2">
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertTitle>Erro</AlertTitle>
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
                 <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={resetFlow}
-                  className="h-8 w-8"
+                  variant="outline"
+                  className="w-full gap-2"
+                  onClick={async () => {
+                    if (profile) {
+                      const cpf = profile.cpf.replace(/\D/g, "");
+                      await startConsultationFlow(cpf, profile);
+                    }
+                  }}
                 >
-                  <X className="h-4 w-4" />
+                  <RefreshCw className="h-4 w-4" />
+                  Tentar novamente
                 </Button>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Selecione a especialidade para iniciar sua consulta
-              </p>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {specialties.map((specialty) => (
-                <SpecialtySelectionCard
-                  key={specialty.id}
-                  specialty={specialty}
-                  onSelect={createConsultation}
-                  isLoading={isFlowLoading}
-                />
-              ))}
-            </CardContent>
-          </Card>
-        )}
+            )}
 
-        {/* No specialties available */}
-        {step === "selecting_specialty" && specialties.length === 0 && (
-          <Alert className="mb-6">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Nenhuma especialidade disponível</AlertTitle>
-            <AlertDescription>
-              Não há especialidades disponíveis para criação de atendimento no
-              momento. Tente novamente mais tarde.
-            </AlertDescription>
-          </Alert>
-        )}
+            {/* Specialties list */}
+            {step === "selecting_specialty" && specialties.length > 0 && (
+              <div className="space-y-3 py-2">
+                {specialties.map((specialty) => (
+                  <SpecialtySelectionCard
+                    key={specialty.id}
+                    specialty={specialty}
+                    onSelect={handleSelectSpecialty}
+                    isLoading={isFlowLoading}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* No specialties */}
+            {step === "selecting_specialty" && specialties.length === 0 && (
+              <Alert className="my-2">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Nenhuma especialidade disponível</AlertTitle>
+                <AlertDescription>
+                  Não há especialidades disponíveis para criação de atendimento
+                  no momento. Tente novamente mais tarde.
+                </AlertDescription>
+              </Alert>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Consultations history */}
         <div>
@@ -745,15 +832,6 @@ const Teleconsultas = () => {
               </Button>
             )}
           </div>
-
-          {/* Authenticating / loading state */}
-          {(step === "authenticating" || step === "registering" || step === "loading_specialties") && !isLoadingConsultations && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-48 w-full rounded-xl" />
-              ))}
-            </div>
-          )}
 
           {/* Loading consultations */}
           {isLoadingConsultations && (
@@ -781,10 +859,7 @@ const Teleconsultas = () => {
           {/* Empty state after loading */}
           {!isLoadingConsultations &&
             accessToken &&
-            consultations.length === 0 &&
-            step !== "authenticating" &&
-            step !== "registering" &&
-            step !== "loading_specialties" && (
+            consultations.length === 0 && (
               <Card className="bg-card border-border/50">
                 <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
                   <Video className="h-10 w-10 text-muted-foreground" />

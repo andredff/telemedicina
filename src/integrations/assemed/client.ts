@@ -128,7 +128,23 @@ class AssemedClient {
       
       if (isJson) {
         const errorData = await response.json();
-        errorMessage = errorData.message || errorData.title || errorMessage;
+
+        // Extrai a mensagem mais específica possível:
+        // 1. errors[""] array (validation errors do .NET)
+        // 2. errors como objeto com arrays
+        // 3. message direto
+        // 4. title genérico
+        if (errorData.errors) {
+          const errorValues = Object.values(errorData.errors) as string[][];
+          const allMessages = errorValues.flat().filter(Boolean);
+          if (allMessages.length > 0) {
+            errorMessage = allMessages[0];
+          } else {
+            errorMessage = errorData.message || errorData.title || errorMessage;
+          }
+        } else {
+          errorMessage = errorData.message || errorData.title || errorMessage;
+        }
       } else {
         errorMessage = await response.text() || errorMessage;
       }
