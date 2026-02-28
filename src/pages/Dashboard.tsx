@@ -306,15 +306,15 @@ const Dashboard = () => {
 
           <Card
             className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
-            onClick={() => navigate("/teleconsultas")}
+            onClick={() => navigate("/especialistas")}
           >
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
                 <Calendar className="h-6 w-6 text-accent" />
               </div>
               <div>
-                <p className="font-medium text-foreground">Agendar</p>
-                <p className="text-xs text-muted-foreground">Especialistas</p>
+                <p className="font-medium text-foreground">Consulta com</p>
+                <p className="text-xs text-muted-foreground">Especialista</p>
               </div>
             </CardContent>
           </Card>
