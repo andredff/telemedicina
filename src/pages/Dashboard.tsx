@@ -19,8 +19,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { getRecentActivities, type Activity } from "@/services/activityService";
-import { TelemedicineFrame } from "@/components/telemedicine";
-import { useAssemedAuth } from "@/hooks/useAssemedAuth";
 import { useToast } from "@/hooks/use-toast";
 
 interface Medication {
@@ -64,7 +62,6 @@ interface UserSubscription {
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { authenticate, isAuthenticating } = useAssemedAuth();
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -72,8 +69,6 @@ const Dashboard = () => {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
-  const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [tipoConsulta, setTipoConsulta] = useState<"imediata" | "agendada">("imediata");
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -239,59 +234,6 @@ const Dashboard = () => {
     navigate("/auth");
   };
 
-  const handleStartConsultation = async (tipo: "imediata" | "agendada") => {
-    if (!subscription?.plan) {
-      toast({
-        title: "Plano necessário",
-        description: "Você precisa assinar um plano para ter acesso à telemedicina.",
-        variant: "destructive",
-      });
-      navigate("/planos");
-      return;
-    }
-
-    if (!profile?.cpf) {
-      toast({
-        title: "CPF necessário",
-        description: "É necessário ter CPF cadastrado no perfil para acessar a telemedicina.",
-        variant: "destructive",
-      });
-      navigate("/perfil");
-      return;
-    }
-
-    const cpf = profile.cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) {
-      toast({
-        title: "CPF inválido",
-        description: "O CPF cadastrado no perfil é inválido. Por favor, atualize seus dados.",
-        variant: "destructive",
-      });
-      navigate("/perfil");
-      return;
-    }
-
-    toast({
-      title: "Autenticando...",
-      description: tipo === "imediata"
-        ? "Preparando consulta imediata..."
-        : "Preparando agendamento de consulta...",
-    });
-
-    try {
-      const token = await authenticate(cpf, profile);
-      setAccessToken(token);
-      setTipoConsulta(tipo);
-    } catch (error: unknown) {
-      logger.error("Erro ao acessar telemedicina:", error);
-      toast({
-        title: "Erro ao acessar telemedicina",
-        description: error instanceof Error ? error.message : "Não foi possível acessar a telemedicina. Tente novamente.",
-        variant: "destructive",
-      });
-    }
-  };
-
   const getStatusBadge = (status: string) => {
     const variants = {
       pending: "default",
@@ -311,21 +253,6 @@ const Dashboard = () => {
       </Badge>
     );
   };
-
-  // Renderiza o iframe white-label se houver token
-  if (accessToken) {
-    return (
-      <TelemedicineFrame
-        accessToken={accessToken}
-        tipoConsulta={tipoConsulta}
-        onClose={() => {
-          setAccessToken(null);
-          setTipoConsulta("imediata");
-        }}
-        title="Telemedicina Novità Home Care"
-      />
-    );
-  }
 
   if (loading) {
     return (
@@ -364,15 +291,11 @@ const Dashboard = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           <Card
             className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
-            onClick={() => handleStartConsultation("imediata")}
+            onClick={() => navigate("/teleconsultas")}
           >
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                {isAuthenticating ? (
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                ) : (
-                  <Video className="h-6 w-6 text-primary" />
-                )}
+                <Video className="h-6 w-6 text-primary" />
               </div>
               <div>
                 <p className="font-medium text-foreground">Consulta Imediata</p>
@@ -383,7 +306,7 @@ const Dashboard = () => {
 
           <Card
             className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
-            onClick={() => handleStartConsultation("agendada")}
+            onClick={() => navigate("/teleconsultas")}
           >
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">

@@ -135,10 +135,33 @@ export interface Consultation {
   profissionalNome: string | null;
   status: ConsultationStatus;
   situacao?: ConsultationStatus; // Alias para compatibilidade com API
+  situacaoAtendimentoDescricao?: string; // Descrição textual do status vinda da API
   dataHoraCriacao: string;
   dataHoraInicio: string | null;
   dataHoraFim: string | null;
   pacienteToken: string;
+}
+
+/**
+ * Normaliza status da consulta para enum ConsultationStatus
+ * A API pode retornar em diferentes formatos
+ */
+export function normalizeConsultationStatus(consultation: Consultation): ConsultationStatus {
+  // Primeiro tenta campos diretos
+  if (consultation.status) return consultation.status;
+  if (consultation.situacao) return consultation.situacao;
+  
+  // Normaliza descrição textual para enum
+  const desc = consultation.situacaoAtendimentoDescricao?.toLowerCase();
+  if (desc) {
+    if (desc.includes('cancelad')) return 'CANCELADO';
+    if (desc.includes('conclu') || desc.includes('finaliz')) return 'CONCLUIDO';
+    // Verificar "aguard" ANTES de "atendimento" pois "Aguardando atendimento" contém ambos
+    if (desc.includes('aguard') || desc.includes('espera')) return 'AGUARDANDO';
+    if (desc.includes('em atendimento') || desc.includes('andamento')) return 'EM_ATENDIMENTO';
+  }
+  
+  return 'AGUARDANDO';
 }
 
 export interface GetConsultationsRequest {

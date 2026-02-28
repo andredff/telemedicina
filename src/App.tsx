@@ -24,6 +24,7 @@ import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
 import CheckoutMedication from "./pages/CheckoutMedication";
 import Telemedicine from "./pages/Telemedicine";
+import Teleconsultas from "./pages/Teleconsultas";
 import Farmacia from "./pages/Farmacia";
 import Sobre from "./pages/Sobre";
 import NotFound from "./pages/NotFound";
@@ -82,6 +83,7 @@ const App = () => (
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="/telemedicina" element={<Telemedicine />} />
+          <Route path="/teleconsultas" element={<Teleconsultas />} />
           <Route path="/farmacia" element={<Farmacia />} />
           <Route path="/termos" element={<Terms />} />
           <Route path="/privacidade" element={<Privacy />} />

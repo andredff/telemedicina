@@ -47,3 +47,6 @@ export type {
   // Erros
   AssemedError,
 } from "./types";
+
+// Funções utilitárias
+export { normalizeConsultationStatus } from "./types";
