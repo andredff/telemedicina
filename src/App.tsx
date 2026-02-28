@@ -14,6 +14,7 @@ import Auth from "./pages/Auth";
 import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import ProfileSettings from "./pages/ProfileSettings";
+import MyPlan from "./pages/MyPlan";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Prescriptions from "./pages/Prescriptions";
 import Orders from "./pages/Orders";
@@ -23,6 +24,7 @@ import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
 import CheckoutMedication from "./pages/CheckoutMedication";
 import Telemedicine from "./pages/Telemedicine";
+import Farmacia from "./pages/Farmacia";
 import Sobre from "./pages/Sobre";
 import NotFound from "./pages/NotFound";
 import AdminLayout from "./pages/admin/AdminLayout";
@@ -70,6 +72,7 @@ const App = () => (
           <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/perfil" element={<ProfileSettings />} />
+          <Route path="/meu-plano" element={<MyPlan />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/order/:id" element={<OrderDetail />} />
@@ -79,6 +82,7 @@ const App = () => (
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="/telemedicina" element={<Telemedicine />} />
+          <Route path="/farmacia" element={<Farmacia />} />
           <Route path="/termos" element={<Terms />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/cancelamento" element={<Cancellation />} />

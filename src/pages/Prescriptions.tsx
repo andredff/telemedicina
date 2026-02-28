@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -124,9 +125,10 @@ const Prescriptions = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header isAuthenticated title="Receituários" />
       
-      <main className="container mx-auto px-4 py-8 mt-20">
+      <main className="container mx-auto px-4 py-8">
+        <BackLink />
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold text-foreground mb-2">

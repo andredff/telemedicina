@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -208,7 +209,8 @@ const OrderDetail = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
-        <main className="container mx-auto px-4 py-8 mt-20">
+        <main className="container mx-auto px-4 py-8">
+          <BackLink />
           <Card className="max-w-2xl mx-auto">
             <CardContent className="py-12 text-center">
               <Package className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
@@ -230,13 +232,10 @@ const OrderDetail = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-8 mt-20">
+      <main className="container mx-auto px-4 py-8">
+        <BackLink />
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
-          <Button variant="ghost" size="sm" onClick={() => navigate("/orders")}>
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
-          </Button>
           <div className="flex-1">
             <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
               Pedido #{order.id.slice(-8).toUpperCase()}

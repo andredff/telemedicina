@@ -33,7 +33,7 @@ export interface FinancialMetrics {
     bronze: number;
     prata: number;
     ouro: number;
-    platina: number;
+    diamante: number;
     coletivo: number;
   };
 
@@ -55,18 +55,16 @@ const PLAN_PRICES: Record<string, number> = {
   bronze: 79.90,
   prata: 149.90,
   ouro: 249.90,
-  platina: 449.90,
   diamante: 449.90,
   coletivo: 39.90, // por pessoa
 };
 
-type NormalizedPlanKey = "bronze" | "prata" | "ouro" | "platina" | "coletivo";
+type NormalizedPlanKey = "bronze" | "prata" | "ouro" | "diamante" | "coletivo";
 
 const normalizePlanType = (type: string | null | undefined): NormalizedPlanKey | null => {
   if (!type) return null;
   if (type.includes("coletivo")) return "coletivo";
-  if (type === "diamante") return "platina";
-  if (type === "platina") return "platina";
+  if (type === "diamante" || type === "platina") return "diamante";
   if (type === "bronze" || type === "prata" || type === "ouro") return type;
   return null;
 };
@@ -146,7 +144,7 @@ async function fetchSubscriptionData(): Promise<{
     bronze: number;
     prata: number;
     ouro: number;
-    platina: number;
+    diamante: number;
     coletivo: number;
   };
   activeRevenue: number;
@@ -191,7 +189,7 @@ async function fetchSubscriptionData(): Promise<{
       bronze: 0,
       prata: 0,
       ouro: 0,
-      platina: 0,
+      diamante: 0,
       coletivo: 0,
     };
 
@@ -414,14 +412,14 @@ function getMockSubscriptionData() {
       bronze: 120,
       prata: 156,
       ouro: 89,
-      platina: 42,
+      diamante: 42,
       coletivo: 16,
     },
     activeRevenue: calculateMRR({
       bronze: 120,
       prata: 156,
       ouro: 89,
-      platina: 42,
+      diamante: 42,
       coletivo: 16,
     }),
   };
@@ -463,7 +461,7 @@ function getEmptyMetrics(): FinancialMetrics {
       bronze: 0,
       prata: 0,
       ouro: 0,
-      platina: 0,
+      diamante: 0,
       coletivo: 0,
     },
     mrrGrowth: 0,

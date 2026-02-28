@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import Header from "@/components/Header";
 import {
   FileText,
   Calendar,
@@ -11,10 +12,6 @@ import {
   Video,
   Pill,
   Clock,
-  Heart,
-  LogOut,
-  ShoppingCart,
-  Settings,
   Package,
   Crown
 } from "lucide-react";
@@ -352,32 +349,7 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <div className="gradient-hero rounded-xl p-2">
-              <Heart className="h-5 w-5 text-primary-foreground" fill="currentColor" />
-            </div>
-            <div>
-              <h1 className="text-lg font-heading font-bold text-foreground">Novità</h1>
-              <p className="text-xs text-primary -mt-0.5">Home Care & Telemedicina</p>
-            </div>
-          </div>
-
-          <nav className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/cart")}>
-              <ShoppingCart className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => navigate("/perfil")}>
-              <Settings className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <Header isAuthenticated onLogout={handleLogout} />
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
@@ -424,13 +396,13 @@ const Dashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/medicamentos")}>
+          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/farmacia")}>
             <CardContent className="p-4 flex flex-col items-center text-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-medical-green/10 flex items-center justify-center group-hover:bg-medical-green/20 transition-colors">
                 <Pill className="h-6 w-6 text-medical-green" />
               </div>
               <div>
-                <p className="font-medium text-foreground">Medicamentos</p>
+                <p className="font-medium text-foreground">Farmácia</p>
                 <p className="text-xs text-muted-foreground">Entrega em casa</p>
               </div>
             </CardContent>
@@ -464,7 +436,7 @@ const Dashboard = () => {
                   <Button
                     variant="secondary"
                     className="bg-card text-foreground hover:bg-card/90"
-                    onClick={() => navigate("/planos")}
+                    onClick={() => navigate("/meu-plano")}
                   >
                     Fazer upgrade
                   </Button>

@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import {
-  ArrowLeft,
   User,
   Mail,
   Phone,
@@ -16,7 +17,6 @@ import {
   Heart,
   Loader2,
   Shield,
-  Settings,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -257,27 +257,13 @@ const ProfileSettings = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/dashboard")}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar ao Dashboard
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <Settings className="h-5 w-5 text-primary" />
-            <span className="font-heading font-semibold">Configurações</span>
-          </div>
-        </div>
-      </header>
+      <Header 
+        isAuthenticated 
+        title="Configurações"
+      />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
+        <BackLink />
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">

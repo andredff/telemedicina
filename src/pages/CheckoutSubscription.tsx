@@ -1,7 +1,9 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { ArrowLeft, Crown } from "lucide-react";
+import { Crown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { SubscriptionCheckout } from "@/components/checkout";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -274,27 +276,13 @@ const CheckoutSubscription = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => navigate("/planos")}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar aos planos
-          </Button>
-
-          <div className="flex items-center gap-2">
-            <Crown className="h-5 w-5 text-primary" />
-            <span className="font-heading font-semibold">Checkout Seguro</span>
-          </div>
-        </div>
-      </header>
+      <Header 
+        isAuthenticated 
+        title="Assinar Plano"
+      />
 
       <main className="container mx-auto px-4 py-8">
+        <BackLink />
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">

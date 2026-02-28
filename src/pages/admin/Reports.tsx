@@ -74,7 +74,7 @@ export default function AdminReports() {
     { name: 'Bronze', value: financialMetrics.planDistribution.bronze },
     { name: 'Prata', value: financialMetrics.planDistribution.prata },
     { name: 'Ouro', value: financialMetrics.planDistribution.ouro },
-    { name: 'Platina', value: financialMetrics.planDistribution.platina },
+    { name: 'Diamante', value: financialMetrics.planDistribution.diamante },
     { name: 'Coletivo', value: financialMetrics.planDistribution.coletivo },
   ].filter(p => p.value > 0) : [];
 

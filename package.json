@@ -10,7 +10,12 @@
     "cielo:server": "node server/cielo-server.js",
     "cielo:api:test": "dotenv_config_path=.env node -r dotenv/config scripts/cielo-api-test.mjs",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "supabase:setup": "bash scripts/setup-supabase-local.sh"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

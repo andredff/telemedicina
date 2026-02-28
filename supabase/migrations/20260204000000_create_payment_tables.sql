@@ -5,7 +5,7 @@
 -- Stores all payment attempts for auditing
 CREATE TABLE IF NOT EXISTS payment_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id UUID NOT NULL,
+  order_id TEXT NOT NULL,
   payment_type TEXT NOT NULL CHECK (payment_type IN ('credit_card', 'recurrent', 'pix', 'boleto')),
   payment_id TEXT,
   amount BIGINT NOT NULL,
@@ -26,7 +26,7 @@ CREATE INDEX IF NOT EXISTS idx_payment_logs_created_at ON payment_logs(created_a
 -- Stores webhook notifications from Cielo
 CREATE TABLE IF NOT EXISTS cielo_webhooks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  order_id UUID,
+  order_id TEXT,
   payment_id TEXT NOT NULL,
   recurrent_payment_id TEXT,
   old_status TEXT,
@@ -74,7 +74,7 @@ ON saved_cards(user_id, card_token) WHERE card_token IS NOT NULL;
 CREATE TABLE IF NOT EXISTS subscriptions (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  order_id UUID REFERENCES orders(id) ON DELETE SET NULL,
+  order_id TEXT REFERENCES orders(id) ON DELETE SET NULL,
   plan_id UUID,
   recurrent_payment_id TEXT NOT NULL,
   payment_id TEXT,
@@ -105,20 +105,25 @@ END;
 $$ language 'plpgsql';
 
 -- Triggers for updated_at
-DO $$
-DECLARE
-  table_names TEXT[] := ARRAY['payment_logs', 'cielo_webhooks', 'saved_cards', 'subscriptions'];
-BEGIN
-  FOREACH table_names SLICE 1 IN ARRAY table_names LOOP
-    EXECUTE format('
-      CREATE TRIGGER update_%I_updated_at
-      BEFORE UPDATE ON %I
-      FOR EACH ROW
-      EXECUTE FUNCTION update_updated_at_column()
-    ', table_names, table_names);
-  END LOOP;
-END;
-$$;
+CREATE TRIGGER update_payment_logs_updated_at
+  BEFORE UPDATE ON payment_logs
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_cielo_webhooks_updated_at
+  BEFORE UPDATE ON cielo_webhooks
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_saved_cards_updated_at
+  BEFORE UPDATE ON saved_cards
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_subscriptions_updated_at
+  BEFORE UPDATE ON subscriptions
+  FOR EACH ROW
+  EXECUTE FUNCTION update_updated_at_column();
 
 -- Row Level Security (RLS) Policies
 
@@ -162,7 +167,7 @@ CREATE POLICY "Users can update their own subscriptions" ON subscriptions
 
 -- Function to update order payment status
 CREATE OR REPLACE FUNCTION update_order_payment_status(
-  p_order_id UUID,
+  p_order_id TEXT,
   p_payment_id TEXT,
   p_status TEXT
 )

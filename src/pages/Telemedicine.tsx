@@ -1,11 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  ArrowLeft,
-  Heart,
-  LogOut,
-  Settings,
-  ShoppingCart,
   AlertCircle,
   CheckCircle,
   Video,
@@ -15,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { useToast } from "@/hooks/use-toast";
 import { TelemedicineFrame, AccessBlockedModal } from "@/components/telemedicine";
 import { useSubscriptionStatus, useCanAccessTelemedicine } from "@/hooks/use-telemedicine";
@@ -202,44 +199,14 @@ const Telemedicine = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 w-full bg-card/95 backdrop-blur-md border-b border-border/50 shadow-soft">
-        <div className="container mx-auto flex h-16 items-center justify-between px-4">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => navigate("/dashboard")}
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </Button>
-            <div className="flex items-center gap-3">
-              <div className="gradient-hero rounded-xl p-2">
-                <Heart className="h-5 w-5 text-primary-foreground" fill="currentColor" />
-              </div>
-              <div>
-                <h1 className="text-lg font-heading font-bold text-foreground">Telemedicina</h1>
-                <p className="text-xs text-primary -mt-0.5">Novità Home Care</p>
-              </div>
-            </div>
-          </div>
-
-          <nav className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" onClick={() => navigate("/cart")}>
-              <ShoppingCart className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="icon">
-              <Settings className="h-5 w-5" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Sair</span>
-            </Button>
-          </nav>
-        </div>
-      </header>
+      <Header 
+        isAuthenticated 
+        onLogout={handleLogout}
+        title="Telemedicina"
+      />
 
       <main className="container mx-auto px-4 py-8">
+        <BackLink />
         {/* Status da assinatura */}
         {isCheckingAccess ? (
           <Skeleton className="h-20 w-full mb-6" />

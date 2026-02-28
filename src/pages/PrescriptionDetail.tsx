@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, FileText, User, Calendar, AlertCircle, ArrowLeft } from "lucide-react";
@@ -61,15 +62,18 @@ const PrescriptionDetail = () => {
     return (
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
-        <div className="container mx-auto px-4 py-8 text-center">
-          <p className="text-muted-foreground">
-            {prescriptionError ? `Erro: ${prescriptionError}` : 
-             !prescription ? "Receituário não encontrado" :
-             "Receituário sem medicamentos"}
-          </p>
-          <Button onClick={() => navigate("/dashboard")} className="mt-4">
-            Voltar ao dashboard
-          </Button>
+        <div className="container mx-auto px-4 py-8">
+          <BackLink />
+          <div className="text-center">
+            <p className="text-muted-foreground">
+              {prescriptionError ? `Erro: ${prescriptionError}` : 
+               !prescription ? "Receituário não encontrado" :
+               "Receituário sem medicamentos"}
+            </p>
+            <Button onClick={() => navigate("/dashboard")} className="mt-4">
+              Voltar ao dashboard
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -141,15 +145,7 @@ const PrescriptionDetail = () => {
       <Header isAuthenticated onLogout={handleLogout} />
       
       <main className="container mx-auto px-4 py-8">
-        <Button
-          variant="ghost"
-          onClick={() => navigate("/dashboard")}
-          className="mb-6 gap-2"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar aos receituários
-        </Button>
-
+        <BackLink />
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-6">
             <Card className="border-border/50">

@@ -1,11 +1,58 @@
 import { useState, useEffect } from "react";
-import { MapPin, Edit2, Check, Search, Loader2, ArrowRight } from "lucide-react";
+import { MapPin, Edit2, Check, Search, Loader2, ArrowRight, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { searchCep, isValidCepFormat } from "@/integrations/correios";
+
+// Cidades do entorno de Brasília que são atendidas (GO)
+const ENTORNO_BRASILIA_CITIES = [
+  "valparaíso de goiás",
+  "valparaiso de goias",
+  "novo gama",
+  "cidade ocidental",
+  "luziânia",
+  "luziania",
+  "águas lindas de goiás",
+  "aguas lindas de goias",
+  "águas lindas",
+  "aguas lindas",
+  "planaltina",
+  "formosa",
+  "santo antônio do descoberto",
+  "santo antonio do descoberto",
+  "cristalina",
+  "alexânia",
+  "alexania",
+  "padre bernardo",
+  "cocalzinho de goiás",
+  "cocalzinho de goias",
+  "pirenópolis",
+  "pirenopolis",
+];
+
+// Verifica se o endereço está em área atendida (Brasília/DF ou entorno)
+function isServicedArea(state: string, city: string): boolean {
+  const normalizedState = state.toLowerCase().trim();
+  const normalizedCity = city.toLowerCase().trim();
+  
+  // DF é sempre atendido
+  if (normalizedState === "df") {
+    return true;
+  }
+  
+  // GO - apenas cidades do entorno
+  if (normalizedState === "go") {
+    return ENTORNO_BRASILIA_CITIES.some(
+      entornoCity => normalizedCity.includes(entornoCity) || entornoCity.includes(normalizedCity)
+    );
+  }
+  
+  return false;
+}
 
 interface DeliveryAddressFormProps {
   onAddressConfirm: (address: DeliveryAddress) => void;
@@ -30,6 +77,7 @@ export function DeliveryAddressForm({
   const [isLoading, setIsLoading] = useState(false);
   const [isSearchingCep, setIsSearchingCep] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
+  const [regionError, setRegionError] = useState<boolean>(false);
   const [address, setAddress] = useState<DeliveryAddress>({
     street: "",
     number: "",
@@ -44,6 +92,14 @@ export function DeliveryAddressForm({
   useEffect(() => {
     loadProfileAddress();
   }, []);
+
+  // Validate region when city or state changes
+  useEffect(() => {
+    if (address.city && address.state) {
+      const isServiced = isServicedArea(address.state, address.city);
+      setRegionError(!isServiced);
+    }
+  }, [address.city, address.state]);
 
   const loadProfileAddress = async () => {
     try {
@@ -69,9 +125,15 @@ export function DeliveryAddressForm({
         setAddress(loadedAddress);
         setOriginalAddress(loadedAddress);
         
-        // Auto-confirm address if it has all required fields
-        if (loadedAddress.street && loadedAddress.city && loadedAddress.state && loadedAddress.zipCode) {
-          onAddressConfirm(loadedAddress);
+        // Check if region is serviced
+        if (loadedAddress.state && loadedAddress.city) {
+          const isServiced = isServicedArea(loadedAddress.state, loadedAddress.city);
+          setRegionError(!isServiced);
+          
+          // Auto-confirm address if it has all required fields AND is in serviced area
+          if (isServiced && loadedAddress.street && loadedAddress.zipCode) {
+            onAddressConfirm(loadedAddress);
+          }
         }
       }
     } catch (error) {
@@ -84,6 +146,10 @@ export function DeliveryAddressForm({
     // Clear CEP error when user starts typing
     if (field === "zipCode") {
       setCepError(null);
+    }
+    // Clear region error when city or state changes
+    if (field === "city" || field === "state") {
+      setRegionError(false);
     }
   };
 
@@ -107,6 +173,13 @@ export function DeliveryAddressForm({
           city: result.city,
           state: result.state,
         }));
+        
+        // Check if region is serviced
+        if (!isServicedArea(result.state, result.city)) {
+          setRegionError(true);
+        } else {
+          setRegionError(false);
+        }
       } else {
         setCepError("CEP não encontrado. Por favor, preencha o endereço manualmente.");
       }
@@ -119,6 +192,12 @@ export function DeliveryAddressForm({
   };
 
   const handleSave = async () => {
+    // Check region before saving
+    if (!isServicedArea(address.state, address.city)) {
+      setRegionError(true);
+      return;
+    }
+    
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -183,10 +262,23 @@ export function DeliveryAddressForm({
               <p className="text-muted-foreground">
                 {address.city} - {address.state}, {address.zipCode}
               </p>
+              
+              {regionError && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Região não atendida</AlertTitle>
+                  <AlertDescription>
+                    No momento, atendemos apenas Brasília (DF) e região do entorno. 
+                    Em breve estaremos em outras localidades!
+                  </AlertDescription>
+                </Alert>
+              )}
+              
               <div className="flex gap-3 mt-4 pt-2">
                 <Button
                   onClick={() => onAddressConfirm(address)}
                   className="flex-1 gap-2"
+                  disabled={regionError}
                 >
                   Continuar para Pagamento
                   <ArrowRight className="h-4 w-4" />
@@ -267,6 +359,16 @@ export function DeliveryAddressForm({
             {cepError && (
               <p className="text-sm text-red-500 mt-1">{cepError}</p>
             )}
+            {regionError && (
+              <Alert variant="destructive" className="mt-2">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Região não atendida</AlertTitle>
+                <AlertDescription>
+                  No momento, atendemos apenas Brasília (DF) e região do entorno. 
+                  Em breve estaremos em outras localidades!
+                </AlertDescription>
+              </Alert>
+            )}
             <p className="text-xs text-muted-foreground mt-1">
               Digite o CEP e clique em buscar para preencher o endereço automaticamente
             </p>
@@ -337,7 +439,7 @@ export function DeliveryAddressForm({
         <div className="flex gap-3 pt-2">
           <Button
             onClick={handleSave}
-            disabled={isLoading || !hasAddress}
+            disabled={isLoading || !hasAddress || regionError}
             className="flex-1 gap-2"
           >
             <Check className="h-4 w-4" />

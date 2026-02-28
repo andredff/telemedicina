@@ -132,7 +132,7 @@ export default function AdminSettings() {
                       <SelectItem value="bronze">Bronze</SelectItem>
                       <SelectItem value="prata">Prata</SelectItem>
                       <SelectItem value="ouro">Ouro</SelectItem>
-                      <SelectItem value="platina">Platina</SelectItem>
+                      <SelectItem value="diamante">Diamante</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

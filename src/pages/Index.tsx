@@ -66,7 +66,7 @@ function getIcon(iconName: string): LucideIcon {
 
 // Ícone do plano baseado no tipo
 const getPlanIcon = (planType: string): LucideIcon => {
-  if (planType.includes('platina')) return Gem;
+  if (planType.includes('diamante')) return Gem;
   if (planType.includes('ouro')) return Crown;
   if (planType.includes('prata')) return Star;
   if (planType.includes('bronze')) return Shield;
