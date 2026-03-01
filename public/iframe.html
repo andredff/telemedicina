@@ -1,400 +1,73 @@
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Teleconsulta Novità</title>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    html, body {
-      width: 100%;
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(180deg, #f0f7ee 0%, #ffffff 100%);
-    }
-    
-    .container {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    /* removed top header to avoid duplicate header in embedded view */
-    
-    .content {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-    
-    .waiting-room {
-      text-align: center;
-      max-width: 480px;
-    }
-    
-    .waiting-icon {
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 20px;
-      background: linear-gradient(135deg, #EDAF00 0%, #CC9B00 100%);
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      animation: pulse 2s ease-in-out infinite;
-    }
-    
-    @keyframes pulse {
-      0%, 100% { transform: scale(1); opacity: 1; }
-      50% { transform: scale(1.05); opacity: 0.8; }
-    }
-    
-    .waiting-icon svg {
-      width: 40px;
-      height: 40px;
-      fill: white;
-    }
-    
-    .waiting-title {
-      font-size: 24px;
-      font-weight: 700;
-      color: #1a1a1a;
-      margin-bottom: 12px;
-    }
-    
-    .waiting-description {
-      font-size: 16px;
-      color: #666;
-      margin-bottom: 32px;
-      line-height: 1.6;
-    }
-    
-    .waiting-status {
-      background: white;
-      border-radius: 16px;
-      padding: 24px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-      border: 1px solid #e5e7eb;
-    }
-    
-    .status-row {
-      display: grid;
-      grid-template-columns: 24px 1fr auto;
-      gap: 12px;
-      align-items: center;
-      padding: 12px 0;
-      border-bottom: 1px solid #f0f0f0;
-    }
-    
-    .status-row:last-child {
-      border-bottom: none;
-    }
-    
-    .status-dot {
-      width: 10px;
-      height: 10px;
-      border-radius: 50%;
-      background: #EDAF00;
-      animation: blink 1.5s ease-in-out infinite;
-    }
-    
-    @keyframes blink {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-    
-    .status-text {
-      font-size: 14px;
-      color: #6b7280;
-      text-align: left;
-    }
-    
-    .status-value {
-      font-size: 14px;
-      font-weight: 600;
-      color: #A67705;
-      text-align: right;
-    }
-    
-    .info-cards {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 16px;
-      margin-top: 24px;
-    }
-    
-    .info-card {
-      background: white;
-      border-radius: 12px;
-      padding: 16px;
-      text-align: left;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-      border: 1px solid #e5e7eb;
-    }
-    
-    .info-card-icon {
-      width: 32px;
-      height: 32px;
-      background: #fff4dd;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin-bottom: 8px;
-    }
-    
-    .info-card-icon svg {
-      width: 18px;
-      height: 18px;
-      fill: #A67705;
-    }
-    
-    .info-card-title {
-      font-size: 13px;
-      font-weight: 600;
-      color: #374151;
-      margin-bottom: 4px;
-    }
-    
-    .info-card-desc {
-      font-size: 12px;
-      color: #6b7280;
-    }
-    
-    .enter-button {
-      margin-top: 24px;
-      width: 100%;
-      padding: 16px 24px;
-      background: linear-gradient(135deg, #EDAF00 0%, #CC9B00 100%);
-      color: white;
-      border: none;
-      border-radius: 12px;
-      font-size: 16px;
-      font-weight: 600;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      transition: transform 0.2s, box-shadow 0.2s;
-    }
-    
-    .enter-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(237, 175, 0, 0.22);
-    }
-    
-    .enter-button:active {
-      transform: translateY(0);
-    }
-    
-    .enter-button svg {
-      width: 20px;
-      height: 20px;
-    }
-    
-    .enter-button.hidden {
-      display: none;
-    }
+<iframe id="iframe" height="800px" width="100%" title="Telemedicina" style="border: 0px"
+	allow="camera; microphone; clipboard-write;"></iframe>
 
-    .hidden {
-      display: none;
-    }
-    
-    /* Responsive */
-    @media (max-width: 640px) {
-      .header {
-        padding: 12px 16px;
-      }
-      
-      .header-title {
-        font-size: 16px;
-      }
-      
-      .waiting-title {
-        font-size: 20px;
-      }
-      
-      .waiting-description {
-        font-size: 14px;
-      }
-      
-      .info-cards {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="content" id="waitingRoom">
-      <div class="waiting-room">
-        <div class="waiting-icon">
-          <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
-          </svg>
-        </div>
-        
-        <h1 class="waiting-title">Sala de Espera</h1>
-        
-        <div class="waiting-status">
-          <div class="status-row">
-            <span class="status-dot"></span>
-            <span class="status-text">Status</span>
-            <span class="status-value" id="statusText">Na sala de espera</span>
-          </div>
-          <div class="status-row">
-            <span></span>
-            <span class="status-text">Especialidade</span>
-            <span class="status-value" id="specialtyText">Clínico Geral</span>
-          </div>
-          <div class="status-row">
-            <span></span>
-            <span class="status-text">ID Atendimento</span>
-            <span class="status-value" id="attendanceId">-</span>
-          </div>
-        </div>
-        
-        <button id="enterButton" class="enter-button hidden" onclick="enterConsultation()">
-          <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-            <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
-          </svg>
-          Entrar na Videochamada
-        </button>
-        
-        <div class="info-cards">
-          <div class="info-card">
-            <div class="info-card-icon">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-              </svg>
-            </div>
-            <div class="info-card-title">Câmera e Microfone</div>
-            <div class="info-card-desc">Mantenha ligados durante a consulta</div>
-          </div>
-          
-          <div class="info-card">
-            <div class="info-card-icon">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
-              </svg>
-            </div>
-            <div class="info-card-title">Ambiente Silencioso</div>
-            <div class="info-card-desc">Escolha um local tranquilo</div>
-          </div>
-          
-          <div class="info-card">
-            <div class="info-card-icon">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm0 14H4V6h16v12z"/>
-              </svg>
-            </div>
-            <div class="info-card-title">Conexão Estável</div>
-            <div class="info-card-desc">Use Wi-Fi ou 4G/5G</div>
-          </div>
-          
-          <div class="info-card">
-            <div class="info-card-icon">
-              <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14h-2v-4H6v-2h4V7h2v4h4v2h-4v4z"/>
-              </svg>
-            </div>
-            <div class="info-card-title">Documentos</div>
-            <div class="info-card-desc">Tenha exames em mãos</div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-  </div>
+<script>
+	//v1.2
+	const iFrame = document.getElementById("iframe");
+	const appBaseUrl = "https://dev-app-assemed.azurewebsites.net";
+	const plataforma = "novita";
+	const exibirLogo = false;
 
-  <!-- Iframe para a consulta real quando conectado -->
-  <iframe id="consultationFrame" style="display:none;width:100%;height:100%;border:none;position:fixed;inset:0;z-index:10;" allow="camera; microphone; fullscreen; display-capture"></iframe>
-  
-  <script>
-    // Recebe parâmetros da URL
-    const params = new URLSearchParams(window.location.search);
-    const atendimentoId = params.get('atendimentoId');
-    const token = params.get('token');
-    const tipo = params.get('tipo') || 'imediata';
-    const especialidade = params.get('especialidade') || 'Clínico Geral';
-    const isSandbox = params.get('sandbox') === 'true';
-    
-    // Atualiza UI com informações
-    const consultationTypeEl = document.getElementById('consultationType');
-    if (consultationTypeEl) consultationTypeEl.textContent = especialidade;
-    const specialtyEl = document.getElementById('specialtyText');
-    if (specialtyEl) specialtyEl.textContent = especialidade;
-    
-    if (atendimentoId) {
-      const attendanceEl = document.getElementById('attendanceId');
-      if (attendanceEl) attendanceEl.textContent = '#' + atendimentoId;
-    }
-    
-    // URL base da sala Assemed
-    const baseUrl = isSandbox
-      ? 'https://dev-app-assemed.azurewebsites.net'
-      : 'https://app.assemedtelemedicina.com';
-    
-    // URL da consulta para uso posterior
-    let consultationUrl = null;
-    
-    // Se tiver atendimentoId e token, prepara a URL e mostra botão
-    if (atendimentoId && token) {
-      consultationUrl = `${baseUrl}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`;
-      const enterBtnInit = document.getElementById('enterButton');
-      if (enterBtnInit) enterBtnInit.classList.remove('hidden');
-    }
-    
-    // Função para entrar na videochamada
-    function enterConsultation() {
-      if (consultationUrl) {
-        const waitingRoom = document.getElementById('waitingRoom');
-        const consultationFrame = document.getElementById('consultationFrame');
-        consultationFrame.src = consultationUrl;
-        consultationFrame.style.display = 'block';
-        waitingRoom.style.display = 'none';
-      }
-    }
-    
-    // Comunicação com o parent window
-    window.addEventListener('message', function(event) {
-      if (event.data.type === 'CONSULTATION_STATUS') {
-        document.getElementById('statusText').textContent = event.data.status || 'Aguardando';
-      }
-      
-      if (event.data.type === 'START_CONSULTATION') {
-        const { atendimentoId, token, especialidade } = event.data;
-        consultationUrl = `${baseUrl}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`;
-        
-          const attendanceEl2 = document.getElementById('attendanceId');
-          if (attendanceEl2) attendanceEl2.textContent = '#' + atendimentoId;
-          const specialtyEl2 = document.getElementById('specialtyText');
-          if (specialtyEl2) specialtyEl2.textContent = especialidade || 'Clínico Geral';
-          const enterBtn = document.getElementById('enterButton');
-          if (enterBtn) enterBtn.classList.remove('hidden');
-      }
-      
-      // Quando o profissional entrar, entrar automaticamente
-      if (event.data.type === 'PROFESSIONAL_JOINED') {
-        enterConsultation();
-      }
-      
-      if (event.data.type === 'CLOSE_CONSULTATION') {
-        window.parent.postMessage({ type: 'CONSULTATION_CLOSED' }, '*');
-      }
-    });
-    
-    // Notifica parent que iframe está pronto
-    window.parent.postMessage({ type: 'IFRAME_READY' }, '*');
-  </script>
-</body>
-</html>
+	function setIframeSource(customPath, customParams = "") {
+		let queryParams = `showLogo=${exibirLogo}&plataforma=${plataforma}`;
+
+		if (customParams)
+			queryParams += (`&${customParams}`);
+
+		iFrame.setAttribute("src", `${appBaseUrl}${customPath}?${queryParams}`);
+	}
+
+	// Recupera os parâmetros para alteração de link do iFrame, se houverem
+	const urlParams = new URLSearchParams(window.location.search);
+	const sala = urlParams.get('sala');
+	const rs = urlParams.get('rs');
+	const pa = urlParams.get('pa');
+	const menu = urlParams.get('menu');
+	const redirectUrl = urlParams.get('redirectUrl');
+	const ad = urlParams.get('ad');
+	const ag = urlParams.get('ag');
+	const vendedor = urlParams.get('vendedor');
+
+	if (redirectUrl != null) // Redireciona para o link fornecido
+		setIframeSource(`/${redirectUrl}`);
+	else if (sala != null) // Redireciona para o link da consulta
+		setIframeSource(`/sala-espera-externa/${sala}`);
+	else if (rs != null) // Redireciona para o link da recuperação de senha
+		setIframeSource(`/authentication/recuperar-senha/${rs}`);
+	else if (pa != null) // Redireciona para o link de ativacao de conta 
+		setIframeSource(`/authentication/bem-vindo/${pa}`);
+	else if (menu === "atendimento") // Redireciona para o a página do parâmetro
+		setIframeSource(`/atendimentos`);
+	else if (menu === "assinaturas") // Redireciona para o a página do parâmetro
+		setIframeSource(`/assinaturas`);
+	else if (menu === "cancelamento-conta") // Redireciona para a página de exclusão de dados
+		setIframeSource(`/editar-perfil/excluir-conta`);
+	else if (ad != null) // Redireciona para o link de detalhe do atendimento 
+		setIframeSource(`/atendimentos/detalhe/${ad}`);
+	else if (ag != null) // Redireciona para o link de detalhe do agendamento 
+		setIframeSource(`/agendamentos`, `ag=${ag}`);
+	else if (vendedor != null) // Redireciona para o link de cadastro do vendedor 
+		setIframeSource(`/authentication/desejo-me-cadastrar`, `idVendedor=${vendedor}`);
+	else { // Redireciona para o último link acessado ou para o link padrão do iFrame
+		const lastIframePath = sessionStorage.getItem("lastIframePath");
+		if (lastIframePath) {
+			setIframeSource(lastIframePath, "");
+		} else {
+			setIframeSource("/authentication/login");
+		}
+	}
+
+	window.addEventListener("message", (event) => {
+		if (event.data?.type === "iframe-url-change" && event.data.href) {
+			const fullUrl = `${event.data.href}`;
+			sessionStorage.setItem("lastIframePath", fullUrl);
+		}
+	});
+	window.addEventListener('message', (event) => {
+		if (event.origin !== appBaseUrl) return;
+
+		if (event.data?.type === 'redirect' && event.data.url) {
+			window.location.href = event.data.url;
+		}
+	});
+</script>

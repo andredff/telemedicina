@@ -308,15 +308,18 @@ function ConsultationIframe({
   onClose: () => void;
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [showIframe, setShowIframe] = useState(false);
+  const [localToken, setLocalToken] = useState<string | null>(pacienteToken || null);
   const isSandbox = getIsSandbox();
 
-  const safeToken = pacienteToken || "";
-  const iframePageUrl = `/iframe.html?atendimentoId=${atendimentoId}&token=${encodeURIComponent(
-    safeToken
-  )}&especialidade=${encodeURIComponent(especialidade)}&sandbox=${isSandbox}&tipo=imediata`;
-
-  const consultationUrl = buildConsultationUrl(atendimentoId, safeToken);
+  // Build url to the iframe wrapper. When we have a token we will load Assemed's sala URL directly.
+  const iframeWrapperBase = `/iframe.html?sala=${atendimentoId}&sandbox=${isSandbox}&especialidade=${encodeURIComponent(
+    especialidade
+  )}`;
+  const iframeWrapperUrl = localToken ? `${iframeWrapperBase}&token=${encodeURIComponent(localToken)}` : iframeWrapperBase;
+  const assemedSalaUrl = localToken ? buildConsultationUrl(atendimentoId, localToken) : null;
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -331,23 +334,68 @@ function ConsultationIframe({
     return () => window.removeEventListener("message", handler);
   }, [onClose]);
 
+  // If parent gave a pacienteToken, open iframe immediately
+  useEffect(() => {
+    if (pacienteToken) {
+      setLocalToken(pacienteToken);
+      setShowIframe(true);
+      setIsLoading(true);
+    }
+  }, [pacienteToken]);
+
+  // When iframe is shown and we have a token, notify the iframe to start the consultation
+  useEffect(() => {
+    if (!showIframe) return;
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    const payload = {
+      type: "START_CONSULTATION",
+      atendimentoId,
+      token: localToken,
+      especialidade,
+    };
+    try {
+      win.postMessage(payload, "*");
+    } catch (e) {
+      // ignore
+    }
+  }, [showIframe, localToken, atendimentoId, especialidade]);
+
+  const handleEnterClick = async () => {
+    setIsLoading(true);
+    // Fetch fresh consultation token only when user explicitly clicks
+    if (!localToken) {
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        const fresh = await assemedClient.getConsultation(atendimentoId);
+        if (fresh?.pacienteToken) setLocalToken(fresh.pacienteToken);
+      } catch (err) {
+        toast({
+          title: "Erro ao preparar consulta",
+          description: "Não foi possível obter detalhes da consulta. Tente novamente.",
+          variant: "destructive",
+        });
+        setIsLoading(false);
+        return;
+      }
+    }
+    setShowIframe(true);
+    setIsLoading(false);
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-background flex flex-col">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-card border-b border-border/50 shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
             <Video className="h-4 w-4 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-sm text-foreground">
-              Teleconsulta Novità
-            </p>
+            <p className="font-semibold text-sm text-foreground">Teleconsulta Novità</p>
             <p className="text-xs text-muted-foreground">{especialidade}</p>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* link to open in new tab removed per UI change */}
           <Button
             variant="ghost"
             size="icon"
@@ -360,24 +408,44 @@ function ConsultationIframe({
         </div>
       </div>
 
-      {/* Iframe */}
       <div className="flex-1 relative overflow-hidden">
-        {isLoading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10 gap-4">
-            <Loader2 className="h-10 w-10 animate-spin text-primary" />
-            <p className="text-muted-foreground text-sm">
-              Carregando sala de espera...
-            </p>
+        {!showIframe ? (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="max-w-xl w-full p-6 bg-card border border-border/50 rounded-lg shadow-card text-center">
+              <div className="flex flex-col items-center gap-4">
+                <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                  <Video className="h-8 w-8 text-primary" />
+                </div>
+                <h2 className="text-lg font-semibold">Sala de Espera</h2>
+                <p className="text-sm text-muted-foreground">Especialidade: {especialidade}</p>
+                <p className="text-sm text-muted-foreground">ID: #{atendimentoId}</p>
+                <div className="w-full mt-4">
+                  <Button size="lg" className="w-full" onClick={handleEnterClick}>
+                    <Video className="h-4 w-4 mr-2" /> Entrar na Videochamada
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3">A videochamada abrirá em uma área dentro do aplicativo.</p>
+              </div>
+            </div>
           </div>
+        ) : (
+          <>
+            {isLoading && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-background z-10 gap-4">
+                <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                <p className="text-muted-foreground text-sm">Carregando sala de espera...</p>
+              </div>
+            )}
+            <iframe
+              ref={iframeRef}
+              src={assemedSalaUrl ?? iframeWrapperUrl}
+              title="Teleconsulta Novità"
+              className="w-full h-full border-0"
+              allow="camera; microphone; fullscreen; display-capture"
+              onLoad={() => setIsLoading(false)}
+            />
+          </>
         )}
-        <iframe
-          ref={iframeRef}
-          src={iframePageUrl}
-          title="Teleconsulta Novità"
-          className="w-full h-full border-0"
-          allow="camera; microphone; fullscreen; display-capture"
-          onLoad={() => setIsLoading(false)}
-        />
       </div>
     </div>
   );
@@ -608,20 +676,10 @@ const Teleconsultas = () => {
   // ── Join existing consultation ────────────────────────────────────────────
 
   const handleJoinConsultation = async (consultation: Consultation) => {
-    // Se o token estiver ausente, busca detalhes atualizados da consulta
-    if (!consultation.pacienteToken) {
-      try {
-        const { assemedClient } = await import("@/integrations/assemed/client");
-        const fresh = await assemedClient.getConsultation(consultation.id);
-        if (fresh && fresh.pacienteToken) {
-          setJoiningConsultation(fresh);
-          return;
-        }
-      } catch {
-        // fallback: usa a consulta original mesmo sem token
-      }
-    }
-    setJoiningConsultation(consultation);
+    // Navigate to in-app waiting room; actual token fetch and iframe load happen there
+    navigate(`/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(
+      consultation.especialidadeNome || "Consulta"
+    )}`);
   };
 
   // ── Cancel consultation ───────────────────────────────────────────────────
@@ -645,18 +703,17 @@ const Teleconsultas = () => {
     }
   }, [closeConsultation, loadConsultations, accessToken]);
 
-  // ── Render: new consultation - show iframe inline ────────────────────────────
-
-  if (activeConsultation && activeConsultation.pacienteToken) {
-    return (
-      <ConsultationIframe
-        atendimentoId={activeConsultation.id}
-        pacienteToken={activeConsultation.pacienteToken}
-        especialidade={selectedSpecialtyName}
-        onClose={handleCloseIframe}
-      />
-    );
-  }
+  // When a new consultation is created, navigate to the in-app waiting room
+  // so the user continues the flow there (token fetch / iframe enter happens on that page).
+  useEffect(() => {
+    if (activeConsultation && activeConsultation.id) {
+      navigate(
+        `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(
+          selectedSpecialtyName
+        )}`
+      );
+    }
+  }, [activeConsultation, navigate, selectedSpecialtyName]);
 
   // ── Render: full-screen iframe for joining existing consultation ───────────
 
