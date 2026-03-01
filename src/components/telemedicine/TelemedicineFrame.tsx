@@ -75,15 +75,6 @@ export function TelemedicineFrame({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href={iframeUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm text-muted-foreground hover:text-primary flex items-center gap-1"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Abrir em nova aba
-          </a>
           {onClose && (
             <Button variant="ghost" size="icon" onClick={onClose} className="h-8 w-8">
               <X className="h-4 w-4" />

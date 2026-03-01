@@ -347,15 +347,7 @@ function ConsultationIframe({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href={consultationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Abrir em nova aba</span>
-          </a>
+          {/* link to open in new tab removed per UI change */}
           <Button
             variant="ghost"
             size="icon"
@@ -758,17 +750,20 @@ const Teleconsultas = () => {
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Erro</AlertTitle>
-            <AlertDescription className="flex items-center justify-between gap-4">
+              <AlertDescription className="flex items-center justify-between gap-4">
               <span>{error}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetFlow}
-                className="gap-2 shrink-0"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Tentar novamente
-              </Button>
+              {error !==
+                "Você já possui uma consulta em andamento. Aguarde o atendimento ser concluído ou cancele-o antes de iniciar uma nova consulta." && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={resetFlow}
+                  className="gap-2 shrink-0"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  Tentar novamente
+                </Button>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -813,19 +808,22 @@ const Teleconsultas = () => {
                   <AlertTitle>Erro</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={async () => {
-                    if (profile) {
-                      const cpf = profile.cpf.replace(/\D/g, "");
-                      await startConsultationFlow(cpf, profile);
-                    }
-                  }}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Tentar novamente
-                </Button>
+                {error !==
+                  "Você já possui uma consulta em andamento. Aguarde o atendimento ser concluído ou cancele-o antes de iniciar uma nova consulta." && (
+                  <Button
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={async () => {
+                      if (profile) {
+                        const cpf = profile.cpf.replace(/\D/g, "");
+                        await startConsultationFlow(cpf, profile);
+                      }
+                    }}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                    Tentar novamente
+                  </Button>
+                )}
               </div>
             )}
 

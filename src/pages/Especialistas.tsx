@@ -354,15 +354,7 @@ function ConsultationIframe({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href={consultationUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-muted-foreground hover:text-primary flex items-center gap-1 transition-colors"
-          >
-            <ExternalLink className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Abrir em nova aba</span>
-          </a>
+          {/* link to open in new tab removed per UI change */}
           <Button
             variant="ghost"
             size="icon"

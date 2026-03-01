@@ -25,50 +25,7 @@
       flex-direction: column;
     }
     
-    .header {
-      background: linear-gradient(135deg, #2B5A3F 0%, #3D7A56 100%);
-      color: white;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-    }
-    
-    .header-logo {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-    }
-    
-    .logo-icon {
-      width: 32px;
-      height: 32px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    
-    .logo-icon svg {
-      width: 20px;
-      height: 20px;
-      fill: white;
-    }
-    
-    .header-title {
-      font-size: 18px;
-      font-weight: 600;
-    }
-    
-    .header-badge {
-      background: rgba(255, 255, 255, 0.2);
-      padding: 4px 12px;
-      border-radius: 99px;
-      font-size: 12px;
-      font-weight: 500;
-    }
+    /* removed top header to avoid duplicate header in embedded view */
     
     .content {
       flex: 1;
@@ -87,7 +44,7 @@
       width: 80px;
       height: 80px;
       margin: 0 auto 20px;
-      background: linear-gradient(135deg, #2B5A3F 0%, #3D7A56 100%);
+      background: linear-gradient(135deg, #EDAF00 0%, #CC9B00 100%);
       border-radius: 50%;
       display: flex;
       align-items: center;
@@ -145,7 +102,7 @@
       width: 10px;
       height: 10px;
       border-radius: 50%;
-      background: #10b981;
+      background: #EDAF00;
       animation: blink 1.5s ease-in-out infinite;
     }
     
@@ -163,7 +120,7 @@
     .status-value {
       font-size: 14px;
       font-weight: 600;
-      color: #2B5A3F;
+      color: #A67705;
       text-align: right;
     }
     
@@ -186,7 +143,7 @@
     .info-card-icon {
       width: 32px;
       height: 32px;
-      background: #f0f7ee;
+      background: #fff4dd;
       border-radius: 8px;
       display: flex;
       align-items: center;
@@ -197,7 +154,7 @@
     .info-card-icon svg {
       width: 18px;
       height: 18px;
-      fill: #2B5A3F;
+      fill: #A67705;
     }
     
     .info-card-title {
@@ -216,7 +173,7 @@
       margin-top: 24px;
       width: 100%;
       padding: 16px 24px;
-      background: linear-gradient(135deg, #2B5A3F 0%, #3D7A56 100%);
+      background: linear-gradient(135deg, #EDAF00 0%, #CC9B00 100%);
       color: white;
       border: none;
       border-radius: 12px;
@@ -232,7 +189,7 @@
     
     .enter-button:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(43, 90, 63, 0.4);
+      box-shadow: 0 8px 24px rgba(237, 175, 0, 0.22);
     }
     
     .enter-button:active {
@@ -278,18 +235,6 @@
 </head>
 <body>
   <div class="container">
-    <header class="header">
-      <div class="header-logo">
-        <div class="logo-icon">
-          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" fill="currentColor"/>
-          </svg>
-        </div>
-        <span class="header-title">Novità Telemedicina</span>
-      </div>
-      <span class="header-badge" id="consultationType">Consulta Imediata</span>
-    </header>
-    
     <div class="content" id="waitingRoom">
       <div class="waiting-room">
         <div class="waiting-icon">
@@ -384,11 +329,14 @@
     const isSandbox = params.get('sandbox') === 'true';
     
     // Atualiza UI com informações
-    document.getElementById('consultationType').textContent = especialidade;
-    document.getElementById('specialtyText').textContent = especialidade;
+    const consultationTypeEl = document.getElementById('consultationType');
+    if (consultationTypeEl) consultationTypeEl.textContent = especialidade;
+    const specialtyEl = document.getElementById('specialtyText');
+    if (specialtyEl) specialtyEl.textContent = especialidade;
     
     if (atendimentoId) {
-      document.getElementById('attendanceId').textContent = '#' + atendimentoId;
+      const attendanceEl = document.getElementById('attendanceId');
+      if (attendanceEl) attendanceEl.textContent = '#' + atendimentoId;
     }
     
     // URL base da sala Assemed
@@ -402,7 +350,8 @@
     // Se tiver atendimentoId e token, prepara a URL e mostra botão
     if (atendimentoId && token) {
       consultationUrl = `${baseUrl}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`;
-      document.getElementById('enterButton').classList.remove('hidden');
+      const enterBtnInit = document.getElementById('enterButton');
+      if (enterBtnInit) enterBtnInit.classList.remove('hidden');
     }
     
     // Função para entrar na videochamada
@@ -426,9 +375,12 @@
         const { atendimentoId, token, especialidade } = event.data;
         consultationUrl = `${baseUrl}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`;
         
-        document.getElementById('attendanceId').textContent = '#' + atendimentoId;
-        document.getElementById('specialtyText').textContent = especialidade || 'Clínico Geral';
-        document.getElementById('enterButton').classList.remove('hidden');
+          const attendanceEl2 = document.getElementById('attendanceId');
+          if (attendanceEl2) attendanceEl2.textContent = '#' + atendimentoId;
+          const specialtyEl2 = document.getElementById('specialtyText');
+          if (specialtyEl2) specialtyEl2.textContent = especialidade || 'Clínico Geral';
+          const enterBtn = document.getElementById('enterButton');
+          if (enterBtn) enterBtn.classList.remove('hidden');
       }
       
       // Quando o profissional entrar, entrar automaticamente
