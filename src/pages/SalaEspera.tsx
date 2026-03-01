@@ -139,7 +139,7 @@ export default function SalaEspera() {
       />
 
       <div className="mx-auto max-w-4xl px-4 py-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate(-1)}>
+        <Button variant="ghost" size="sm" onClick={() => navigate('/teleconsultas')}>
           <ChevronLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>
