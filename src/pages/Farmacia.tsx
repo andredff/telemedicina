@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -43,6 +45,7 @@ const Farmacia = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
+  const { accessToken: assemedAccessToken } = useAssemedToken();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -372,6 +375,7 @@ const Farmacia = () => {
           </CardContent>
         </Card>
       </main>
+      <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>
   );
 };

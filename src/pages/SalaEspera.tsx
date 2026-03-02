@@ -30,6 +30,41 @@ export default function SalaEspera() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Polling para verificar se o atendimento foi finalizado
+  useEffect(() => {
+    if (!iframeSrc || !atendimentoId) return;
+
+    const checkConsultationStatus = async () => {
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        const status = await assemedClient.getConsultationStatus(atendimentoId);
+        
+        if (status.situacao === "CONCLUIDO") {
+          // Fecha o iframe e mostra mensagem
+          setIframeSrc(null);
+          setShowEnter(false);
+          toast({
+            title: "Consulta Finalizada",
+            description: "Sua teleconsulta foi concluída. Obrigado por usar nossos serviços!",
+          });
+          // Navega de volta para teleconsultas após 3 segundos
+          setTimeout(() => {
+            navigate('/teleconsultas');
+          }, 3000);
+        }
+      } catch (err) {
+        // Silently fail - não interrompe a consulta se houver erro no polling
+        console.error('[SalaEspera] Erro ao verificar status da consulta:', err);
+      }
+    };
+
+    // Verifica imediatamente e depois a cada 10 segundos
+    checkConsultationStatus();
+    const interval = setInterval(checkConsultationStatus, 10000);
+
+    return () => clearInterval(interval);
+  }, [iframeSrc, atendimentoId, toast, navigate]);
+
   const handleEnter = async () => {
     if (!atendimentoId) return;
     setIsLoading(true);

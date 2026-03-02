@@ -2,6 +2,8 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,6 +27,7 @@ import { Calendar } from "@/components/ui/calendar";
 const Prescriptions = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { accessToken: assemedAccessToken } = useAssemedToken();
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
@@ -450,6 +453,7 @@ const Prescriptions = () => {
           )}
         </div>
       </main>
+      <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>
   );
 };

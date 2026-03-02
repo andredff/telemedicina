@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Header from "@/components/Header";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, ShoppingBag, Plus, Minus } from "lucide-react";
@@ -17,6 +19,7 @@ const Cart = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const { accessToken: assemedAccessToken } = useAssemedToken();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -237,6 +240,7 @@ const Cart = () => {
           </div>
         )}
       </main>
+      <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>
   );
 };

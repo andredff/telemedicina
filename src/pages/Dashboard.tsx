@@ -4,6 +4,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText,
   Calendar,
@@ -69,6 +71,7 @@ const Dashboard = () => {
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
   const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+  const { accessToken: assemedAccessToken } = useAssemedToken();
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -499,6 +502,9 @@ const Dashboard = () => {
           </Card>
         </div>
       </main>
+
+      {/* Floating consultation banner */}
+      <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>
   );
 };

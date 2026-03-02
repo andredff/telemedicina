@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   Crown,
   Star,
@@ -468,6 +470,7 @@ const MyPlan = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      <ActiveConsultationBanner accessToken={useAssemedToken().accessToken} />
     </div>
   );
 };
