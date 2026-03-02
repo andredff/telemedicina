@@ -551,6 +551,7 @@ export type Database = {
           complement: string | null
           created_at: string
           email: string
+          emailTelemedicina: string | null
           full_name: string
           id: string
           neighborhood: string | null
@@ -566,6 +567,7 @@ export type Database = {
           complement?: string | null
           created_at?: string
           email: string
+          emailTelemedicina?: string | null
           full_name: string
           id: string
           neighborhood?: string | null
@@ -581,6 +583,7 @@ export type Database = {
           complement?: string | null
           created_at?: string
           email?: string
+          emailTelemedicina?: string | null
           full_name?: string
           id?: string
           neighborhood?: string | null

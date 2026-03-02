@@ -417,12 +417,19 @@ function buildRegisterData(
     telefone = "00000000000";
   }
 
+  // Gera alias de email para telemedicina
+  let username = "";
+  if (profile.email) {
+    username = profile.email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
+  }
+  const aliasEmail = `paciente+${username}@novitatelemedicina.com.br`;
+
   return {
     nome: profile.full_name.substring(0, 250),
     cpf,
     dataNascimento,
     sexo: gender,
     telefone: telefone.substring(0, 20),
-    email: profile.email.substring(0, 100),
+    email: aliasEmail.substring(0, 100),
   };
 }
