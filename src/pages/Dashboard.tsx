@@ -13,14 +13,13 @@ import {
   ChevronRight,
   Video,
   Pill,
-  Clock,
   Package,
   Crown
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
-import { getRecentActivities, type Activity } from "@/services/activityService";
+
 import { useToast } from "@/hooks/use-toast";
 
 interface Medication {
@@ -70,7 +69,7 @@ const Dashboard = () => {
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
-  const [recentActivities, setRecentActivities] = useState<Activity[]>([]);
+
   const { accessToken: assemedAccessToken } = useAssemedToken();
 
   const fetchProfile = async (userId: string) => {
@@ -188,14 +187,7 @@ const Dashboard = () => {
     }
   };
 
-  const fetchRecentActivities = async (userId: string) => {
-    try {
-      const activities = await getRecentActivities(userId, 10);
-      setRecentActivities(activities);
-    } catch (error) {
-      logger.error("Error fetching activities:", error);
-    }
-  };
+
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -209,7 +201,6 @@ const Dashboard = () => {
           fetchProfile(session.user.id);
           fetchPrescriptions(session.user.id);
           fetchSubscription(session.user.id);
-          fetchRecentActivities(session.user.id);
         }
       }
     );
@@ -224,7 +215,6 @@ const Dashboard = () => {
         fetchProfile(session.user.id);
         fetchPrescriptions(session.user.id);
         fetchSubscription(session.user.id);
-        fetchRecentActivities(session.user.id);
       }
       setLoading(false);
     });
@@ -469,38 +459,6 @@ const Dashboard = () => {
           </div>
         </div>
 
-        <div>
-          <h2 className="text-xl font-heading font-semibold text-foreground mb-4">
-            Atividade Recente
-          </h2>
-          <Card className="bg-card border-border/50">
-            <CardContent className="p-0 divide-y divide-border/50">
-              {recentActivities.length > 0 ? (
-                recentActivities.map((activity, index) => (
-                  <div key={activity.id || index} className="flex items-center gap-4 p-4">
-                    <div className="w-10 h-10 rounded-xl bg-muted flex items-center justify-center">
-                      {activity.icon === "Video" && <Video className="h-5 w-5 text-muted-foreground" />}
-                      {activity.icon === "FileText" && <FileText className="h-5 w-5 text-muted-foreground" />}
-                      {activity.icon === "Pill" && <Pill className="h-5 w-5 text-muted-foreground" />}
-                    </div>
-                    <div className="flex-1">
-                      <p className="font-medium text-foreground">{activity.title}</p>
-                      <p className="text-sm text-muted-foreground">{activity.description}</p>
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3.5 w-3.5" />
-                      {activity.time}
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="flex items-center justify-center p-8 text-muted-foreground">
-                  <p>Nenhuma atividade recente</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
       </main>
 
       {/* Floating consultation banner */}

@@ -86,6 +86,7 @@ const MyPlan = () => {
   const [selectedPlan, setSelectedPlan] = useState<PlanData | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [planAction, setPlanAction] = useState<'upgrade' | 'downgrade' | 'subscribe'>('subscribe');
+  const { accessToken } = useAssemedToken();
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -470,7 +471,7 @@ const MyPlan = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <ActiveConsultationBanner accessToken={useAssemedToken().accessToken} />
+      <ActiveConsultationBanner accessToken={accessToken} />
     </div>
   );
 };

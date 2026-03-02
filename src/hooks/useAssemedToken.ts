@@ -17,7 +17,7 @@ interface ProfileData {
  */
 export function useAssemedToken() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const authenticate = useCallback(async (profile: ProfileData) => {
     if (!profile?.cpf || !profile?.email) return;
@@ -62,6 +62,7 @@ export function useAssemedToken() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         console.log("[useAssemedToken] Sem usuário autenticado");
+        setIsLoading(false);
         return;
       }
 
@@ -97,8 +98,13 @@ export function useAssemedToken() {
 
         console.log("[useAssemedToken] Perfil carregado, CPF:", cpf ? `${cpf.substring(0, 3)}***` : "vazio");
         await authenticate(profile);
+        // Se authenticate não setou token (CPF vazio/inválido), garante isLoading = false
+        if (!cpf || cpf.replace(/\D/g, "").length !== 11) {
+          setIsLoading(false);
+        }
       } catch (error) {
         logger.error("[useAssemedToken] Erro ao buscar perfil:", error);
+        setIsLoading(false);
       }
     };
 

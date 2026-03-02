@@ -191,6 +191,11 @@ export interface Prescription {
   dataCriacao: string;
 }
 
+/** Item retornado por GET /api/Atendimentos/v2/{id}/receituario */
+export interface ReceituarioItem {
+  urlPdf: string;
+}
+
 export interface GetPrescriptionsResponse {
   items: Prescription[];
 }

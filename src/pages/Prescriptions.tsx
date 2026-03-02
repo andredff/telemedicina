@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Search, User, FileText, ChevronRight, Loader2, Filter, X, ChevronLeft, ChevronRight as ChevronRightIcon } from "lucide-react";
+import { Search, User, FileText, ChevronRight, Loader2, Filter, X, ChevronLeft, ChevronRight as ChevronRightIcon, Download, ExternalLink, Video } from "lucide-react";
 import { usePrescriptionSearch } from "@/hooks/use-prescription-search";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -22,17 +22,121 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar as CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { Calendar } from "@/components/ui/calendar";
+import { normalizeConsultationStatus } from "@/integrations/assemed/types";
+
+// Receituário vindo da API Assemed
+interface AssemedReceituario {
+  consultationId: number;
+  especialidade: string;
+  profissional: string | null;
+  data: string;
+  status: string;
+  urlPdf: string;
+}
 
 const Prescriptions = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { accessToken: assemedAccessToken } = useAssemedToken();
+  const { accessToken: assemedAccessToken, isLoading: assemedLoading } = useAssemedToken();
   const [searchTerm, setSearchTerm] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string[]>([]);
   const [dateFrom, setDateFrom] = useState<Date | undefined>(undefined);
   const [dateTo, setDateTo] = useState<Date | undefined>(undefined);
+
+  // Receituários vindos da API Assemed
+  const [assemedReceituarios, setAssemedReceituarios] = useState<AssemedReceituario[]>([]);
+  const [loadingReceituarios, setLoadingReceituarios] = useState(true);
+
+  // Carrega receituários de todas as consultas Assemed
+  useEffect(() => {
+    // Aguarda o hook terminar de autenticar antes de tomar decisão
+    if (assemedLoading) {
+      console.log("[Prescriptions] Aguardando autenticação Assemed...");
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadReceituarios = async () => {
+      setLoadingReceituarios(true);
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+
+        // Usa o token do hook se disponível, senão tenta o token já existente no client
+        if (assemedAccessToken) {
+          assemedClient.setAccessToken(assemedAccessToken);
+        }
+
+        const currentToken = assemedClient.getAccessToken();
+        if (!currentToken) {
+          console.log("[Prescriptions] Sem token Assemed — paciente pode não estar cadastrado no Assemed");
+          setLoadingReceituarios(false);
+          return;
+        }
+
+        // 1. Buscar todas as consultas via /obter
+        console.log("[Prescriptions] Buscando consultas...");
+        const response = await assemedClient.getConsultations(50, 0);
+        const consultations = response.items || [];
+
+        console.log("[Prescriptions] Consultas carregadas:", consultations.length,
+          consultations.map(c => ({
+            id: c.id,
+            status: normalizeConsultationStatus(c),
+          }))
+        );
+
+        if (cancelled) return;
+
+        // 2. Para cada consulta, buscar receituários (pula canceladas)
+        const receituarios: AssemedReceituario[] = [];
+
+        for (const consultation of consultations) {
+          const status = normalizeConsultationStatus(consultation);
+          if (status === "CANCELADO") continue;
+
+          try {
+            const items = await assemedClient.getReceituarios(consultation.id);
+            
+            if (items && items.length > 0) {
+              console.log(`[Prescriptions] Consulta #${consultation.id}: ${items.length} receituário(s)`);
+            }
+
+            for (const item of items) {
+              if (item.urlPdf) {
+                receituarios.push({
+                  consultationId: consultation.id,
+                  especialidade: consultation.especialidadeNome || "Consulta",
+                  profissional: consultation.profissionalNome || null,
+                  data: consultation.dataHoraFim || consultation.dataHoraCriacao,
+                  status: normalizeConsultationStatus(consultation),
+                  urlPdf: item.urlPdf,
+                });
+              }
+            }
+          } catch (err) {
+            // Silently skip — consulta pode não ter receituários
+          }
+        }
+
+        if (cancelled) return;
+
+        console.log("[Prescriptions] Total de receituários encontrados:", receituarios.length);
+        setAssemedReceituarios(receituarios);
+      } catch (err) {
+        console.error("[Prescriptions] Erro ao carregar receituários Assemed:", err);
+      } finally {
+        setLoadingReceituarios(false);
+      }
+    };
+
+    loadReceituarios();
+
+    return () => { cancelled = true; };
+  }, [assemedAccessToken, assemedLoading]);
 
   // Memoize search params to prevent recreating the object on every render
   const searchParams = useMemo(() => ({
@@ -319,6 +423,83 @@ const Prescriptions = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Receituários Assemed (da Teleconsulta) */}
+        {(assemedReceituarios.length > 0 || loadingReceituarios) && (
+          <div className="mb-8">
+            <div className="flex items-center gap-2 mb-4">
+              <Video className="h-5 w-5 text-primary" />
+              <h2 className="text-xl font-heading font-semibold text-foreground">
+                Receituários da Teleconsulta
+              </h2>
+            </div>
+
+            {loadingReceituarios ? (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <Loader2 className="mx-auto h-8 w-8 text-primary animate-spin mb-3" />
+                  <p className="text-sm text-muted-foreground">Buscando receituários das consultas...</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {assemedReceituarios.map((rec, index) => (
+                  <Card key={`assemed-rec-${rec.consultationId}-${index}`} className="bg-card border-border/50 hover:shadow-card transition-all">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-primary shrink-0" />
+                          <CardTitle className="text-base">
+                            Consulta #{rec.consultationId}
+                          </CardTitle>
+                        </div>
+                        <Badge className="bg-green-100 text-green-700 border-green-200 shrink-0">
+                          Concluída
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <p className="text-muted-foreground text-xs">Especialidade</p>
+                          <p className="font-medium">{rec.especialidade}</p>
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs">Profissional</p>
+                          <p className="font-medium">{rec.profissional || "—"}</p>
+                        </div>
+                        <div className="col-span-2">
+                          <p className="text-muted-foreground text-xs">Data</p>
+                          <p className="font-medium">
+                            {(() => {
+                              try {
+                                return format(new Date(rec.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+                              } catch {
+                                return rec.data;
+                              }
+                            })()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="pt-2 border-t border-border/50">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full gap-2"
+                          onClick={() => window.open(rec.urlPdf, "_blank")}
+                        >
+                          <Download className="h-4 w-4" />
+                          Baixar Receituário
+                          <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Prescriptions List */}
         <div className="space-y-4">

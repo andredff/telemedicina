@@ -435,17 +435,39 @@ class AssemedClient {
 
   /**
    * Obtém receituários/documentos de uma consulta
+   * GET /api/Atendimentos/v2/{id}/receituario
+   * Retorna array de {urlPdf: string}
+   */
+  async getReceituarios(consultationId: number): Promise<{urlPdf: string}[]> {
+    if (this.useMock) {
+      const mock = await assemedMockClient.getPrescriptions(consultationId);
+      return mock.items.map(i => ({ urlPdf: i.url }));
+    }
+
+    return this.request<{urlPdf: string}[]>(
+      `/api/Atendimentos/v2/${consultationId}/receituario`,
+      { method: "GET" },
+      true
+    );
+  }
+
+  /**
+   * @deprecated Use getReceituarios. Mantido para compatibilidade.
    */
   async getPrescriptions(consultationId: number): Promise<GetPrescriptionsResponse> {
     if (this.useMock) {
       return assemedMockClient.getPrescriptions(consultationId);
     }
 
-    return this.request<GetPrescriptionsResponse>(
-      `/api/Atendimentos/v2/${consultationId}/receituario`,
-      { method: "GET" },
-      true
-    );
+    const items = await this.getReceituarios(consultationId);
+    return {
+      items: items.map((item, idx) => ({
+        id: consultationId * 100 + idx,
+        tipo: "RECEITA" as const,
+        url: item.urlPdf,
+        dataCriacao: new Date().toISOString(),
+      })),
+    };
   }
 }
 

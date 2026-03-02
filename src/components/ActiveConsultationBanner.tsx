@@ -18,7 +18,7 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
   const hasLoaded = useRef(false);
 
   const loadActiveConsultation = useCallback(async () => {
-    if (!accessToken || isDismissed) return;
+    if (!accessToken) return;
 
     try {
       const { assemedClient } = await import("@/integrations/assemed/client");
@@ -27,13 +27,7 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       const response = await assemedClient.getConsultations(10, 0);
       const consultations = response.items || [];
       
-      console.log("[ActiveConsultationBanner] Consultas carregadas:", consultations.length, consultations.map(c => ({
-        id: c.id,
-        status: c.status,
-        situacao: c.situacao,
-        desc: c.situacaoAtendimentoDescricao,
-        normalized: normalizeConsultationStatus(c)
-      })));
+      console.log("[ActiveConsultationBanner] Consultas carregadas:", consultations.length);
 
       // Encontra a primeira consulta ativa usando normalizeConsultationStatus
       const active = consultations.find((c) => {
@@ -48,16 +42,13 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       console.error("[ActiveConsultationBanner] Erro ao buscar consultas:", err);
       setActiveConsultation(null);
     }
-  }, [accessToken, isDismissed]);
+  }, [accessToken]);
 
   useEffect(() => {
-    loadActiveConsultation();
-    
-    // Recarrega a cada 15 segundos
-    const interval = setInterval(loadActiveConsultation, 15000);
-    
-    return () => clearInterval(interval);
-  }, [loadActiveConsultation]);
+    if (!isDismissed) {
+      loadActiveConsultation();
+    }
+  }, [loadActiveConsultation, isDismissed]);
 
   const handleEnter = () => {
     if (activeConsultation) {

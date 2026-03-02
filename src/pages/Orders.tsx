@@ -30,6 +30,7 @@ interface Order {
   user_id: string;
 }
 
+
 const Orders = () => {
   const navigate = useNavigate();
   const [selectedTab, setSelectedTab] = useState("all");
@@ -37,6 +38,7 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
+  const { accessToken } = useAssemedToken();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -356,7 +358,7 @@ const Orders = () => {
           )}
         </div>
       </main>
-      <ActiveConsultationBanner accessToken={useAssemedToken().accessToken} />
+      <ActiveConsultationBanner accessToken={accessToken} />
     </div>
   );
 };

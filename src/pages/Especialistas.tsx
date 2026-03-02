@@ -425,7 +425,13 @@ const Especialistas = () => {
   // Filter consultations to exclude "Clínico Geral" (only show specialist consultations)
   const specialistConsultations = consultations.filter((c) => {
     const nome = (c.especialidadeNome || "").toLowerCase();
-    return !nome.includes("cl") || !nome.includes("geral");
+    return !(nome.includes("clínico") || nome.includes("clinico")) || !nome.includes("geral");
+  });
+
+  // Filter specialties dropdown: exclude Clínico Geral
+  const filteredSpecialties = specialties.filter((s) => {
+    const nome = s.nome.toLowerCase();
+    return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
   });
 
   const fetchProfile = useCallback(async (userId: string) => {
@@ -707,7 +713,7 @@ const Especialistas = () => {
                 Consulta com Especialista
               </h1>
               <p className="text-muted-foreground mt-1">
-                Agende consultas com médicos especialistas
+                Atendimento com médicos especialistas
               </p>
             </div>
             <Button
@@ -735,19 +741,8 @@ const Especialistas = () => {
         {step === "error" && error && !showSpecialtyModal && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Erro</AlertTitle>
-            <AlertDescription className="flex items-center justify-between gap-4">
-              <span>{error}</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={resetFlow}
-                className="gap-2 shrink-0"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Tentar novamente
-              </Button>
-            </AlertDescription>
+            <AlertTitle>Não foi possível continuar</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
@@ -788,27 +783,14 @@ const Especialistas = () => {
               <div className="space-y-4 py-2">
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Erro</AlertTitle>
+                  <AlertTitle>Não foi possível continuar</AlertTitle>
                   <AlertDescription>{error}</AlertDescription>
                 </Alert>
-                <Button
-                  variant="outline"
-                  className="w-full gap-2"
-                  onClick={async () => {
-                    if (profile) {
-                      const cpf = profile.cpf.replace(/\D/g, "");
-                      await startConsultationFlow(cpf, profile);
-                    }
-                  }}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Tentar novamente
-                </Button>
               </div>
             )}
 
             {/* Specialties dropdown */}
-            {step === "selecting_specialty" && specialties.length > 0 && (
+            {step === "selecting_specialty" && filteredSpecialties.length > 0 && (
               <div className="space-y-4 py-2">
                 <div className="space-y-2">
                   <label className="text-sm font-medium text-foreground">
@@ -817,7 +799,7 @@ const Especialistas = () => {
                   <Select
                     value={selectedSpecialty?.id.toString() || ""}
                     onValueChange={(value) => {
-                      const specialty = specialties.find((s) => s.id.toString() === value);
+                      const specialty = filteredSpecialties.find((s) => s.id.toString() === value);
                       if (specialty) {
                         setSelectedSpecialty(specialty);
                         setSelectedSpecialtyName(specialty.nome);
@@ -828,7 +810,7 @@ const Especialistas = () => {
                       <SelectValue placeholder="Escolha uma especialidade" />
                     </SelectTrigger>
                     <SelectContent>
-                      {specialties.map((specialty) => (
+                      {filteredSpecialties.map((specialty) => (
                         <SelectItem key={specialty.id} value={specialty.id.toString()}>
                           <div className="flex items-center justify-between w-full">
                             <span>{specialty.nome}</span>
@@ -861,7 +843,7 @@ const Especialistas = () => {
             )}
 
             {/* No specialties */}
-            {step === "selecting_specialty" && specialties.length === 0 && (
+            {step === "selecting_specialty" && filteredSpecialties.length === 0 && (
               <Alert className="my-2">
                 <AlertCircle className="h-4 w-4" />
                 <AlertTitle>Nenhuma especialidade disponível</AlertTitle>
@@ -935,7 +917,7 @@ const Especialistas = () => {
                     className="gap-2 mt-1"
                   >
                     <Plus className="h-4 w-4" />
-                    Agendar primeira consulta
+                    Nova consulta
                   </Button>
                 </CardContent>
               </Card>

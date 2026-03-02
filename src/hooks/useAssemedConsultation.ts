@@ -35,6 +35,19 @@ function humanizeAssemedError(message: string): string {
     return "Erro de conexão. Verifique sua internet e tente novamente.";
   }
 
+  if (
+    lower.includes("especialidade não está habilitada") ||
+    lower.includes("especialidade nao esta habilitada") ||
+    lower.includes("não está habilitada para o paciente") ||
+    lower.includes("nao esta habilitada para o paciente")
+  ) {
+    return "Esta especialidade não está disponível para o seu perfil. Por favor, selecione outra especialidade ou entre em contato com o suporte.";
+  }
+
+  if (lower.includes("validation errors") || lower.includes("one or more validation")) {
+    return "Não foi possível criar a consulta. Verifique seus dados ou selecione outra especialidade.";
+  }
+
   // Retorna a mensagem original se não houver tradução conhecida
   return message;
 }
@@ -230,9 +243,7 @@ export function useAssemedConsultation() {
         }));
 
         const specialtiesResponse = await assemedClient.getSpecialties(100, 0);
-        const availableSpecialties = (specialtiesResponse.items || []).filter(
-          (s) => s.permiteCriacaoAtendimentoPeloPaciente
-        );
+        const availableSpecialties = specialtiesResponse.items || [];
 
         setState((prev) => ({
           ...prev,
