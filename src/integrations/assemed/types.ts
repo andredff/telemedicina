@@ -177,7 +177,30 @@ export interface GetConsultationsResponse {
 export interface ConsultationSimplified {
   id: number;
   situacao: ConsultationStatus;
+  situacaoAtendimentoDescricao?: string; // A API pode retornar descrição textual
   profissionalNome: string | null;
+}
+
+/**
+ * Normaliza status simplificado da consulta para enum ConsultationStatus
+ * A API pode retornar em diferentes formatos (enum ou descrição textual)
+ */
+export function normalizeSimplifiedStatus(simplified: ConsultationSimplified): ConsultationStatus {
+  // Primeiro tenta o campo situacao direto se for enum válido
+  const validStatuses: ConsultationStatus[] = ['AGUARDANDO', 'EM_ATENDIMENTO', 'CONCLUIDO', 'CANCELADO'];
+  if (simplified.situacao && validStatuses.includes(simplified.situacao)) {
+    return simplified.situacao;
+  }
+  
+  // Tenta normalizar como string (pode vir "Aguardando atendimento", etc)
+  const situacaoStr = String(simplified.situacao || simplified.situacaoAtendimentoDescricao || '').toLowerCase();
+  
+  if (situacaoStr.includes('cancelad')) return 'CANCELADO';
+  if (situacaoStr.includes('conclu') || situacaoStr.includes('finaliz')) return 'CONCLUIDO';
+  if (situacaoStr.includes('aguard') || situacaoStr.includes('espera')) return 'AGUARDANDO';
+  if (situacaoStr.includes('em atendimento') || situacaoStr.includes('andamento')) return 'EM_ATENDIMENTO';
+  
+  return 'AGUARDANDO';
 }
 
 // ==========================================

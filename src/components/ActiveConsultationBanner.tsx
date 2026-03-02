@@ -3,8 +3,40 @@ import { useNavigate, useLocation } from "react-router-dom";
 import { Video, X, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { Consultation } from "@/integrations/assemed/types";
-import { normalizeConsultationStatus } from "@/integrations/assemed/types";
+import type { Consultation, ConsultationSimplified } from "@/integrations/assemed/types";
+import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
+
+const STORAGE_KEY = "novita_active_consultation";
+const POLL_INTERVAL = 10000; // 10 segundos
+
+interface CachedConsultation {
+  id: number;
+  especialidadeNome: string;
+  profissionalNome: string | null;
+  situacao: string;
+}
+
+function getCachedConsultation(): CachedConsultation | null {
+  try {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (!stored) return null;
+    return JSON.parse(stored);
+  } catch {
+    return null;
+  }
+}
+
+function setCachedConsultation(consultation: CachedConsultation | null) {
+  try {
+    if (consultation) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(consultation));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
 
 interface ActiveConsultationBannerProps {
   accessToken: string | null;
@@ -16,7 +48,33 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
   const hasLoaded = useRef(false);
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  /**
+   * Verifica status da consulta usando endpoint simplificado
+   * GET /api/Atendimentos/{id}/simplificado
+   */
+  const checkConsultationStatus = useCallback(async (consultationId: number): Promise<ConsultationSimplified | null> => {
+    if (!accessToken) return null;
+
+    try {
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      assemedClient.setAccessToken(accessToken);
+      const response = await assemedClient.getConsultationStatus(consultationId);
+      // Normaliza o status (API pode retornar em diferentes formatos)
+      const normalizedStatus = normalizeSimplifiedStatus(response);
+      console.log(`[ActiveConsultationBanner] Status simplificado consulta ${consultationId}:`, response.situacao, '-> normalizado:', normalizedStatus);
+      return { ...response, situacao: normalizedStatus };
+    } catch (err) {
+      console.error("[ActiveConsultationBanner] Erro ao verificar status simplificado:", err);
+      return null;
+    }
+  }, [accessToken]);
+
+  /**
+   * Carrega consulta ativa usando cache + endpoint simplificado
+   * Se não houver cache, busca lista completa de consultas
+   */
   const loadActiveConsultation = useCallback(async () => {
     if (!accessToken) return;
 
@@ -24,6 +82,41 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       const { assemedClient } = await import("@/integrations/assemed/client");
       assemedClient.setAccessToken(accessToken);
       
+      // Primeiro tenta usar cache e verificar com endpoint simplificado
+      const cached = getCachedConsultation();
+      if (cached) {
+        console.log("[ActiveConsultationBanner] Verificando consulta em cache:", cached.id);
+        const status = await checkConsultationStatus(cached.id);
+        
+        if (status && (status.situacao === "AGUARDANDO" || status.situacao === "EM_ATENDIMENTO")) {
+          // Atualiza consulta em cache com status atualizado
+          const updatedCached = { ...cached, situacao: status.situacao, profissionalNome: status.profissionalNome };
+          setCachedConsultation(updatedCached);
+          setActiveConsultation({
+            id: cached.id,
+            pacienteId: 0,
+            pacienteNome: "",
+            especialidadeId: 0,
+            especialidadeNome: cached.especialidadeNome,
+            tipoProfissionalId: 0,
+            profissionalNome: status.profissionalNome,
+            status: status.situacao,
+            dataHoraCriacao: "",
+            dataHoraInicio: null,
+            dataHoraFim: null,
+            pacienteToken: null,
+          });
+          hasLoaded.current = true;
+          return;
+        } else {
+          // Consulta em cache não está mais ativa
+          console.log("[ActiveConsultationBanner] Consulta em cache não está mais ativa");
+          setCachedConsultation(null);
+        }
+      }
+
+      // Fallback: busca lista completa de consultas
+      console.log("[ActiveConsultationBanner] Buscando lista completa de consultas");
       const response = await assemedClient.getConsultations(10, 0);
       const consultations = response.items || [];
       
@@ -36,13 +129,82 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       });
       
       console.log("[ActiveConsultationBanner] Consulta ativa encontrada:", active?.id ?? "nenhuma");
+      
+      if (active) {
+        // Salva em cache para próximas verificações
+        setCachedConsultation({
+          id: active.id,
+          especialidadeNome: active.especialidadeNome,
+          profissionalNome: active.profissionalNome,
+          situacao: normalizeConsultationStatus(active),
+        });
+      } else {
+        setCachedConsultation(null);
+      }
+      
       setActiveConsultation(active || null);
       hasLoaded.current = true;
     } catch (err) {
       console.error("[ActiveConsultationBanner] Erro ao buscar consultas:", err);
       setActiveConsultation(null);
     }
-  }, [accessToken]);
+  }, [accessToken, checkConsultationStatus]);
+
+  /**
+   * Polling periódico usando endpoint simplificado
+   */
+  useEffect(() => {
+    if (!accessToken || isDismissed || !activeConsultation) {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+      return;
+    }
+
+    const pollStatus = async () => {
+      const status = await checkConsultationStatus(activeConsultation.id);
+      
+      if (!status) return;
+      
+      if (status.situacao === "CONCLUIDO" || status.situacao === "CANCELADO") {
+        // Consulta finalizada - limpa cache e estado
+        console.log("[ActiveConsultationBanner] Consulta finalizada:", status.situacao);
+        setCachedConsultation(null);
+        setActiveConsultation(null);
+        return;
+      }
+      
+      // Atualiza dados do profissional se mudou
+      if (status.profissionalNome !== activeConsultation.profissionalNome || 
+          status.situacao !== activeConsultation.status) {
+        setActiveConsultation(prev => prev ? {
+          ...prev,
+          profissionalNome: status.profissionalNome,
+          status: status.situacao,
+        } : null);
+        
+        const cached = getCachedConsultation();
+        if (cached) {
+          setCachedConsultation({
+            ...cached,
+            profissionalNome: status.profissionalNome,
+            situacao: status.situacao,
+          });
+        }
+      }
+    };
+
+    // Inicia polling
+    pollingRef.current = setInterval(pollStatus, POLL_INTERVAL);
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current);
+        pollingRef.current = null;
+      }
+    };
+  }, [accessToken, isDismissed, activeConsultation, checkConsultationStatus]);
 
   useEffect(() => {
     if (!isDismissed) {

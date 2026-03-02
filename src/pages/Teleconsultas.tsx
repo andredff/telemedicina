@@ -34,7 +34,7 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
-import { normalizeConsultationStatus } from "@/integrations/assemed/types";
+import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { User } from "@supabase/supabase-js";
@@ -383,7 +383,7 @@ function ConsultationIframe({
     setIsLoading(false);
   };
 
-  if (pageLoading) {
+  if (isLoading && !showIframe) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
@@ -518,12 +518,115 @@ const Teleconsultas = () => {
   }, [profile, hasLoadedConsultations, pageLoading, silentAuthenticate, loadConsultations]);
 
   // Also load consultations when access token becomes available (e.g. after startConsultationFlow)
+  const hasLoadedOnTokenRef = useRef(false);
   useEffect(() => {
-    if (accessToken && hasLoadedConsultations) {
+    if (accessToken && hasLoadedConsultations && !hasLoadedOnTokenRef.current) {
+      hasLoadedOnTokenRef.current = true;
       loadConsultations();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // ── Polling para atualizar status de consultas ativas usando endpoint simplificado ──
+  // Usa refs para evitar re-execução do effect quando consultations muda
+  const consultationsRef = useRef(consultations);
+  
+  // Mantém ref atualizado
+  useEffect(() => {
+    consultationsRef.current = consultations;
+  }, [consultations]);
+
+  useEffect(() => {
+    if (!accessToken) return;
+
+    // Aguarda ter consultations carregadas
+    const getActiveConsultationIds = () => {
+      return consultationsRef.current
+        .filter((c) => {
+          const status = normalizeConsultationStatus(c);
+          return status === "AGUARDANDO" || status === "EM_ATENDIMENTO";
+        })
+        .map((c) => c.id);
+    };
+
+    const pollActiveConsultations = async () => {
+      const activeIds = getActiveConsultationIds();
+      if (activeIds.length === 0) return;
+
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        assemedClient.setAccessToken(accessToken);
+        
+        for (const consultationId of activeIds) {
+          try {
+            const response = await assemedClient.getConsultationStatus(consultationId);
+            // Normaliza o status (API pode retornar em diferentes formatos)
+            const normalizedStatus = normalizeSimplifiedStatus(response);
+            console.log(`[Teleconsultas] Status consulta ${consultationId}:`, response.situacao, '-> normalizado:', normalizedStatus);
+            
+            // Encontra a consulta atual no ref
+            const currentConsultation = consultationsRef.current.find(c => c.id === consultationId);
+            if (!currentConsultation) continue;
+            
+            const currentStatus = normalizeConsultationStatus(currentConsultation);
+            
+            // Verifica se houve mudança
+            if (normalizedStatus !== currentStatus || 
+                response.profissionalNome !== currentConsultation.profissionalNome) {
+              
+              // Atualiza a consulta localmente sem chamar /obter novamente
+              const updatedConsultations = consultationsRef.current.map(c => 
+                c.id === consultationId 
+                  ? { ...c, status: normalizedStatus, situacao: normalizedStatus, profissionalNome: response.profissionalNome }
+                  : c
+              );
+              consultationsRef.current = updatedConsultations;
+              
+              // Força re-render via hook - precisa chamar loadConsultations apenas uma vez
+              // Notifica o usuário
+              if (normalizedStatus === "CONCLUIDO") {
+                toast({
+                  title: "Consulta Finalizada",
+                  description: "Sua teleconsulta foi concluída com sucesso.",
+                });
+                // Recarrega apenas quando consulta finaliza para atualizar histórico
+                loadConsultations();
+              } else if (normalizedStatus === "CANCELADO") {
+                toast({
+                  title: "Consulta Cancelada",
+                  description: "A consulta foi cancelada.",
+                  variant: "destructive",
+                });
+                loadConsultations();
+              } else if (normalizedStatus === "EM_ATENDIMENTO" && currentStatus === "AGUARDANDO") {
+                toast({
+                  title: "Médico Disponível",
+                  description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo.`,
+                });
+              }
+            }
+          } catch (err) {
+            console.error(`[Teleconsultas] Erro ao verificar status da consulta ${consultationId}:`, err);
+          }
+        }
+      } catch (err) {
+        console.error("[Teleconsultas] Erro no polling de consultas:", err);
+      }
+    };
+
+    // Inicia polling após 5 segundos (dá tempo para carregar consultas)
+    const initialDelay = setTimeout(() => {
+      pollActiveConsultations();
+    }, 5000);
+    
+    // Depois executa a cada 10 segundos
+    const interval = setInterval(pollActiveConsultations, 10000);
+
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(interval);
+    };
+  }, [accessToken, toast, loadConsultations]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

@@ -5,10 +5,20 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import type { ConsultationStatus } from "@/integrations/assemed/types";
+import { normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 
 function getIsSandbox() {
   return import.meta.env.VITE_ASSEMED_SANDBOX === "true" || import.meta.env.DEV;
 }
+
+// Mapeia status da API para texto amigável
+const statusLabels: Record<ConsultationStatus, string> = {
+  AGUARDANDO: "Aguardando atendimento",
+  EM_ATENDIMENTO: "Em atendimento",
+  CONCLUIDO: "Consulta concluída",
+  CANCELADO: "Consulta cancelada",
+};
 
 export default function SalaEspera() {
   const { id } = useParams();
@@ -18,6 +28,8 @@ export default function SalaEspera() {
   const [iframeSrc, setIframeSrc] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [showEnter, setShowEnter] = useState(false);
+  const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus>("AGUARDANDO");
+  const [profissionalNome, setProfissionalNome] = useState<string | null>(null);
 
   const q = new URLSearchParams(location.search);
   const especialidade = q.get("especialidade") || "Clínico Geral";
@@ -30,16 +42,25 @@ export default function SalaEspera() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Polling para verificar se o atendimento foi finalizado
+  // Polling para verificar status do atendimento usando endpoint simplificado
   useEffect(() => {
-    if (!iframeSrc || !atendimentoId) return;
+    if (!atendimentoId) return;
 
     const checkConsultationStatus = async () => {
       try {
         const { assemedClient } = await import("@/integrations/assemed/client");
-        const status = await assemedClient.getConsultationStatus(atendimentoId);
+        const response = await assemedClient.getConsultationStatus(atendimentoId);
         
-        if (status.situacao === "CONCLUIDO") {
+        // Normaliza o status (API pode retornar em diferentes formatos)
+        const normalizedStatus = normalizeSimplifiedStatus(response);
+        
+        console.log(`[SalaEspera] Status consulta ${atendimentoId}:`, response.situacao, '-> normalizado:', normalizedStatus, 'profissional:', response.profissionalNome);
+        
+        // Atualiza status e profissional
+        setConsultationStatus(normalizedStatus);
+        setProfissionalNome(response.profissionalNome);
+        
+        if (normalizedStatus === "CONCLUIDO") {
           // Fecha o iframe e mostra mensagem
           setIframeSrc(null);
           setShowEnter(false);
@@ -48,6 +69,17 @@ export default function SalaEspera() {
             description: "Sua teleconsulta foi concluída. Obrigado por usar nossos serviços!",
           });
           // Navega de volta para teleconsultas após 3 segundos
+          setTimeout(() => {
+            navigate('/teleconsultas');
+          }, 3000);
+        } else if (normalizedStatus === "CANCELADO") {
+          setIframeSrc(null);
+          setShowEnter(false);
+          toast({
+            title: "Consulta Cancelada",
+            description: "Esta consulta foi cancelada.",
+            variant: "destructive",
+          });
           setTimeout(() => {
             navigate('/teleconsultas');
           }, 3000);
@@ -63,7 +95,7 @@ export default function SalaEspera() {
     const interval = setInterval(checkConsultationStatus, 10000);
 
     return () => clearInterval(interval);
-  }, [iframeSrc, atendimentoId, toast, navigate]);
+  }, [atendimentoId, toast, navigate]);
 
   const handleEnter = async () => {
     if (!atendimentoId) return;
@@ -195,8 +227,15 @@ export default function SalaEspera() {
               <div className="status-row">
                 <span className="status-dot" />
                 <span className="status-text">Status</span>
-                <span className="status-value" id="statusText">Na sala de espera</span>
+                <span className="status-value" id="statusText">{statusLabels[consultationStatus]}</span>
               </div>
+              {profissionalNome && (
+                <div className="status-row">
+                  <span />
+                  <span className="status-text">Profissional</span>
+                  <span className="status-value">{profissionalNome}</span>
+                </div>
+              )}
               <div className="status-row">
                 <span />
                 <span className="status-text">Especialidade</span>
