@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { assemedClient, AssemedApiError } from "@/integrations/assemed/client";
+import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import type { RegisterPatientRequest } from "@/integrations/assemed/types";
 
 interface ProfileData {
@@ -60,6 +62,20 @@ export function useAssemedAuth() {
         // Registra o paciente
         const registerData = buildRegisterData(cleanCpf, profile);
         await assemedClient.registerPatient(registerData);
+
+        // Salva o emailTelemedicina no banco de dados do usuário
+        try {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await supabase
+              .from("profiles")
+              .update({ email_telemedicina: registerData.email })
+              .eq("id", user.id);
+            logger.info("[useAssemedAuth] emailTelemedicina salvo:", registerData.email);
+          }
+        } catch (updateErr) {
+          logger.error("[useAssemedAuth] Erro ao salvar emailTelemedicina:", updateErr);
+        }
 
         // Login após registro
         const retryLogin = await assemedClient.login(cleanCpf);

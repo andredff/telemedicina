@@ -1,5 +1,7 @@
 import { useState, useCallback } from "react";
 import { assemedClient, AssemedApiError } from "@/integrations/assemed/client";
+import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 
 /**
  * Transforma mensagens de erro técnicas da API Assemed em mensagens amigáveis para o usuário.
@@ -151,6 +153,20 @@ export function useAssemedConsultation() {
           setState((prev) => ({ ...prev, step: "registering" }));
           const registerData = buildRegisterData(cleanCpf, profile);
           await assemedClient.registerPatient(registerData);
+
+          // Salva o emailTelemedicina no banco de dados do usuário
+          try {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase
+                .from("profiles")
+                .update({ email_telemedicina: registerData.email })
+                .eq("id", user.id);
+              logger.info("[useAssemedConsultation] emailTelemedicina salvo:", registerData.email);
+            }
+          } catch (updateErr) {
+            logger.error("[useAssemedConsultation] Erro ao salvar emailTelemedicina:", updateErr);
+          }
 
           setState((prev) => ({ ...prev, step: "authenticating" }));
           const retryLogin = await assemedClient.login(cleanCpf);
