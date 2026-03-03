@@ -376,19 +376,56 @@ export async function getMonthlyMetricsHistory(months: number = 6): Promise<Mont
 
     for (let i = months - 1; i >= 0; i--) {
       const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const nextMonth = new Date(now.getFullYear(), now.getMonth() - i + 1, 1);
       const monthName = date.toLocaleDateString("pt-BR", { month: "short" });
+      
+      const monthStart = date.toISOString();
+      const monthEnd = nextMonth.toISOString();
 
-      // Em produção, buscaria dados reais do mês
-      // Por simplicidade, usando dados mock com tendência
-      const baseSubscribers = 150 + (months - i) * 30;
-      const baseMRR = baseSubscribers * 120; // Ticket médio aproximado
+      // Busca novos assinantes no mês
+      const { count: newSubscribers } = await supabase
+        .from("user_subscriptions")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", monthStart)
+        .lt("created_at", monthEnd);
+
+      // Busca cancelamentos no mês
+      const { count: cancelledCount } = await supabase
+        .from("user_subscriptions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "cancelled")
+        .gte("updated_at", monthStart)
+        .lt("updated_at", monthEnd);
+
+      // Busca total de assinantes ativos até o final do mês
+      const { count: totalSubscribers } = await supabase
+        .from("user_subscriptions")
+        .select("*", { count: "exact", head: true })
+        .eq("status", "active")
+        .lt("created_at", monthEnd);
+
+      // Calcula churn rate
+      const activeAtStart = (totalSubscribers || 0) + (cancelledCount || 0) - (newSubscribers || 0);
+      const churnRate = activeAtStart > 0 ? ((cancelledCount || 0) / activeAtStart) * 100 : 0;
+
+      // Busca MRR do mês (soma dos preços dos planos ativos)
+      const { data: activeSubscriptions } = await supabase
+        .from("user_subscriptions")
+        .select("subscription_plans(price)")
+        .eq("status", "active")
+        .lt("created_at", monthEnd);
+
+      const mrr = activeSubscriptions?.reduce((sum, sub) => {
+        const price = (sub.subscription_plans as any)?.price || 0;
+        return sum + price;
+      }, 0) || 0;
 
       history.push({
         month: monthName.charAt(0).toUpperCase() + monthName.slice(1),
-        mrr: baseMRR + Math.random() * 5000,
-        subscribers: baseSubscribers + Math.floor(Math.random() * 20),
-        churn: 2 + Math.random() * 3,
-        newSubscribers: 20 + Math.floor(Math.random() * 15),
+        mrr,
+        subscribers: totalSubscribers || 0,
+        churn: Math.round(churnRate * 10) / 10,
+        newSubscribers: newSubscribers || 0,
       });
     }
 

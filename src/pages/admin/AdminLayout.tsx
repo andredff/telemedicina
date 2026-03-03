@@ -1,4 +1,4 @@
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RBAC } from '@/integrations/supabase/adminClient';
@@ -17,10 +17,10 @@ import {
 
 export default function AdminLayout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [user, setUser] = useState<{ id: string; email: string; role: string } | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(true);
-  const [activeMenu, setActiveMenu] = useState<string>('dashboard');
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -95,20 +95,22 @@ export default function AdminLayout() {
         <div className="flex-1 overflow-y-auto">
           <nav className="p-4">
             <div className="space-y-1">
-              {menuItems.map((item) => (
-                <Button
-                  key={item.id}
-                  variant={activeMenu === item.id ? 'secondary' : 'ghost'}
-                  className={`w-full justify-start ${activeMenu === item.id ? 'bg-primary/10' : 'hover:bg-gray-100'}`}
-                  onClick={() => {
-                    setActiveMenu(item.id);
-                    navigate(item.path);
-                  }}
-                >
-                  {item.icon}
-                  <span className="ml-3">{item.label}</span>
-                </Button>
-              ))}
+              {menuItems.map((item) => {
+                const isActive = item.path === '/admin' 
+                  ? location.pathname === '/admin'
+                  : location.pathname.startsWith(item.path);
+                return (
+                  <Button
+                    key={item.id}
+                    variant="ghost"
+                    className={`w-full justify-start ${isActive ? 'bg-orange-500 text-white hover:bg-orange-600 hover:text-white' : 'hover:bg-gray-100'}`}
+                    onClick={() => navigate(item.path)}
+                  >
+                    {item.icon}
+                    <span className="ml-3">{item.label}</span>
+                  </Button>
+                );
+              })}
             </div>
           </nav>
         </div>

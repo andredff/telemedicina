@@ -69,34 +69,48 @@ const Auth = () => {
     }
   }, [tabParam]);
 
-  const getRedirectPath = (plan: string | null) => {
+  const getRedirectPath = (plan: string | null, isAdmin: boolean = false) => {
+    if (isAdmin) {
+      return "/admin";
+    }
     if (plan) {
       return `/checkout/subscription?plan=${plan}`;
     }
     return "/dashboard";
   };
 
+  const checkUserRole = async (userId: string): Promise<string | null> => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', userId)
+      .single();
+    return data?.role || null;
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
+      async (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         // Redirect if logged in
         if (session?.user) {
-          navigate(getRedirectPath(selectedPlan));
+          const role = await checkUserRole(session.user.id);
+          navigate(getRedirectPath(selectedPlan, role === 'admin'));
         }
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        navigate(getRedirectPath(selectedPlan));
+        const role = await checkUserRole(session.user.id);
+        navigate(getRedirectPath(selectedPlan, role === 'admin'));
       }
     });
 
@@ -203,7 +217,8 @@ const Auth = () => {
         description: "Bem-vindo à Novità",
       });
 
-      navigate(getRedirectPath(selectedPlan));
+      const role = await checkUserRole(data.user.id);
+      navigate(getRedirectPath(selectedPlan, role === 'admin'));
     } catch (error) {
       toast({
         title: "Erro ao fazer login",
