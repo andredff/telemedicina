@@ -136,7 +136,8 @@ export interface Consultation {
   status: ConsultationStatus;
   situacao?: ConsultationStatus; // Alias para compatibilidade com API
   situacaoAtendimentoDescricao?: string; // Descrição textual do status vinda da API
-  dataHoraCriacao: string;
+  dataHoraCriacao?: string;
+  dataCriacao?: string; // Alias alternativo da API
   dataHoraInicio: string | null;
   dataHoraFim: string | null;
   pacienteToken: string | null;

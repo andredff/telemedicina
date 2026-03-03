@@ -172,7 +172,7 @@ function ConsultationHistoryCard({
           </div>
           <div>
             <p className="text-muted-foreground text-xs mb-0.5">Data</p>
-            <p className="font-medium">{formatDate(consultation.dataHoraCriacao)}</p>
+            <p className="font-medium">{formatDate(consultation.dataCriacao || consultation.dataHoraCriacao)}</p>
           </div>
           {consultation.dataHoraFim && consultation.dataHoraInicio && (
             <div>
