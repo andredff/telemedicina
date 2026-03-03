@@ -59,7 +59,7 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     shortDescription: 'Consulta garantida com especialista',
     price_monthly: 49.90,
     price_yearly: 49.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 538,92/ano = R$ 44,91/mês
-    specialist_consultations_per_year: 2,
+    specialist_consultations_per_year: 1,
     checkups_per_year: 0,
     max_dependents: 0,
     features: [
@@ -76,7 +76,7 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     shortDescription: 'Maiores cuidados em saúde',
     price_monthly: 79.90,
     price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
-    specialist_consultations_per_year: 3,
+    specialist_consultations_per_year: 2,
     checkups_per_year: 1,
     max_dependents: 0,
     highlight: true,
@@ -134,7 +134,7 @@ export const COLETIVO_PLANS: PlanData[] = [
     shortDescription: 'Especialista incluído - até 3 pessoas',
     price_monthly: 129.90,
     price_yearly: 129.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.186,92/ano = R$ 98,91/mês
-    specialist_consultations_per_year: 2,
+    specialist_consultations_per_year: 4,
     checkups_per_year: 0,
     max_dependents: 2,
     features: [
@@ -152,7 +152,7 @@ export const COLETIVO_PLANS: PlanData[] = [
     shortDescription: 'Check-up incluído - até 3 pessoas',
     price_monthly: 209.90,
     price_yearly: 209.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.726,92/ano = R$ 143,91/mês
-    specialist_consultations_per_year: 4,
+    specialist_consultations_per_year: 6,
     checkups_per_year: 2,
     max_dependents: 2,
     highlight: true,
@@ -173,7 +173,7 @@ export const COLETIVO_PLANS: PlanData[] = [
     shortDescription: 'Plano completo - até 3 pessoas',
     price_monthly: 259.90,
     price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
-    specialist_consultations_per_year: 6,
+    specialist_consultations_per_year: 8,
     checkups_per_year: 2,
     max_dependents: 2,
     features: [

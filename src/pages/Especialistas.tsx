@@ -40,6 +40,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
+import { useSubscription } from "@/hooks/useSubscription";
 import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
@@ -402,8 +403,27 @@ const Especialistas = () => {
   const [joiningConsultation, setJoiningConsultation] =
     useState<Consultation | null>(null);
   const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
+  const [showStandaloneModal, setShowStandaloneModal] = useState(false);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("");
   const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | null>(null);
+  const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
+  const [isUsingPlanConsultation, setIsUsingPlanConsultation] = useState(false);
+  const [availableCredits, setAvailableCredits] = useState<{
+    id: string;
+    type: string;
+    amount: number;
+    expires_at: string;
+  }[]>([]);
+
+  const { 
+    isActive: hasActivePlan,
+    plan,
+    hasSpecialistConsultationsAvailable,
+    specialistConsultationsUsed,
+    specialistConsultationsLimit,
+    specialistConsultationsRemaining,
+    incrementSpecialistConsultations,
+  } = useSubscription();
 
   const {
     step,
@@ -510,6 +530,62 @@ const Especialistas = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
+  // Carrega créditos disponíveis ao carregar a página
+  const loadAvailableCredits = useCallback(async () => {
+    if (!user) return;
+    
+    // Usa any porque a tabela consultation_credits ainda não está nos tipos gerados
+    const { data, error } = await (supabase as any)
+      .from("consultation_credits")
+      .select("id, type, amount, expires_at, consultation_id")
+      .eq("user_id", user.id)
+      .eq("status", "available")
+      .eq("type", "especialista") // Apenas créditos de especialista
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      setAvailableCredits(data);
+    }
+  }, [user]);
+
+  // Carrega créditos quando o usuário é definido
+  useEffect(() => {
+    loadAvailableCredits();
+  }, [loadAvailableCredits]);
+
+  // Recarrega créditos quando abre o modal (para garantir dados atualizados)
+  useEffect(() => {
+    if (showStandaloneModal) {
+      loadAvailableCredits();
+    }
+  }, [showStandaloneModal, loadAvailableCredits]);
+
+  // Marca o crédito como usado quando a consulta for criada
+  useEffect(() => {
+    const markCreditAsUsed = async () => {
+      if (activeConsultation && activeConsultation.id && pendingCreditId) {
+        // Usa any porque a tabela consultation_credits ainda não está nos tipos gerados
+        const { error } = await (supabase as any)
+          .from("consultation_credits")
+          .update({
+            status: "used",
+            consultation_id: activeConsultation.id,
+            used_at: new Date().toISOString(),
+          })
+          .eq("id", pendingCreditId);
+
+        if (error) {
+          logger.error("Error marking credit as used:", error);
+        }
+        setPendingCreditId(null);
+        // Recarrega os créditos disponíveis
+        loadAvailableCredits();
+      }
+    };
+    markCreditAsUsed();
+  }, [activeConsultation, pendingCreditId, loadAvailableCredits]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
@@ -566,16 +642,126 @@ const Especialistas = () => {
       return;
     }
 
+    // Se não tem plano ativo
+    if (!hasActivePlan) {
+      // Se tem créditos disponíveis, usa o primeiro automaticamente
+      if (availableCredits.length > 0) {
+        const firstCredit = availableCredits[0];
+        toast({
+          title: "Usando crédito disponível",
+          description: "Você tem uma consulta avulsa disponível. Iniciando...",
+        });
+        setPendingCreditId(firstCredit.id);
+        setIsUsingPlanConsultation(false);
+        await startConsultationFlow(cpf, profile);
+        setShowSpecialtyModal(true);
+        return;
+      }
+      // Sem créditos, mostra modal para comprar
+      setShowStandaloneModal(true);
+      return;
+    }
+
+    // Se tem plano mas já usou todas as consultas com especialista
+    if (!hasSpecialistConsultationsAvailable) {
+      // Se tem créditos disponíveis, usa o primeiro automaticamente
+      if (availableCredits.length > 0) {
+        const firstCredit = availableCredits[0];
+        toast({
+          title: "Usando crédito disponível",
+          description: "Suas consultas do plano acabaram, mas você tem uma consulta avulsa disponível.",
+        });
+        setPendingCreditId(firstCredit.id);
+        setIsUsingPlanConsultation(false);
+        await startConsultationFlow(cpf, profile);
+        setShowSpecialtyModal(true);
+        return;
+      }
+      // Sem créditos, mostra modal para comprar
+      setShowStandaloneModal(true);
+      return;
+    }
+
+    // Tem consultas disponíveis no plano - marca que está usando do plano
+    setIsUsingPlanConsultation(true);
+
     // Abre o modal de seleção de especialidades
     await startConsultationFlow(cpf, profile);
     setShowSpecialtyModal(true);
   };
+
+  // Inicia consulta após pagamento de consulta avulsa
+  const handleStartAfterPayment = async (creditId?: string) => {
+    if (!profile) return;
+    const cpf = profile.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) return;
+
+    // Se temos um creditId, guardamos para marcar como usado depois
+    if (creditId) {
+      setPendingCreditId(creditId);
+    }
+
+    // Consulta avulsa - não está usando do plano
+    setIsUsingPlanConsultation(false);
+
+    // Inicia o fluxo de consulta com especialista
+    await startConsultationFlow(cpf, profile);
+    setShowSpecialtyModal(true);
+  };
+
+  // Usa um crédito existente para iniciar consulta
+  const handleUseExistingCredit = async (creditId: string) => {
+    if (!profile) return;
+    
+    setShowStandaloneModal(false);
+    
+    toast({
+      title: "Usando crédito disponível",
+      description: "Iniciando sua consulta...",
+    });
+    
+    setTimeout(() => {
+      handleStartAfterPayment(creditId);
+    }, 500);
+  };
+
+  // Verifica se veio do checkout de consulta avulsa
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const consultationCredit = params.get("consultation_credit");
+    
+    if (consultationCredit && profile && !pageLoading) {
+      // Remove o parâmetro da URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+      
+      // Verifica se é um UUID válido (crédito do banco)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(consultationCredit);
+      
+      // Inicia a consulta automaticamente
+      toast({
+        title: "Pagamento confirmado!",
+        description: "Iniciando sua consulta...",
+      });
+      
+      setTimeout(() => {
+        handleStartAfterPayment(isUUID ? consultationCredit : undefined);
+      }, 1000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, pageLoading]);
 
   const handleSelectSpecialty = async (specialty: Specialty) => {
     if (!specialty) return;
     setSelectedSpecialtyName(specialty.nome);
     setSelectedSpecialty(specialty);
     setShowSpecialtyModal(false);
+    
+    // Se está usando do plano, incrementa o contador
+    if (isUsingPlanConsultation) {
+      await incrementSpecialistConsultations();
+    }
+    
     await createConsultation(specialty);
   };
 
@@ -589,6 +775,12 @@ const Especialistas = () => {
       return;
     }
     setShowSpecialtyModal(false);
+    
+    // Se está usando do plano, incrementa o contador
+    if (isUsingPlanConsultation) {
+      await incrementSpecialistConsultations();
+    }
+    
     await createConsultation(selectedSpecialty);
   };
 
@@ -737,6 +929,68 @@ const Especialistas = () => {
           </div>
         </div>
 
+        {/* Info card: consultas do plano */}
+        {hasActivePlan && specialistConsultationsLimit > 0 && (
+          <Card className="mb-6 border-primary/20 bg-primary/5">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Stethoscope className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">
+                      Consultas com Especialista - Plano {plan?.name}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {specialistConsultationsRemaining > 0 ? (
+                        <>Você ainda tem <span className="font-semibold text-primary">{specialistConsultationsRemaining}</span> consulta{specialistConsultationsRemaining !== 1 ? 's' : ''} disponível{specialistConsultationsRemaining !== 1 ? 'is' : ''} este ano</>
+                      ) : (
+                        <span className="text-amber-600">Você já utilizou todas as {specialistConsultationsLimit} consultas do seu plano</span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-primary">
+                    {specialistConsultationsUsed}/{specialistConsultationsLimit}
+                  </p>
+                  <p className="text-xs text-muted-foreground">utilizadas</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Info card: créditos de consulta avulsa */}
+        {availableCredits.length > 0 && (
+          <Card className="mb-6 border-green-200 bg-green-50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-green-800">
+                      Consultas Avulsas Disponíveis
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Você tem <span className="font-semibold">{availableCredits.length}</span> consulta{availableCredits.length !== 1 ? 's' : ''} avulsa{availableCredits.length !== 1 ? 's' : ''} paga{availableCredits.length !== 1 ? 's' : ''} para usar
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-green-600">
+                    {availableCredits.length}
+                  </p>
+                  <p className="text-xs text-green-700">disponível{availableCredits.length !== 1 ? 'is' : ''}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Error alert (outside modal, e.g. after modal is closed) */}
         {step === "error" && error && !showSpecialtyModal && (
           <Alert variant="destructive" className="mb-6">
@@ -853,6 +1107,125 @@ const Especialistas = () => {
                 </AlertDescription>
               </Alert>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de consulta avulsa (usuários sem plano ou sem consultas disponíveis) */}
+        <Dialog
+          open={showStandaloneModal}
+          onOpenChange={(open) => {
+            if (!open) setShowStandaloneModal(false);
+          }}
+        >
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserIcon className="h-5 w-5 text-primary" />
+                Consulta com Especialista
+              </DialogTitle>
+              <DialogDescription>
+                {hasActivePlan && !hasSpecialistConsultationsAvailable ? (
+                  <>
+                    Você já utilizou suas {specialistConsultationsLimit} consulta{specialistConsultationsLimit !== 1 ? 's' : ''} com especialista do plano {plan?.name} este ano.
+                    {availableCredits.length > 0 
+                      ? " Use um crédito disponível ou compre uma consulta avulsa."
+                      : " Compre uma consulta avulsa para continuar."}
+                  </>
+                ) : availableCredits.length > 0 
+                  ? "Você tem créditos disponíveis! Use um abaixo ou compre uma nova consulta."
+                  : "Pague uma consulta avulsa para ser atendido por um especialista"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Aviso de consultas esgotadas do plano */}
+              {hasActivePlan && !hasSpecialistConsultationsAvailable && (
+                <Alert className="border-amber-200 bg-amber-50">
+                  <AlertCircle className="h-4 w-4 text-amber-600" />
+                  <AlertTitle className="text-amber-800">Consultas do plano esgotadas</AlertTitle>
+                  <AlertDescription className="text-amber-700">
+                    Você utilizou {specialistConsultationsUsed} de {specialistConsultationsLimit} consulta{specialistConsultationsLimit !== 1 ? 's' : ''} com especialista incluídas no seu plano {plan?.name}.
+                    As consultas são renovadas anualmente.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {/* Créditos disponíveis (apenas especialista) */}
+              {availableCredits.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Seus créditos disponíveis:</p>
+                  {availableCredits.map((credit) => (
+                    <Card
+                      key={credit.id}
+                      className="cursor-pointer transition-all border-green-200 bg-green-50 hover:border-green-400 hover:shadow-md"
+                      onClick={() => handleUseExistingCredit(credit.id)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-800">
+                                Especialista
+                              </p>
+                              <p className="text-xs text-green-600">
+                                Válido até {format(new Date(credit.expires_at), "dd/MM/yyyy", { locale: ptBR })}
+                              </p>
+                            </div>
+                          </div>
+                          <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700">
+                            Usar agora
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  <div className="border-t pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground text-center mb-3">
+                      Ou compre uma nova consulta:
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Opção Especialista */}
+              <Card 
+                className="cursor-pointer transition-all hover:border-accent/50 hover:shadow-md"
+                onClick={() => navigate("/checkout/consultation?type=especialista")}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center shrink-0">
+                      <UserIcon className="h-6 w-6 text-accent" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground">Consulta Avulsa - Especialista</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Consulta pontual com médico especialista de sua escolha.
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-accent">R$ 119,90</p>
+                      <p className="text-xs text-muted-foreground">por consulta</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* CTA para planos */}
+              <div className="pt-4 border-t">
+                <p className="text-sm text-muted-foreground text-center mb-3">
+                  Ou assine um plano para consultas ilimitadas com clínico geral
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => navigate("/planos")}
+                >
+                  Ver planos disponíveis
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 

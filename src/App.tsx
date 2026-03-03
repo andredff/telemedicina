@@ -23,6 +23,7 @@ import BlogPost from "./pages/BlogPost";
 import Cart from "./pages/Cart";
 import CheckoutSubscription from "./pages/CheckoutSubscription";
 import CheckoutMedication from "./pages/CheckoutMedication";
+import CheckoutConsultation from "./pages/CheckoutConsultation";
 import Telemedicine from "./pages/Telemedicine";
 import Teleconsultas from "./pages/Teleconsultas";
 import SalaEspera from "./pages/SalaEspera";
@@ -84,6 +85,7 @@ const App = () => (
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
+          <Route path="/checkout/consultation" element={<CheckoutConsultation />} />
           <Route path="/telemedicina" element={<Telemedicine />} />
           <Route path="/teleconsultas" element={<Teleconsultas />} />
           <Route path="/sala-espera/:id" element={<SalaEspera />} />

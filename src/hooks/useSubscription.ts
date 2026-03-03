@@ -15,8 +15,12 @@ interface UseSubscriptionReturn {
   canAccessTelemedicine: boolean;
   hasSpecialistConsultationsAvailable: boolean;
   hasCheckupAvailable: boolean;
+  specialistConsultationsUsed: number;
+  specialistConsultationsLimit: number;
+  specialistConsultationsRemaining: number;
   cancelSubscription: () => Promise<void>;
   reactivateSubscription: () => Promise<void>;
+  incrementSpecialistConsultations: () => Promise<boolean>;
   refetch: () => Promise<void>;
 }
 
@@ -111,6 +115,42 @@ export function useSubscription(): UseSubscriptionReturn {
     return plan.includes_checkup === true;
   }, [plan]);
 
+  // Valores de consultas com especialista
+  const specialistConsultationsUsed = subscription?.specialist_consultations_used ?? 0;
+  const specialistConsultationsLimit = plan?.specialist_consultations_per_year ?? 0;
+  const specialistConsultationsRemaining = Math.max(0, specialistConsultationsLimit - specialistConsultationsUsed);
+
+  // Incrementa o contador de consultas com especialista usadas
+  const incrementSpecialistConsultations = async (): Promise<boolean> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !subscription) return false;
+
+      const currentUsed = subscription.specialist_consultations_used ?? 0;
+      const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+          specialist_consultations_used: currentUsed + 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', subscription.id);
+
+      if (error) throw error;
+
+      // Atualiza o estado local
+      await fetchSubscription();
+      return true;
+    } catch (error) {
+      console.error('Error incrementing specialist consultations:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível registrar a consulta.',
+        variant: 'destructive',
+      });
+      return false;
+    }
+  };
+
   const cancelSubscription = async (): Promise<void> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -184,8 +224,12 @@ export function useSubscription(): UseSubscriptionReturn {
     canAccessTelemedicine: canAccessTelemedicine(),
     hasSpecialistConsultationsAvailable: hasSpecialistConsultationsAvailable(),
     hasCheckupAvailable: hasCheckupAvailable(),
+    specialistConsultationsUsed,
+    specialistConsultationsLimit,
+    specialistConsultationsRemaining,
     cancelSubscription,
     reactivateSubscription,
+    incrementSpecialistConsultations,
     refetch: fetchSubscription,
   };
 }

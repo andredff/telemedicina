@@ -413,9 +413,48 @@ const Teleconsultas = () => {
   const [joiningConsultation, setJoiningConsultation] =
     useState<Consultation | null>(null);
   const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
+  const [showStandaloneModal, setShowStandaloneModal] = useState(false);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("Consulta Imediata");
+  const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
+  const [availableCredits, setAvailableCredits] = useState<{
+    id: string;
+    type: string;
+    amount: number;
+    expires_at: string;
+  }[]>([]);
 
   const { isActive: hasActivePlan } = useSubscription();
+
+  // Carrega créditos disponíveis (apenas clínico geral)
+  const loadAvailableCredits = useCallback(async () => {
+    if (!user) return;
+    
+    // Usa any porque a tabela consultation_credits ainda não está nos tipos gerados
+    const { data, error } = await (supabase as any)
+      .from("consultation_credits")
+      .select("id, type, amount, expires_at")
+      .eq("user_id", user.id)
+      .eq("status", "available")
+      .eq("type", "clinico_geral") // Apenas créditos de clínico geral
+      .gt("expires_at", new Date().toISOString())
+      .order("created_at", { ascending: true });
+
+    if (!error && data) {
+      setAvailableCredits(data);
+    }
+  }, [user]);
+
+  // Carrega créditos quando o usuário é definido
+  useEffect(() => {
+    loadAvailableCredits();
+  }, [loadAvailableCredits]);
+
+  // Recarrega créditos quando abre o modal (para garantir dados atualizados)
+  useEffect(() => {
+    if (showStandaloneModal) {
+      loadAvailableCredits();
+    }
+  }, [showStandaloneModal, loadAvailableCredits]);
 
   const {
     step,
@@ -710,10 +749,111 @@ const Teleconsultas = () => {
       return;
     }
 
+    // Se não tem plano ativo
+    if (!hasActivePlan) {
+      // Se tem créditos de clínico geral disponíveis, usa o primeiro automaticamente
+      if (availableCredits.length > 0) {
+        const firstCredit = availableCredits[0];
+        toast({
+          title: "Usando crédito disponível",
+          description: "Você tem uma consulta avulsa disponível. Iniciando...",
+        });
+        setPendingCreditId(firstCredit.id);
+        setIsAutoSelecting(true);
+        await startConsultationFlow(cpf, profile);
+        return;
+      }
+      // Sem créditos, mostra modal para comprar
+      setShowStandaloneModal(true);
+      return;
+    }
+
     // Inicia o fluxo diretamente com clínico geral (sem modal)
     setIsAutoSelecting(true);
     await startConsultationFlow(cpf, profile);
   };
+
+  // Usa um crédito existente para iniciar consulta
+  const handleUseExistingCredit = async (creditId: string) => {
+    if (!profile) return;
+    
+    setShowStandaloneModal(false);
+    
+    toast({
+      title: "Usando crédito disponível",
+      description: "Iniciando sua consulta...",
+    });
+    
+    setTimeout(() => {
+      handleStartAfterPayment(creditId);
+    }, 500);
+  };
+
+  // Inicia consulta após pagamento de consulta avulsa
+  const handleStartAfterPayment = async (creditId?: string) => {
+    if (!profile) return;
+    const cpf = profile.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) return;
+
+    // Se temos um creditId, guardamos para marcar como usado depois
+    if (creditId) {
+      setPendingCreditId(creditId);
+    }
+
+    setIsAutoSelecting(true);
+    await startConsultationFlow(cpf, profile);
+  };
+
+  // Marca o crédito como usado quando a consulta for criada
+  useEffect(() => {
+    const markCreditAsUsed = async () => {
+      if (activeConsultation && activeConsultation.id && pendingCreditId) {
+        // Usa any porque a tabela consultation_credits ainda não está nos tipos gerados
+        const { error } = await (supabase as any)
+          .from("consultation_credits")
+          .update({
+            status: "used",
+            consultation_id: activeConsultation.id,
+            used_at: new Date().toISOString(),
+          })
+          .eq("id", pendingCreditId);
+
+        if (error) {
+          logger.error("Error marking credit as used:", error);
+        }
+        setPendingCreditId(null);
+        // Recarrega os créditos disponíveis
+        loadAvailableCredits();
+      }
+    };
+    markCreditAsUsed();
+  }, [activeConsultation, pendingCreditId, loadAvailableCredits]);
+
+  // Verifica se veio do checkout de consulta avulsa
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const consultationCredit = params.get("consultation_credit");
+    
+    if (consultationCredit && profile && !pageLoading) {
+      // Remove o parâmetro da URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, "", newUrl);
+      
+      // Verifica se é um UUID válido (crédito do banco)
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(consultationCredit);
+      
+      // Inicia a consulta automaticamente
+      toast({
+        title: "Pagamento confirmado!",
+        description: "Iniciando sua consulta...",
+      });
+      
+      setTimeout(() => {
+        handleStartAfterPayment(isUUID ? consultationCredit : undefined);
+      }, 1000);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile, pageLoading]);
 
   const handleSelectSpecialty = async (specialty: Specialty) => {
     setSelectedSpecialtyName(specialty.nome);
@@ -855,6 +995,35 @@ const Teleconsultas = () => {
           </div>
         </div>
 
+        {/* Info card: créditos de consulta avulsa disponíveis (apenas para usuários sem plano) */}
+        {!hasActivePlan && availableCredits.length > 0 && (
+          <Card className="mb-6 border-green-200 bg-green-50">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                    <CheckCircle className="h-5 w-5 text-green-600" />
+                  </div>
+                  <div>
+                    <p className="font-medium text-green-800">
+                      Consultas Avulsas Disponíveis
+                    </p>
+                    <p className="text-sm text-green-600">
+                      Você tem <span className="font-semibold">{availableCredits.length}</span> consulta{availableCredits.length !== 1 ? 's' : ''} avulsa{availableCredits.length !== 1 ? 's' : ''} de clínico geral paga{availableCredits.length !== 1 ? 's' : ''} para usar
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-2xl font-bold text-green-600">
+                    {availableCredits.length}
+                  </p>
+                  <p className="text-xs text-green-700">disponível{availableCredits.length !== 1 ? 'is' : ''}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Error alert (outside modal, e.g. after modal is closed) */}
         {step === "error" && error && !showSpecialtyModal && (
           <Alert variant="destructive" className="mb-6">
@@ -962,6 +1131,106 @@ const Teleconsultas = () => {
                 </AlertDescription>
               </Alert>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Modal de consulta avulsa (usuários sem plano) */}
+        <Dialog
+          open={showStandaloneModal}
+          onOpenChange={(open) => {
+            if (!open) setShowStandaloneModal(false);
+          }}
+        >
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Video className="h-5 w-5 text-primary" />
+                Consulta Avulsa
+              </DialogTitle>
+              <DialogDescription>
+                {availableCredits.filter(c => c.type === "clinico_geral").length > 0 
+                  ? "Você tem créditos disponíveis! Use um abaixo ou compre uma nova consulta."
+                  : "Pague uma consulta avulsa para ser atendido por um clínico geral"}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {/* Créditos disponíveis (apenas clínico geral) */}
+              {availableCredits.filter(c => c.type === "clinico_geral").length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Seus créditos disponíveis:</p>
+                  {availableCredits.filter(c => c.type === "clinico_geral").map((credit) => (
+                    <Card
+                      key={credit.id}
+                      className="cursor-pointer transition-all border-green-200 bg-green-50 hover:border-green-400 hover:shadow-md"
+                      onClick={() => handleUseExistingCredit(credit.id)}
+                    >
+                      <CardContent className="p-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-800">
+                                Clínico Geral
+                              </p>
+                              <p className="text-xs text-green-600">
+                                Válido até {format(new Date(credit.expires_at), "dd/MM/yyyy", { locale: ptBR })}
+                              </p>
+                            </div>
+                          </div>
+                          <Button size="sm" variant="default" className="bg-green-600 hover:bg-green-700">
+                            Usar agora
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                  <div className="border-t pt-4 mt-4">
+                    <p className="text-sm text-muted-foreground text-center mb-3">
+                      Ou compre uma nova consulta:
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Opção Clínico Geral */}
+              <Card 
+                className="cursor-pointer transition-all hover:border-primary/50 hover:shadow-md"
+                onClick={() => navigate("/checkout/consultation?type=clinico_geral")}
+              >
+                <CardContent className="p-4">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      <Stethoscope className="h-6 w-6 text-primary" />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-foreground">Consulta Avulsa - Clínico Geral</h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Consulta pontual com médico clínico geral, sem compromisso.
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-primary">R$ 59,90</p>
+                      <p className="text-xs text-muted-foreground">por consulta</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* CTA para planos */}
+              <div className="pt-4 border-t">
+                <p className="text-sm text-muted-foreground text-center mb-3">
+                  Ou assine um plano para consultas ilimitadas com clínico geral
+                </p>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => navigate("/planos")}
+                >
+                  Ver planos disponíveis
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
 
