@@ -21,6 +21,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
+import { getPlanColor } from "@/data/plansData";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 
 interface UserSubscription {
@@ -277,7 +278,7 @@ const ProfileSettings = () => {
         <div className="grid gap-6">
           {/* Subscription Card */}
           {subscription?.plan && (
-            <Card className="gradient-hero border-0 text-primary-foreground">
+            <Card className={`border-0 text-primary-foreground bg-gradient-to-br ${getPlanColor(subscription.plan.type)}`}>
               <CardHeader>
                 <div className="flex items-center gap-2 mb-2">
                   <Crown className="h-5 w-5" />

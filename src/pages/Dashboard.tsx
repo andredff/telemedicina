@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { getPlanColor } from "@/data/plansData";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 import { useToast } from "@/hooks/use-toast";
@@ -338,7 +339,7 @@ const Dashboard = () => {
         </div>
 
         {subscription?.plan ? (
-          <Card className="mb-8 gradient-hero border-0 text-primary-foreground">
+          <Card className={`mb-8 border-0 text-primary-foreground bg-gradient-to-br ${getPlanColor(subscription.plan.type)}`}>
             <CardContent className="p-6">
               <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
