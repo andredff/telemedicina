@@ -242,6 +242,20 @@ export function useAssemedConsultation() {
             const registerData = buildRegisterData(cleanCpf, profile);
             await assemedClient.registerPatient(registerData);
 
+            // Salva o emailTelemedicina no banco de dados do usuário
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                await supabase
+                  .from("profiles")
+                  .update({ email_telemedicina: registerData.email })
+                  .eq("id", user.id);
+                logger.info("[useAssemedConsultation] emailTelemedicina salvo:", registerData.email);
+              }
+            } catch (updateErr) {
+              logger.error("[useAssemedConsultation] Erro ao salvar emailTelemedicina:", updateErr);
+            }
+
             // Login após cadastro
             setState((prev) => ({ ...prev, step: "authenticating" }));
             const retryLogin = await assemedClient.login(cleanCpf);
@@ -279,12 +293,13 @@ export function useAssemedConsultation() {
 
   /**
    * Cria o atendimento com a especialidade selecionada
+   * Retorna true se criado com sucesso, false se houver erro
    */
   const createConsultation = useCallback(
-    async (specialty: Specialty): Promise<void> => {
+    async (specialty: Specialty): Promise<boolean> => {
       if (!state.accessToken) {
         setError("Token de acesso não disponível. Tente novamente.");
-        return;
+        return false;
       }
 
       setState((prev) => ({ ...prev, step: "creating_consultation" }));
@@ -310,12 +325,14 @@ export function useAssemedConsultation() {
           step: "in_consultation",
           activeConsultation: consultation,
         }));
+        return true;
       } catch (err: unknown) {
         const message =
           err instanceof Error
             ? err.message
             : "Erro ao criar atendimento";
         setError(message);
+        return false;
       }
     },
     [state.accessToken]

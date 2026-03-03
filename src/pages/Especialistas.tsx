@@ -16,6 +16,8 @@ import {
   RefreshCw,
   User as UserIcon,
 } from "lucide-react";
+import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
+import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -423,7 +425,10 @@ const Especialistas = () => {
     specialistConsultationsLimit,
     specialistConsultationsRemaining,
     incrementSpecialistConsultations,
+    decrementSpecialistConsultations,
   } = useSubscription();
+
+  const { accessToken: bannerAccessToken } = useAssemedToken();
 
   const {
     step,
@@ -695,9 +700,10 @@ const Especialistas = () => {
                 });
                 loadConsultations();
               } else if (normalizedStatus === "CANCELADO") {
-                // Restaura o crédito do usuário para qualquer cancelamento
+                // Tenta restaurar crédito avulso (se existir)
+                let creditRestored = false;
                 try {
-                  const { error } = await (supabase as any)
+                  const { data: restoredCredits, error } = await (supabase as any)
                     .from("consultation_credits")
                     .update({
                       status: "available",
@@ -705,31 +711,36 @@ const Especialistas = () => {
                       used_at: null,
                     })
                     .eq("consultation_id", consultationId)
-                    .eq("status", "used");
+                    .eq("status", "used")
+                    .select();
                   
-                  if (!error) {
+                  if (!error && restoredCredits && restoredCredits.length > 0) {
                     logger.info(`Crédito restaurado para consulta especialista cancelada ${consultationId}`);
                     loadAvailableCredits();
-                    toast({
-                      title: "Consulta Cancelada",
-                      description: response.motivoCancelamento === 4
-                        ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
-                        : "A consulta foi cancelada. Seu crédito foi restaurado.",
-                    });
-                  } else {
-                    logger.error("Erro ao restaurar crédito:", error);
-                    toast({
-                      title: "Consulta Cancelada",
-                      description: "A consulta foi cancelada.",
-                      variant: "destructive",
-                    });
+                    creditRestored = true;
                   }
+                  
+                  // Se não restaurou crédito avulso, restaura a consulta do plano
+                  if (!creditRestored) {
+                    await decrementSpecialistConsultations();
+                    logger.info(`Consulta do plano restaurada para consulta cancelada ${consultationId}`);
+                  }
+                  
+                  toast({
+                    title: "Consulta Cancelada",
+                    description: response.motivoCancelamento === 4
+                      ? creditRestored 
+                        ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
+                        : "Sua consulta expirou por tempo de espera."
+                      : creditRestored
+                        ? "A consulta foi cancelada. Seu crédito foi restaurado."
+                        : "A consulta foi cancelada.",
+                  });
                 } catch (restoreError) {
                   logger.error("Erro ao restaurar crédito:", restoreError);
                   toast({
                     title: "Consulta Cancelada",
                     description: "A consulta foi cancelada.",
-                    variant: "destructive",
                   });
                 }
                 loadConsultations();
@@ -761,7 +772,7 @@ const Especialistas = () => {
       clearTimeout(initialDelay);
       clearInterval(interval);
     };
-  }, [accessToken, toast, loadConsultations, loadAvailableCredits]);
+  }, [accessToken, toast, loadConsultations, loadAvailableCredits, decrementSpecialistConsultations]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -802,8 +813,8 @@ const Especialistas = () => {
       return;
     }
 
-    // Verifica se já existe consulta em andamento (apenas especialistas)
-    const activeConsultations = specialistConsultations.filter(
+    // Verifica se já existe consulta em andamento (TODAS as consultas, não só especialistas)
+    const activeConsultations = consultations.filter(
       (c) =>
         normalizeConsultationStatus(c) === "AGUARDANDO" ||
         normalizeConsultationStatus(c) === "EM_ATENDIMENTO"
@@ -934,12 +945,13 @@ const Especialistas = () => {
     setSelectedSpecialty(specialty);
     setShowSpecialtyModal(false);
     
-    // Se está usando do plano, incrementa o contador
-    if (isUsingPlanConsultation) {
-      await incrementSpecialistConsultations();
-    }
+    const success = await createConsultation(specialty);
     
-    await createConsultation(specialty);
+    // Só incrementa o contador se a consulta foi criada com sucesso
+    if (success && isUsingPlanConsultation) {
+      await incrementSpecialistConsultations();
+      logger.info("Consulta do plano incrementada após criação bem-sucedida");
+    }
   };
 
   const handleConfirmSpecialty = async () => {
@@ -953,12 +965,13 @@ const Especialistas = () => {
     }
     setShowSpecialtyModal(false);
     
-    // Se está usando do plano, incrementa o contador
-    if (isUsingPlanConsultation) {
-      await incrementSpecialistConsultations();
-    }
+    const success = await createConsultation(selectedSpecialty);
     
-    await createConsultation(selectedSpecialty);
+    // Só incrementa o contador se a consulta foi criada com sucesso
+    if (success && isUsingPlanConsultation) {
+      await incrementSpecialistConsultations();
+      logger.info("Consulta do plano incrementada após criação bem-sucedida");
+    }
   };
 
   const handleCloseSpecialtyModal = () => {
@@ -990,7 +1003,8 @@ const Especialistas = () => {
   const handleCancelConsultation = async (id: number) => {
     await cancelConsultation(id);
     
-    // Restaura o crédito se houver um crédito usado para esta consulta
+    // Tenta restaurar o crédito avulso se existir
+    let creditRestored = false;
     try {
       // Primeiro tenta restaurar pelo consultation_id (consulta já associada)
       const { data: creditByConsultation, error: error1 } = await (supabase as any)
@@ -1007,6 +1021,7 @@ const Especialistas = () => {
       if (creditByConsultation && creditByConsultation.length > 0) {
         logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
         loadAvailableCredits();
+        creditRestored = true;
       } else if (pendingCreditId) {
         // Se não encontrou pelo consultation_id, tenta restaurar pelo pendingCreditId
         // (caso o crédito ainda não tenha sido associado à consulta)
@@ -1023,7 +1038,15 @@ const Especialistas = () => {
           logger.info(`Crédito pendente ${pendingCreditId} restaurado`);
           setPendingCreditId(null);
           loadAvailableCredits();
+          creditRestored = true;
         }
+      }
+      
+      // Se não restaurou crédito avulso e estava usando do plano, restaura a consulta do plano
+      if (!creditRestored && (isUsingPlanConsultation || hasActivePlan)) {
+        await decrementSpecialistConsultations();
+        logger.info(`Consulta do plano restaurada para consulta cancelada ${id}`);
+        setIsUsingPlanConsultation(false);
       }
     } catch (err) {
       logger.error("Erro ao restaurar crédito:", err);
@@ -1031,7 +1054,9 @@ const Especialistas = () => {
     
     toast({
       title: "Consulta cancelada",
-      description: "Sua consulta foi cancelada e seu crédito foi restaurado.",
+      description: creditRestored 
+        ? "Sua consulta foi cancelada e seu crédito foi restaurado."
+        : "Sua consulta foi cancelada.",
     });
   };
 
@@ -1093,6 +1118,7 @@ const Especialistas = () => {
   return (
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
+      <ActiveConsultationBanner accessToken={bannerAccessToken} />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Page title */}

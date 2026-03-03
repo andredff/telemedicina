@@ -21,6 +21,7 @@ interface UseSubscriptionReturn {
   cancelSubscription: () => Promise<void>;
   reactivateSubscription: () => Promise<void>;
   incrementSpecialistConsultations: () => Promise<boolean>;
+  decrementSpecialistConsultations: () => Promise<boolean>;
   refetch: () => Promise<void>;
 }
 
@@ -151,6 +152,34 @@ export function useSubscription(): UseSubscriptionReturn {
     }
   };
 
+  // Decrementa o contador de consultas com especialista (restaura quando cancelada/erro)
+  const decrementSpecialistConsultations = async (): Promise<boolean> => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !subscription) return false;
+
+      const currentUsed = subscription.specialist_consultations_used ?? 0;
+      if (currentUsed <= 0) return true; // Nada a decrementar
+
+      const { error } = await supabase
+        .from('user_subscriptions')
+        .update({
+          specialist_consultations_used: currentUsed - 1,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', subscription.id);
+
+      if (error) throw error;
+
+      // Atualiza o estado local
+      await fetchSubscription();
+      return true;
+    } catch (error) {
+      console.error('Error decrementing specialist consultations:', error);
+      return false;
+    }
+  };
+
   const cancelSubscription = async (): Promise<void> => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -230,6 +259,7 @@ export function useSubscription(): UseSubscriptionReturn {
     cancelSubscription,
     reactivateSubscription,
     incrementSpecialistConsultations,
+    decrementSpecialistConsultations,
     refetch: fetchSubscription,
   };
 }

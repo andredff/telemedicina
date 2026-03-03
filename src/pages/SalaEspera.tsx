@@ -77,9 +77,9 @@ export default function SalaEspera() {
           setIframeSrc(null);
           setShowEnter(false);
           
-          // Restaura o crédito do usuário para qualquer cancelamento
+          // Tenta restaurar crédito avulso (se existir)
           try {
-            const { error } = await (supabase as any)
+            const { data: restoredCredits, error } = await (supabase as any)
               .from("consultation_credits")
               .update({
                 status: "available",
@@ -87,9 +87,12 @@ export default function SalaEspera() {
                 used_at: null,
               })
               .eq("consultation_id", atendimentoId)
-              .eq("status", "used");
+              .eq("status", "used")
+              .select();
             
-            if (!error) {
+            const hadCredit = restoredCredits && restoredCredits.length > 0;
+            
+            if (hadCredit) {
               logger.info(`Crédito restaurado para consulta cancelada ${atendimentoId}`);
               toast({
                 title: "Consulta Cancelada",
@@ -98,19 +101,23 @@ export default function SalaEspera() {
                   : "A consulta foi cancelada. Seu crédito foi restaurado.",
               });
             } else {
-              logger.error("Erro ao restaurar crédito:", error);
+              // Consulta do plano (sem crédito avulso)
               toast({
                 title: "Consulta Cancelada",
-                description: "A consulta foi cancelada.",
-                variant: "destructive",
+                description: response.motivoCancelamento === 4 
+                  ? "Sua consulta expirou por tempo de espera."
+                  : "A consulta foi cancelada.",
               });
+            }
+            
+            if (error) {
+              logger.error("Erro ao verificar crédito:", error);
             }
           } catch (restoreError) {
             logger.error("Erro ao restaurar crédito:", restoreError);
             toast({
               title: "Consulta Cancelada",
               description: "Esta consulta foi cancelada.",
-              variant: "destructive",
             });
           }
           

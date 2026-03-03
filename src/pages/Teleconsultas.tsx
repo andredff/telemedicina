@@ -685,9 +685,9 @@ const Teleconsultas = () => {
                 // Recarrega apenas quando consulta finaliza para atualizar histórico
                 loadConsultations();
               } else if (normalizedStatus === "CANCELADO") {
-                // Restaura o crédito do usuário para qualquer cancelamento
+                // Tenta restaurar crédito avulso (se existir)
                 try {
-                  const { error } = await (supabase as any)
+                  const { data: restoredCredits, error } = await (supabase as any)
                     .from("consultation_credits")
                     .update({
                       status: "available",
@@ -695,9 +695,12 @@ const Teleconsultas = () => {
                       used_at: null,
                     })
                     .eq("consultation_id", consultationId)
-                    .eq("status", "used");
+                    .eq("status", "used")
+                    .select();
                   
-                  if (!error) {
+                  const hadCredit = restoredCredits && restoredCredits.length > 0;
+                  
+                  if (hadCredit) {
                     logger.info(`Crédito restaurado para consulta cancelada ${consultationId}`);
                     loadAvailableCredits();
                     toast({
@@ -707,19 +710,23 @@ const Teleconsultas = () => {
                         : "A consulta foi cancelada. Seu crédito foi restaurado.",
                     });
                   } else {
-                    logger.error("Erro ao restaurar crédito:", error);
+                    // Consulta do plano (sem crédito avulso)
                     toast({
                       title: "Consulta Cancelada",
-                      description: "A consulta foi cancelada.",
-                      variant: "destructive",
+                      description: response.motivoCancelamento === 4
+                        ? "Sua consulta expirou por tempo de espera."
+                        : "A consulta foi cancelada.",
                     });
+                  }
+                  
+                  if (error) {
+                    logger.error("Erro ao verificar crédito:", error);
                   }
                 } catch (restoreError) {
                   logger.error("Erro ao restaurar crédito:", restoreError);
                   toast({
                     title: "Consulta Cancelada",
                     description: "A consulta foi cancelada.",
-                    variant: "destructive",
                   });
                 }
                 loadConsultations();
@@ -944,7 +951,13 @@ const Teleconsultas = () => {
   const handleSelectSpecialty = async (specialty: Specialty) => {
     setSelectedSpecialtyName(specialty.nome);
     setShowSpecialtyModal(false);
-    await createConsultation(specialty);
+    const success = await createConsultation(specialty);
+    
+    // Se falhou, limpa o crédito pendente (será restaurado automaticamente)
+    if (!success && pendingCreditId) {
+      logger.info(`Limpando crédito pendente ${pendingCreditId} por falha na criação`);
+      setPendingCreditId(null);
+    }
   };
 
   const handleCloseSpecialtyModal = () => {
@@ -966,7 +979,8 @@ const Teleconsultas = () => {
   const handleCancelConsultation = async (id: number) => {
     await cancelConsultation(id);
     
-    // Restaura o crédito se houver um crédito usado para esta consulta
+    // Tenta restaurar o crédito avulso se existir
+    let hadCredit = false;
     try {
       // Primeiro tenta restaurar pelo consultation_id (consulta já associada)
       const { data: creditByConsultation, error: error1 } = await (supabase as any)
@@ -983,6 +997,7 @@ const Teleconsultas = () => {
       if (creditByConsultation && creditByConsultation.length > 0) {
         logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
         loadAvailableCredits();
+        hadCredit = true;
       } else if (pendingCreditId) {
         // Se não encontrou pelo consultation_id, tenta restaurar pelo pendingCreditId
         // (caso o crédito ainda não tenha sido associado à consulta)
@@ -999,6 +1014,7 @@ const Teleconsultas = () => {
           logger.info(`Crédito pendente ${pendingCreditId} restaurado`);
           setPendingCreditId(null);
           loadAvailableCredits();
+          hadCredit = true;
         }
       }
     } catch (err) {
@@ -1007,7 +1023,9 @@ const Teleconsultas = () => {
     
     toast({
       title: "Consulta cancelada",
-      description: "Sua consulta foi cancelada e seu crédito foi restaurado.",
+      description: hadCredit 
+        ? "Sua consulta foi cancelada e seu crédito foi restaurado."
+        : "Sua consulta foi cancelada.",
     });
   };
 
