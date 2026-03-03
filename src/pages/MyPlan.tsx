@@ -266,17 +266,12 @@ const MyPlan = () => {
         
         <CardContent>
           <ul className="space-y-2 mb-6">
-            {plan.features.slice(0, 4).map((feature, index) => (
+            {plan.features.map((feature, index) => (
               <li key={index} className="flex items-start gap-2 text-sm">
                 <Check className="h-4 w-4 text-primary mt-0.5 shrink-0" />
                 <span>{feature}</span>
               </li>
             ))}
-            {plan.features.length > 4 && (
-              <li className="text-sm text-muted-foreground">
-                + {plan.features.length - 4} benefícios
-              </li>
-            )}
           </ul>
           
           {isCurrent ? (
