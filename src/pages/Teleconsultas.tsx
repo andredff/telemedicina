@@ -474,6 +474,60 @@ const Teleconsultas = () => {
     backToSpecialtySelection,
   } = useAssemedConsultation();
 
+  // Restaura créditos órfãos (marcados como "used" mas sem consulta ativa)
+  const restoreOrphanCredits = useCallback(async () => {
+    if (!user) return;
+    
+    // Busca créditos que estão como "used" para este usuário
+    const { data: usedCredits, error: fetchError } = await (supabase as any)
+      .from("consultation_credits")
+      .select("id, consultation_id")
+      .eq("user_id", user.id)
+      .eq("status", "used")
+      .eq("type", "clinico_geral");
+    
+    if (fetchError || !usedCredits || usedCredits.length === 0) return;
+    
+    // Para cada crédito usado, verifica se a consulta ainda está ativa
+    for (const credit of usedCredits) {
+      if (!credit.consultation_id) {
+        // Crédito sem consultation_id - restaura
+        await (supabase as any)
+          .from("consultation_credits")
+          .update({ status: "available", used_at: null })
+          .eq("id", credit.id);
+        logger.info(`Crédito órfão ${credit.id} restaurado (sem consultation_id)`);
+        continue;
+      }
+      
+      // Verifica se a consulta ainda está ativa localmente
+      const isActiveLocally = consultations.some(
+        c => c.id === credit.consultation_id && 
+        (normalizeConsultationStatus(c) === "AGUARDANDO" || normalizeConsultationStatus(c) === "EM_ATENDIMENTO")
+      );
+      
+      if (!isActiveLocally) {
+        await (supabase as any)
+          .from("consultation_credits")
+          .update({ status: "available", consultation_id: null, used_at: null })
+          .eq("id", credit.id);
+        logger.info(`Crédito órfão ${credit.id} restaurado (consulta ${credit.consultation_id} não está ativa)`);
+      }
+    }
+    
+    // Recarrega créditos após restaurar
+    loadAvailableCredits();
+  }, [user, consultations, loadAvailableCredits]);
+
+  // Restaura créditos órfãos quando as consultas são carregadas
+  const hasRestoredOrphans = useRef(false);
+  useEffect(() => {
+    if (!isLoadingConsultations && user && !hasRestoredOrphans.current) {
+      hasRestoredOrphans.current = true;
+      restoreOrphanCredits();
+    }
+  }, [isLoadingConsultations, user, restoreOrphanCredits]);
+
   // Se o usuário tem plano ativo, clínico geral é incluído (preço = 0)
   const specialties = hasActivePlan
     ? rawSpecialties.map((s) => {
@@ -631,11 +685,43 @@ const Teleconsultas = () => {
                 // Recarrega apenas quando consulta finaliza para atualizar histórico
                 loadConsultations();
               } else if (normalizedStatus === "CANCELADO") {
-                toast({
-                  title: "Consulta Cancelada",
-                  description: "A consulta foi cancelada.",
-                  variant: "destructive",
-                });
+                // Restaura o crédito do usuário para qualquer cancelamento
+                try {
+                  const { error } = await (supabase as any)
+                    .from("consultation_credits")
+                    .update({
+                      status: "available",
+                      consultation_id: null,
+                      used_at: null,
+                    })
+                    .eq("consultation_id", consultationId)
+                    .eq("status", "used");
+                  
+                  if (!error) {
+                    logger.info(`Crédito restaurado para consulta cancelada ${consultationId}`);
+                    loadAvailableCredits();
+                    toast({
+                      title: "Consulta Cancelada",
+                      description: response.motivoCancelamento === 4
+                        ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
+                        : "A consulta foi cancelada. Seu crédito foi restaurado.",
+                    });
+                  } else {
+                    logger.error("Erro ao restaurar crédito:", error);
+                    toast({
+                      title: "Consulta Cancelada",
+                      description: "A consulta foi cancelada.",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (restoreError) {
+                  logger.error("Erro ao restaurar crédito:", restoreError);
+                  toast({
+                    title: "Consulta Cancelada",
+                    description: "A consulta foi cancelada.",
+                    variant: "destructive",
+                  });
+                }
                 loadConsultations();
               } else if (normalizedStatus === "EM_ATENDIMENTO" && currentStatus === "AGUARDANDO") {
                 toast({
@@ -665,7 +751,7 @@ const Teleconsultas = () => {
       clearTimeout(initialDelay);
       clearInterval(interval);
     };
-  }, [accessToken, toast, loadConsultations]);
+  }, [accessToken, toast, loadConsultations, loadAvailableCredits]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -879,9 +965,49 @@ const Teleconsultas = () => {
 
   const handleCancelConsultation = async (id: number) => {
     await cancelConsultation(id);
+    
+    // Restaura o crédito se houver um crédito usado para esta consulta
+    try {
+      // Primeiro tenta restaurar pelo consultation_id (consulta já associada)
+      const { data: creditByConsultation, error: error1 } = await (supabase as any)
+        .from("consultation_credits")
+        .update({
+          status: "available",
+          consultation_id: null,
+          used_at: null,
+        })
+        .eq("consultation_id", id)
+        .eq("status", "used")
+        .select();
+      
+      if (creditByConsultation && creditByConsultation.length > 0) {
+        logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
+        loadAvailableCredits();
+      } else if (pendingCreditId) {
+        // Se não encontrou pelo consultation_id, tenta restaurar pelo pendingCreditId
+        // (caso o crédito ainda não tenha sido associado à consulta)
+        const { error: error2 } = await (supabase as any)
+          .from("consultation_credits")
+          .update({
+            status: "available",
+            consultation_id: null,
+            used_at: null,
+          })
+          .eq("id", pendingCreditId);
+        
+        if (!error2) {
+          logger.info(`Crédito pendente ${pendingCreditId} restaurado`);
+          setPendingCreditId(null);
+          loadAvailableCredits();
+        }
+      }
+    } catch (err) {
+      logger.error("Erro ao restaurar crédito:", err);
+    }
+    
     toast({
       title: "Consulta cancelada",
-      description: "Sua consulta foi cancelada com sucesso.",
+      description: "Sua consulta foi cancelada e seu crédito foi restaurado.",
     });
   };
 

@@ -179,6 +179,10 @@ export interface ConsultationSimplified {
   situacao: ConsultationStatus;
   situacaoAtendimentoDescricao?: string; // A API pode retornar descrição textual
   profissionalNome: string | null;
+  /** Motivo do cancelamento (quando situacao = CANCELADO)
+   * 4 = Cancelado por timeout (não queima crédito)
+   */
+  motivoCancelamento?: number;
 }
 
 /**

@@ -275,6 +275,7 @@ export const assemedMockClient = {
         id,
         situacao: "CANCELADO",
         profissionalNome: null,
+        motivoCancelamento: 4, // Timeout - não encontrou
       };
     }
 
@@ -284,6 +285,7 @@ export const assemedMockClient = {
 
     let status: ConsultationStatus = consultation.status;
     let profissionalNome = consultation.profissionalNome;
+    let motivoCancelamento: number | undefined;
 
     if (timeSinceCreation > 30000 && status === "AGUARDANDO") {
       status = "EM_ATENDIMENTO";
@@ -293,10 +295,16 @@ export const assemedMockClient = {
       consultation.dataHoraInicio = new Date().toISOString();
     }
 
+    // Se cancelado, define o motivo
+    if (status === "CANCELADO") {
+      motivoCancelamento = (consultation as any).motivoCancelamento || 1;
+    }
+
     return {
       id,
       situacao: status,
       profissionalNome,
+      motivoCancelamento,
     };
   },
 

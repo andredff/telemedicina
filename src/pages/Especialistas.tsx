@@ -42,7 +42,7 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
-import { normalizeConsultationStatus } from "@/integrations/assemed/types";
+import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { User } from "@supabase/supabase-js";
@@ -530,6 +530,15 @@ const Especialistas = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
 
+  // ── Polling para atualizar status de consultas ativas usando endpoint simplificado ──
+  // Usa refs para evitar re-execução do effect quando consultations muda
+  const consultationsRef = useRef(specialistConsultations);
+  
+  // Mantém ref atualizado
+  useEffect(() => {
+    consultationsRef.current = specialistConsultations;
+  }, [specialistConsultations]);
+
   // Carrega créditos disponíveis ao carregar a página
   const loadAvailableCredits = useCallback(async () => {
     if (!user) return;
@@ -549,10 +558,64 @@ const Especialistas = () => {
     }
   }, [user]);
 
+  // Restaura créditos órfãos (marcados como "used" mas sem consulta ativa)
+  const restoreOrphanCredits = useCallback(async () => {
+    if (!user) return;
+    
+    // Busca créditos que estão como "used" para este usuário
+    const { data: usedCredits, error: fetchError } = await (supabase as any)
+      .from("consultation_credits")
+      .select("id, consultation_id")
+      .eq("user_id", user.id)
+      .eq("status", "used")
+      .eq("type", "especialista");
+    
+    if (fetchError || !usedCredits || usedCredits.length === 0) return;
+    
+    // Para cada crédito usado, verifica se a consulta ainda está ativa
+    for (const credit of usedCredits) {
+      if (!credit.consultation_id) {
+        // Crédito sem consultation_id - restaura
+        await (supabase as any)
+          .from("consultation_credits")
+          .update({ status: "available", used_at: null })
+          .eq("id", credit.id);
+        logger.info(`Crédito órfão ${credit.id} restaurado (sem consultation_id)`);
+        continue;
+      }
+      
+      // Verifica se a consulta ainda está ativa localmente
+      const isActiveLocally = specialistConsultations.some(
+        c => c.id === credit.consultation_id && 
+        (normalizeConsultationStatus(c) === "AGUARDANDO" || normalizeConsultationStatus(c) === "EM_ATENDIMENTO")
+      );
+      
+      if (!isActiveLocally) {
+        await (supabase as any)
+          .from("consultation_credits")
+          .update({ status: "available", consultation_id: null, used_at: null })
+          .eq("id", credit.id);
+        logger.info(`Crédito órfão ${credit.id} restaurado (consulta ${credit.consultation_id} não está ativa)`);
+      }
+    }
+    
+    // Recarrega créditos após restaurar
+    loadAvailableCredits();
+  }, [user, specialistConsultations, loadAvailableCredits]);
+
   // Carrega créditos quando o usuário é definido
   useEffect(() => {
     loadAvailableCredits();
   }, [loadAvailableCredits]);
+
+  // Restaura créditos órfãos quando as consultas são carregadas
+  const hasRestoredOrphans = useRef(false);
+  useEffect(() => {
+    if (!isLoadingConsultations && user && !hasRestoredOrphans.current) {
+      hasRestoredOrphans.current = true;
+      restoreOrphanCredits();
+    }
+  }, [isLoadingConsultations, user, restoreOrphanCredits]);
 
   // Recarrega créditos quando abre o modal (para garantir dados atualizados)
   useEffect(() => {
@@ -585,6 +648,120 @@ const Especialistas = () => {
     };
     markCreditAsUsed();
   }, [activeConsultation, pendingCreditId, loadAvailableCredits]);
+
+  // ── Polling para atualizar status de consultas ativas ──
+  useEffect(() => {
+    if (!accessToken) return;
+
+    // Aguarda ter consultations carregadas
+    const getActiveConsultationIds = () => {
+      return consultationsRef.current
+        .filter((c) => {
+          const status = normalizeConsultationStatus(c);
+          return status === "AGUARDANDO" || status === "EM_ATENDIMENTO";
+        })
+        .map((c) => c.id);
+    };
+
+    const pollActiveConsultations = async () => {
+      const activeIds = getActiveConsultationIds();
+      if (activeIds.length === 0) return;
+
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        assemedClient.setAccessToken(accessToken);
+        
+        for (const consultationId of activeIds) {
+          try {
+            const response = await assemedClient.getConsultationStatus(consultationId);
+            const normalizedStatus = normalizeSimplifiedStatus(response);
+            logger.info(`[Especialistas] Status consulta ${consultationId}:`, response.situacao, '-> normalizado:', normalizedStatus);
+            
+            // Encontra a consulta atual no ref
+            const currentConsultation = consultationsRef.current.find(c => c.id === consultationId);
+            if (!currentConsultation) continue;
+            
+            const currentStatus = normalizeConsultationStatus(currentConsultation);
+            
+            // Verifica se houve mudança
+            if (normalizedStatus !== currentStatus || 
+                response.profissionalNome !== currentConsultation.profissionalNome) {
+              
+              // Notifica o usuário
+              if (normalizedStatus === "CONCLUIDO") {
+                toast({
+                  title: "Consulta Finalizada",
+                  description: "Sua teleconsulta com especialista foi concluída com sucesso.",
+                });
+                loadConsultations();
+              } else if (normalizedStatus === "CANCELADO") {
+                // Restaura o crédito do usuário para qualquer cancelamento
+                try {
+                  const { error } = await (supabase as any)
+                    .from("consultation_credits")
+                    .update({
+                      status: "available",
+                      consultation_id: null,
+                      used_at: null,
+                    })
+                    .eq("consultation_id", consultationId)
+                    .eq("status", "used");
+                  
+                  if (!error) {
+                    logger.info(`Crédito restaurado para consulta especialista cancelada ${consultationId}`);
+                    loadAvailableCredits();
+                    toast({
+                      title: "Consulta Cancelada",
+                      description: response.motivoCancelamento === 4
+                        ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
+                        : "A consulta foi cancelada. Seu crédito foi restaurado.",
+                    });
+                  } else {
+                    logger.error("Erro ao restaurar crédito:", error);
+                    toast({
+                      title: "Consulta Cancelada",
+                      description: "A consulta foi cancelada.",
+                      variant: "destructive",
+                    });
+                  }
+                } catch (restoreError) {
+                  logger.error("Erro ao restaurar crédito:", restoreError);
+                  toast({
+                    title: "Consulta Cancelada",
+                    description: "A consulta foi cancelada.",
+                    variant: "destructive",
+                  });
+                }
+                loadConsultations();
+              } else if (normalizedStatus === "EM_ATENDIMENTO" && currentStatus === "AGUARDANDO") {
+                toast({
+                  title: "Médico Disponível",
+                  description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo.`,
+                });
+              }
+            }
+          } catch (err) {
+            logger.error(`[Especialistas] Erro ao verificar status da consulta ${consultationId}:`, err);
+          }
+        }
+      } catch (err) {
+        logger.error("[Especialistas] Erro no polling de consultas:", err);
+      }
+    };
+
+    // Inicia polling após 5 segundos
+    const initialDelay = setTimeout(() => {
+      pollActiveConsultations();
+    }, 5000);
+    
+    // Depois executa a cada 10 segundos
+    const interval = setInterval(pollActiveConsultations, 10000);
+
+    return () => {
+      clearTimeout(initialDelay);
+      clearInterval(interval);
+    };
+  }, [accessToken, toast, loadConsultations, loadAvailableCredits]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -812,9 +989,49 @@ const Especialistas = () => {
 
   const handleCancelConsultation = async (id: number) => {
     await cancelConsultation(id);
+    
+    // Restaura o crédito se houver um crédito usado para esta consulta
+    try {
+      // Primeiro tenta restaurar pelo consultation_id (consulta já associada)
+      const { data: creditByConsultation, error: error1 } = await (supabase as any)
+        .from("consultation_credits")
+        .update({
+          status: "available",
+          consultation_id: null,
+          used_at: null,
+        })
+        .eq("consultation_id", id)
+        .eq("status", "used")
+        .select();
+      
+      if (creditByConsultation && creditByConsultation.length > 0) {
+        logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
+        loadAvailableCredits();
+      } else if (pendingCreditId) {
+        // Se não encontrou pelo consultation_id, tenta restaurar pelo pendingCreditId
+        // (caso o crédito ainda não tenha sido associado à consulta)
+        const { error: error2 } = await (supabase as any)
+          .from("consultation_credits")
+          .update({
+            status: "available",
+            consultation_id: null,
+            used_at: null,
+          })
+          .eq("id", pendingCreditId);
+        
+        if (!error2) {
+          logger.info(`Crédito pendente ${pendingCreditId} restaurado`);
+          setPendingCreditId(null);
+          loadAvailableCredits();
+        }
+      }
+    } catch (err) {
+      logger.error("Erro ao restaurar crédito:", err);
+    }
+    
     toast({
       title: "Consulta cancelada",
-      description: "Sua consulta foi cancelada com sucesso.",
+      description: "Sua consulta foi cancelada e seu crédito foi restaurado.",
     });
   };
 

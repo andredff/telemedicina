@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { logger } from "@/lib/logger";
 import type { ConsultationStatus } from "@/integrations/assemed/types";
 import { normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 
@@ -75,11 +76,44 @@ export default function SalaEspera() {
         } else if (normalizedStatus === "CANCELADO") {
           setIframeSrc(null);
           setShowEnter(false);
-          toast({
-            title: "Consulta Cancelada",
-            description: "Esta consulta foi cancelada.",
-            variant: "destructive",
-          });
+          
+          // Restaura o crédito do usuário para qualquer cancelamento
+          try {
+            const { error } = await (supabase as any)
+              .from("consultation_credits")
+              .update({
+                status: "available",
+                consultation_id: null,
+                used_at: null,
+              })
+              .eq("consultation_id", atendimentoId)
+              .eq("status", "used");
+            
+            if (!error) {
+              logger.info(`Crédito restaurado para consulta cancelada ${atendimentoId}`);
+              toast({
+                title: "Consulta Cancelada",
+                description: response.motivoCancelamento === 4 
+                  ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
+                  : "A consulta foi cancelada. Seu crédito foi restaurado.",
+              });
+            } else {
+              logger.error("Erro ao restaurar crédito:", error);
+              toast({
+                title: "Consulta Cancelada",
+                description: "A consulta foi cancelada.",
+                variant: "destructive",
+              });
+            }
+          } catch (restoreError) {
+            logger.error("Erro ao restaurar crédito:", restoreError);
+            toast({
+              title: "Consulta Cancelada",
+              description: "Esta consulta foi cancelada.",
+              variant: "destructive",
+            });
+          }
+          
           setTimeout(() => {
             navigate('/teleconsultas');
           }, 3000);
