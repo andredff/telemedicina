@@ -1,9 +1,26 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
@@ -20,6 +37,10 @@ import {
   CreditCard,
   Gem,
   AlertCircle,
+  Plus,
+  Pencil,
+  Trash2,
+  UserPlus,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -58,8 +79,27 @@ interface UserSubscription {
     description: string;
     price_monthly: number;
     price_yearly: number;
+    max_dependents: number;
   } | null;
 }
+
+interface Dependent {
+  id: string;
+  full_name: string;
+  cpf: string;
+  birth_date: string;
+  relationship: string | null;
+  subscription_id: string;
+  created_at: string;
+}
+
+const RELATIONSHIP_OPTIONS = [
+  { value: 'conjuge', label: 'Cônjuge' },
+  { value: 'filho', label: 'Filho(a)' },
+  { value: 'pai_mae', label: 'Pai/Mãe' },
+  { value: 'irmao', label: 'Irmão(ã)' },
+  { value: 'outro', label: 'Outro' },
+];
 
 // Ordem de hierarquia dos planos (para upgrade/downgrade)
 const PLAN_HIERARCHY: Record<string, number> = {
@@ -87,6 +127,19 @@ const MyPlan = () => {
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [planAction, setPlanAction] = useState<'upgrade' | 'downgrade' | 'subscribe'>('subscribe');
   const { accessToken } = useAssemedToken();
+  
+  // Dependentes
+  const [dependents, setDependents] = useState<Dependent[]>([]);
+  const [loadingDependents, setLoadingDependents] = useState(false);
+  const [showDependentDialog, setShowDependentDialog] = useState(false);
+  const [editingDependent, setEditingDependent] = useState<Dependent | null>(null);
+  const [savingDependent, setSavingDependent] = useState(false);
+  const [dependentForm, setDependentForm] = useState({
+    full_name: '',
+    cpf: '',
+    birth_date: '',
+    relationship: '',
+  });
 
   useEffect(() => {
     const fetchUserData = async () => {
@@ -115,7 +168,8 @@ const MyPlan = () => {
               type,
               description,
               price_monthly,
-              price_yearly
+              price_yearly,
+              max_dependents
             )
           `)
           .eq("user_id", user.id)
@@ -127,6 +181,11 @@ const MyPlan = () => {
         }
 
         setSubscription(subscriptionData as UserSubscription | null);
+        
+        // Buscar dependentes se tiver subscrição
+        if (subscriptionData?.id) {
+          fetchDependents(subscriptionData.id);
+        }
       } catch (error) {
         logger.error("Error fetching user data:", error);
         toast({
@@ -146,6 +205,153 @@ const MyPlan = () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
+
+  // ── Dependentes CRUD ──────────────────────────────────────────────────────
+  
+  const fetchDependents = useCallback(async (subscriptionId: string) => {
+    setLoadingDependents(true);
+    try {
+      const { data, error } = await supabase
+        .from("dependents")
+        .select("*")
+        .eq("subscription_id", subscriptionId)
+        .order("created_at", { ascending: true });
+      
+      if (error) throw error;
+      setDependents(data || []);
+    } catch (error) {
+      logger.error("Error fetching dependents:", error);
+    } finally {
+      setLoadingDependents(false);
+    }
+  }, []);
+
+  const openAddDependentDialog = () => {
+    setEditingDependent(null);
+    setDependentForm({
+      full_name: '',
+      cpf: '',
+      birth_date: '',
+      relationship: '',
+    });
+    setShowDependentDialog(true);
+  };
+
+  const openEditDependentDialog = (dependent: Dependent) => {
+    setEditingDependent(dependent);
+    setDependentForm({
+      full_name: dependent.full_name,
+      cpf: dependent.cpf,
+      birth_date: dependent.birth_date,
+      relationship: dependent.relationship || '',
+    });
+    setShowDependentDialog(true);
+  };
+
+  const formatCpf = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 11);
+    if (digits.length <= 3) return digits;
+    if (digits.length <= 6) return `${digits.slice(0, 3)}.${digits.slice(3)}`;
+    if (digits.length <= 9) return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6)}`;
+    return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9)}`;
+  };
+
+  const handleSaveDependent = async () => {
+    if (!subscription?.id) return;
+    
+    // Validações
+    if (!dependentForm.full_name.trim()) {
+      toast({ title: "Erro", description: "Nome é obrigatório", variant: "destructive" });
+      return;
+    }
+    const cpfDigits = dependentForm.cpf.replace(/\D/g, '');
+    if (cpfDigits.length !== 11) {
+      toast({ title: "Erro", description: "CPF inválido", variant: "destructive" });
+      return;
+    }
+    if (!dependentForm.birth_date) {
+      toast({ title: "Erro", description: "Data de nascimento é obrigatória", variant: "destructive" });
+      return;
+    }
+    
+    setSavingDependent(true);
+    try {
+      if (editingDependent) {
+        // Atualizar
+        const { error } = await supabase
+          .from("dependents")
+          .update({
+            full_name: dependentForm.full_name.trim(),
+            cpf: cpfDigits,
+            birth_date: dependentForm.birth_date,
+            relationship: dependentForm.relationship || null,
+          })
+          .eq("id", editingDependent.id);
+        
+        if (error) throw error;
+        toast({ title: "Sucesso", description: "Dependente atualizado com sucesso" });
+      } else {
+        // Criar
+        const { error } = await supabase
+          .from("dependents")
+          .insert({
+            subscription_id: subscription.id,
+            full_name: dependentForm.full_name.trim(),
+            cpf: cpfDigits,
+            birth_date: dependentForm.birth_date,
+            relationship: dependentForm.relationship || null,
+          });
+        
+        if (error) throw error;
+        toast({ title: "Sucesso", description: "Dependente adicionado com sucesso" });
+      }
+      
+      setShowDependentDialog(false);
+      fetchDependents(subscription.id);
+    } catch (error: any) {
+      logger.error("Error saving dependent:", error);
+      toast({
+        title: "Erro",
+        description: error.message?.includes("duplicate") 
+          ? "Este CPF já está cadastrado"
+          : "Não foi possível salvar o dependente",
+        variant: "destructive",
+      });
+    } finally {
+      setSavingDependent(false);
+    }
+  };
+
+  const handleDeleteDependent = async (dependentId: string) => {
+    if (!subscription?.id) return;
+    
+    if (!confirm("Tem certeza que deseja remover este dependente?")) return;
+    
+    try {
+      const { error } = await supabase
+        .from("dependents")
+        .delete()
+        .eq("id", dependentId);
+      
+      if (error) throw error;
+      
+      toast({ title: "Sucesso", description: "Dependente removido" });
+      fetchDependents(subscription.id);
+    } catch (error) {
+      logger.error("Error deleting dependent:", error);
+      toast({ title: "Erro", description: "Não foi possível remover o dependente", variant: "destructive" });
+    }
+  };
+
+  const getRelationshipLabel = (value: string | null) => {
+    const option = RELATIONSHIP_OPTIONS.find(o => o.value === value);
+    return option?.label || value || '—';
+  };
+
+  const maxDependents = subscription?.plan?.max_dependents || 0;
+  const canAddDependent = dependents.length < maxDependents;
+
+  // ── Planos ────────────────────────────────────────────────────────────────
 
   const getCurrentPlanType = (): string => {
     return subscription?.plan?.type || '';
@@ -319,7 +525,7 @@ const MyPlan = () => {
         <BackLink />
         {/* Current Plan Summary */}
         {subscription?.plan ? (
-          <Card className="mb-8 gradient-hero border-0 text-white">
+          <Card className={`mb-8 border-0 text-white bg-gradient-to-br ${getPlanColor(subscription.plan.type)}`}>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -382,6 +588,102 @@ const MyPlan = () => {
           </Card>
         )}
 
+        {/* Dependentes/Beneficiários - só aparece para planos coletivos */}
+        {subscription?.plan && maxDependents > 0 && (
+          <Card className="mb-8">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+                    <Users className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-lg">Beneficiários do Plano</CardTitle>
+                    <CardDescription>
+                      {dependents.length} de {maxDependents} dependentes cadastrados
+                    </CardDescription>
+                  </div>
+                </div>
+                {canAddDependent && (
+                  <Button onClick={openAddDependentDialog} size="sm" className="gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Adicionar
+                  </Button>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingDependents ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : dependents.length === 0 ? (
+                <div className="text-center py-8 border-2 border-dashed rounded-lg">
+                  <Users className="h-10 w-10 mx-auto mb-3 text-muted-foreground/50" />
+                  <p className="text-muted-foreground mb-2">Nenhum dependente cadastrado</p>
+                  <p className="text-sm text-muted-foreground/70 mb-4">
+                    Você pode adicionar até {maxDependents} dependente{maxDependents > 1 ? 's' : ''} ao seu plano
+                  </p>
+                  <Button onClick={openAddDependentDialog} variant="outline" size="sm" className="gap-2">
+                    <Plus className="h-4 w-4" />
+                    Adicionar primeiro dependente
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {dependents.map((dep) => (
+                    <div 
+                      key={dep.id} 
+                      className="flex items-center justify-between p-4 bg-muted/50 rounded-lg"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <span className="text-sm font-semibold text-primary">
+                            {dep.full_name.charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                        <div>
+                          <p className="font-medium">{dep.full_name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {getRelationshipLabel(dep.relationship)} • CPF: {formatCpf(dep.cpf)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => openEditDependentDialog(dep)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => handleDeleteDependent(dep.id)}
+                          className="text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                  {canAddDependent && (
+                    <Button 
+                      variant="outline" 
+                      className="w-full gap-2" 
+                      onClick={openAddDependentDialog}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Adicionar mais um dependente ({dependents.length}/{maxDependents})
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
@@ -431,6 +733,92 @@ const MyPlan = () => {
           </CardContent>
         </Card>
       </main>
+
+      {/* Dialog de Dependente */}
+      <Dialog open={showDependentDialog} onOpenChange={setShowDependentDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingDependent ? 'Editar Dependente' : 'Adicionar Dependente'}
+            </DialogTitle>
+            <DialogDescription>
+              {editingDependent 
+                ? 'Atualize as informações do dependente'
+                : 'Preencha os dados do novo beneficiário do plano'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="dep-name">Nome completo *</Label>
+              <Input
+                id="dep-name"
+                value={dependentForm.full_name}
+                onChange={(e) => setDependentForm(prev => ({ ...prev, full_name: e.target.value }))}
+                placeholder="Nome do dependente"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dep-cpf">CPF *</Label>
+              <Input
+                id="dep-cpf"
+                value={formatCpf(dependentForm.cpf)}
+                onChange={(e) => setDependentForm(prev => ({ ...prev, cpf: e.target.value.replace(/\D/g, '') }))}
+                placeholder="000.000.000-00"
+                maxLength={14}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dep-birth">Data de nascimento *</Label>
+              <Input
+                id="dep-birth"
+                type="date"
+                value={dependentForm.birth_date}
+                onChange={(e) => setDependentForm(prev => ({ ...prev, birth_date: e.target.value }))}
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label htmlFor="dep-relationship">Parentesco</Label>
+              <Select
+                value={dependentForm.relationship}
+                onValueChange={(value) => setDependentForm(prev => ({ ...prev, relationship: value }))}
+              >
+                <SelectTrigger id="dep-relationship">
+                  <SelectValue placeholder="Selecione o parentesco" />
+                </SelectTrigger>
+                <SelectContent>
+                  {RELATIONSHIP_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDependentDialog(false)}
+              disabled={savingDependent}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveDependent} disabled={savingDependent}>
+              {savingDependent ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : editingDependent ? 'Salvar' : 'Adicionar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmation Dialog */}
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
