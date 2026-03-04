@@ -473,10 +473,27 @@ function handlePaymentError(error: unknown): PaymentResult {
     };
   }
 
+  // Sanitize technical error messages that shouldn't be shown to users
+  let message = "Erro ao processar pagamento";
+  if (error instanceof Error) {
+    const technicalMessages = [
+      "Unexpected end of JSON input",
+      "Failed to fetch",
+      "Network request failed",
+      "NetworkError",
+    ];
+    const isTechnical = technicalMessages.some(
+      (tech) => error.message.includes(tech)
+    );
+    if (!isTechnical && error.message) {
+      message = error.message;
+    }
+  }
+
   return {
     success: false,
     status: 3,
-    message: error instanceof Error ? error.message : "Erro desconhecido",
+    message,
   };
 }
 
