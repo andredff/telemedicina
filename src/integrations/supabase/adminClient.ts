@@ -442,13 +442,19 @@ export const AdminQueries = {
             totalUsers: mockUsers.length,
             totalOrders: mockOrders.length,
             totalPrescriptions: mockPrescriptions.length,
-            activeSubscriptions: 1
+            activeSubscriptions: 1,
+            totalConsultationCredits: 3,
+            availableConsultationCredits: 1,
+            consultationCreditsRevenue: 447
           }
         : {
             totalUsers: 0,
             totalOrders: 0,
             totalPrescriptions: 0,
-            activeSubscriptions: 0
+            activeSubscriptions: 0,
+            totalConsultationCredits: 0,
+            availableConsultationCredits: 0,
+            consultationCreditsRevenue: 0
           };
     }
     
@@ -474,18 +480,43 @@ export const AdminQueries = {
         .select('*', { count: 'exact', head: true })
         .eq('status', 'active');
       
-      const [users, orders, prescriptions, subscriptions] = await Promise.all([
+      // Get consultation credits (compras avulsas)
+      const creditsPromise = supabaseAdmin
+        .from('consultation_credits')
+        .select('*', { count: 'exact', head: true });
+      
+      // Get available consultation credits
+      const availableCreditsPromise = supabaseAdmin
+        .from('consultation_credits')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'available');
+      
+      // Get total revenue from consultation credits
+      const creditsRevenuePromise = supabaseAdmin
+        .from('consultation_credits')
+        .select('amount');
+      
+      const [users, orders, prescriptions, subscriptions, credits, availableCredits, creditsRevenue] = await Promise.all([
         usersPromise,
         ordersPromise,
         prescriptionsPromise,
-        subscriptionsPromise
+        subscriptionsPromise,
+        creditsPromise,
+        availableCreditsPromise,
+        creditsRevenuePromise
       ]);
+      
+      // Calculate total credits revenue
+      const totalCreditsRevenue = creditsRevenue.data?.reduce((sum, c) => sum + (c.amount || 0), 0) || 0;
       
       return {
         totalUsers: users.count || 0,
         totalOrders: orders.count || 0,
         totalPrescriptions: prescriptions.count || 0,
-        activeSubscriptions: subscriptions.count || 0
+        activeSubscriptions: subscriptions.count || 0,
+        totalConsultationCredits: credits.count || 0,
+        availableConsultationCredits: availableCredits.count || 0,
+        consultationCreditsRevenue: totalCreditsRevenue
       };
     } catch (error) {
       logger.error("[AdminQueries] Error getting dashboard metrics", error);
@@ -494,13 +525,19 @@ export const AdminQueries = {
             totalUsers: mockUsers.length,
             totalOrders: mockOrders.length,
             totalPrescriptions: mockPrescriptions.length,
-            activeSubscriptions: 1
+            activeSubscriptions: 1,
+            totalConsultationCredits: 3,
+            availableConsultationCredits: 1,
+            consultationCreditsRevenue: 447
           }
         : {
             totalUsers: 0,
             totalOrders: 0,
             totalPrescriptions: 0,
-            activeSubscriptions: 0
+            activeSubscriptions: 0,
+            totalConsultationCredits: 0,
+            availableConsultationCredits: 0,
+            consultationCreditsRevenue: 0
           };
     }
   },

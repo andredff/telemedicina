@@ -275,8 +275,8 @@ function Plans(): JSX.Element {
                         </p>
                         <p className="text-sm text-muted-foreground">por consulta</p>
                       </div>
-                      <Button variant="outline" onClick={() => navigate(`/auth?type=${option.authParam}`)}>
-                        Agendar
+                      <Button variant="outline" onClick={() => navigate(`/checkout/consultation?type=${option.priceKey}`)}>
+                        Adquirir
                       </Button>
                     </div>
                   </div>

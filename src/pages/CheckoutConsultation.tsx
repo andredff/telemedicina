@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Video, Loader2, Stethoscope, CheckCircle, XCircle, CreditCard } from "lucide-react";
+import { Video, Loader2, Stethoscope, CheckCircle, XCircle, CreditCard, Plus, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import {
@@ -53,6 +53,7 @@ const CheckoutConsultation = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
   const [installments, setInstallments] = useState("1");
+  const [quantity, setQuantity] = useState(1);
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     paymentId?: string;
@@ -63,6 +64,8 @@ const CheckoutConsultation = () => {
   const consultationType = typeParam && CONSULTATION_TYPES[typeParam] 
     ? CONSULTATION_TYPES[typeParam] 
     : CONSULTATION_TYPES.clinico_geral;
+
+  const totalPrice = consultationType.price * quantity;
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -89,7 +92,8 @@ const CheckoutConsultation = () => {
         setUser(session?.user ?? null);
 
         if (!session) {
-          navigate("/auth");
+          // Guarda o tipo de consulta para redirecionar após login
+          navigate(`/auth?redirect=/checkout/consultation&type=${typeParam || 'clinico_geral'}`);
         }
       }
     );
@@ -99,7 +103,7 @@ const CheckoutConsultation = () => {
       setUser(session?.user ?? null);
 
       if (!session) {
-        navigate("/auth");
+        navigate(`/auth?redirect=/checkout/consultation&type=${typeParam || 'clinico_geral'}`);
       } else if (session.user) {
         fetchProfile(session.user.id);
       }
@@ -107,7 +111,7 @@ const CheckoutConsultation = () => {
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate, fetchProfile]);
+  }, [navigate, fetchProfile, typeParam]);
 
   // Redireciona se o tipo não for válido
   useEffect(() => {
@@ -142,47 +146,49 @@ const CheckoutConsultation = () => {
         orderId,
         customer,
         cardData,
-        toCents(consultationType.price),
+        toCents(totalPrice),
         parseInt(installments)
       );
 
       if (result.success) {
-        // Salva o crédito no banco de dados
+        // Salva os créditos no banco de dados (um por quantidade)
         const expiresAt = new Date();
         expiresAt.setMonth(expiresAt.getMonth() + 6); // Crédito válido por 6 meses
+
+        // Cria array de créditos para inserir
+        const creditsToInsert = Array.from({ length: quantity }, () => ({
+          user_id: user.id,
+          type: consultationType.id,
+          amount: consultationType.price,
+          payment_id: result.paymentId,
+          status: "available",
+          expires_at: expiresAt.toISOString(),
+        }));
 
         // Usa any porque a tabela consultation_credits ainda não está nos tipos gerados
         const { data: creditData, error: creditError } = await (supabase as any)
           .from("consultation_credits")
-          .insert({
-            user_id: user.id,
-            type: consultationType.id,
-            amount: consultationType.price,
-            payment_id: result.paymentId,
-            status: "available",
-            expires_at: expiresAt.toISOString(),
-          })
-          .select()
-          .single();
+          .insert(creditsToInsert)
+          .select();
 
         if (creditError) {
-          logger.error("Error saving consultation credit:", creditError);
+          logger.error("Error saving consultation credits:", creditError);
           // Continua mesmo com erro - o pagamento já foi processado
         }
 
+        const creditsCreated = creditData?.length || quantity;
         setPaymentResult({
           success: true,
           paymentId: result.paymentId,
-          message: "Pagamento aprovado! Você será redirecionado para iniciar sua consulta.",
+          message: `Pagamento aprovado! ${creditsCreated} consulta${creditsCreated > 1 ? 's' : ''} adicionada${creditsCreated > 1 ? 's' : ''} à sua conta.`,
         });
 
-        // Redireciona para a página correta após 3 segundos com o ID do crédito
-        const creditId = creditData?.id;
+        // Redireciona para a página de teleconsultas após 3 segundos
         const redirectPath = consultationType.id === "especialista" 
           ? "/especialistas" 
           : "/teleconsultas";
         setTimeout(() => {
-          navigate(`${redirectPath}?consultation_credit=${creditId || consultationType.id}`);
+          navigate(redirectPath);
         }, 3000);
       } else {
         setPaymentResult({
@@ -254,10 +260,10 @@ const CheckoutConsultation = () => {
         <div className="max-w-2xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
-              Comprar Consulta Avulsa
+              Comprar Consultas Avulsas
             </h1>
             <p className="text-muted-foreground">
-              Pague e inicie sua consulta imediatamente
+              Adquira consultas e use quando precisar
             </p>
           </div>
 
@@ -279,11 +285,46 @@ const CheckoutConsultation = () => {
                   </div>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="flex justify-between items-center py-3 border-t">
-                  <span className="text-muted-foreground">Total</span>
-                  <span className="text-2xl font-bold text-foreground">
+              <CardContent className="space-y-4">
+                {/* Preço unitário */}
+                <div className="flex justify-between items-center py-2">
+                  <span className="text-muted-foreground">Preço unitário</span>
+                  <span className="font-medium">
                     R$ {consultationType.price.toFixed(2).replace(".", ",")}
+                  </span>
+                </div>
+                
+                {/* Quantidade */}
+                <div className="flex justify-between items-center py-2 border-t">
+                  <span className="text-muted-foreground">Quantidade</span>
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                      disabled={quantity <= 1}
+                    >
+                      <Minus className="h-4 w-4" />
+                    </Button>
+                    <span className="w-8 text-center font-bold text-lg">{quantity}</span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                      disabled={quantity >= 10}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                
+                {/* Total */}
+                <div className="flex justify-between items-center py-3 border-t bg-muted/50 -mx-6 px-6 rounded-b-lg">
+                  <span className="font-medium">Total</span>
+                  <span className="text-2xl font-bold text-foreground">
+                    R$ {totalPrice.toFixed(2).replace(".", ",")}
                   </span>
                 </div>
               </CardContent>
@@ -310,13 +351,13 @@ const CheckoutConsultation = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="1">
-                        1x de R$ {consultationType.price.toFixed(2).replace(".", ",")} (sem juros)
+                        1x de R$ {totalPrice.toFixed(2).replace(".", ",")} (sem juros)
                       </SelectItem>
                       <SelectItem value="2">
-                        2x de R$ {(consultationType.price / 2).toFixed(2).replace(".", ",")} (sem juros)
+                        2x de R$ {(totalPrice / 2).toFixed(2).replace(".", ",")} (sem juros)
                       </SelectItem>
                       <SelectItem value="3">
-                        3x de R$ {(consultationType.price / 3).toFixed(2).replace(".", ",")} (sem juros)
+                        3x de R$ {(totalPrice / 3).toFixed(2).replace(".", ",")} (sem juros)
                       </SelectItem>
                     </SelectContent>
                   </Select>
@@ -326,7 +367,7 @@ const CheckoutConsultation = () => {
                 <CreditCardForm
                   onSubmit={handleCreditCardSubmit}
                   isLoading={isProcessing}
-                  submitLabel="Pagar e Iniciar Consulta"
+                  submitLabel="Confirmar Pagamento"
                 />
               </CardContent>
             </Card>

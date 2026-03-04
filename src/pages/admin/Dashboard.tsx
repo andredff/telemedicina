@@ -14,7 +14,8 @@ import {
   AlertTriangle,
   UserMinus,
   UserPlus,
-  Percent
+  Percent,
+  Video
 } from 'lucide-react';
 import {
   BarChart,
@@ -39,7 +40,10 @@ export default function AdminDashboard() {
     totalUsers: 0,
     totalOrders: 0,
     totalPrescriptions: 0,
-    activeSubscriptions: 0
+    activeSubscriptions: 0,
+    totalConsultationCredits: 0,
+    availableConsultationCredits: 0,
+    consultationCreditsRevenue: 0
   });
   const [financialMetrics, setFinancialMetrics] = useState<FinancialMetrics | null>(null);
   const [monthlyHistory, setMonthlyHistory] = useState<MonthlyMetrics[]>([]);
@@ -155,6 +159,52 @@ export default function AdminDashboard() {
             <div className="text-2xl font-bold">{financialMetrics?.activeSubscribers || basicMetrics.activeSubscriptions}</div>
             <p className="text-xs text-muted-foreground">
               de {financialMetrics?.totalSubscribers || 0} total
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Consultas Avulsas */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card className="border-purple-200 bg-purple-50/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Consultas Avulsas</CardTitle>
+            <Video className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-700">{basicMetrics.totalConsultationCredits}</div>
+            <p className="text-xs text-purple-600">
+              {basicMetrics.availableConsultationCredits} disponíveis para uso
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-purple-200 bg-purple-50/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Receita Avulsas</CardTitle>
+            <DollarSign className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-700">{formatCurrency(basicMetrics.consultationCreditsRevenue)}</div>
+            <p className="text-xs text-purple-600">
+              Total em consultas avulsas
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-purple-200 bg-purple-50/50">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Taxa Conversão</CardTitle>
+            <Percent className="h-4 w-4 text-purple-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-700">
+              {basicMetrics.totalConsultationCredits > 0 
+                ? (((basicMetrics.totalConsultationCredits - basicMetrics.availableConsultationCredits) / basicMetrics.totalConsultationCredits) * 100).toFixed(0)
+                : 0}%
+            </div>
+            <p className="text-xs text-purple-600">
+              Créditos já utilizados
             </p>
           </CardContent>
         </Card>
