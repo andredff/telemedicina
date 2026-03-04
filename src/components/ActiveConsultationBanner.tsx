@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Video, X, Clock, Loader2 } from "lucide-react";
+import { Video, X, Clock, Loader2, Ban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { useToast } from "@/hooks/use-toast";
 import type { Consultation, ConsultationSimplified } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 
@@ -45,8 +46,10 @@ interface ActiveConsultationBannerProps {
 export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBannerProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const hasLoaded = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -226,6 +229,35 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
     setIsDismissed(true);
   };
 
+  const handleCancel = async () => {
+    if (!activeConsultation || !accessToken) return;
+    
+    setIsCancelling(true);
+    try {
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      assemedClient.setAccessToken(accessToken);
+      await assemedClient.cancelConsultation(activeConsultation.id);
+      
+      // Limpa cache e estado
+      setCachedConsultation(null);
+      setActiveConsultation(null);
+      
+      toast({
+        title: "Consulta cancelada",
+        description: "Sua consulta foi cancelada com sucesso.",
+      });
+    } catch (err) {
+      console.error("[ActiveConsultationBanner] Erro ao cancelar consulta:", err);
+      toast({
+        title: "Erro ao cancelar",
+        description: "Não foi possível cancelar a consulta. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   // Não mostra na própria sala de espera
   if (location.pathname.startsWith("/sala-espera")) {
     return null;
@@ -278,23 +310,39 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
                 </p>
               )}
 
-              <Button
-                onClick={handleEnter}
-                size="sm"
-                className="w-full gap-2"
-              >
-                {isWaiting ? (
-                  <>
+              <div className="flex gap-2">
+                <Button
+                  onClick={handleEnter}
+                  size="sm"
+                  className="flex-1 gap-2"
+                >
+                  {isWaiting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Entrar
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4 w-4" />
+                      Entrar
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleCancel}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  disabled={isCancelling}
+                >
+                  {isCancelling ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Entrar na Sala
-                  </>
-                ) : (
-                  <>
-                    <Video className="h-4 w-4" />
-                    Entrar na Consulta
-                  </>
-                )}
-              </Button>
+                  ) : (
+                    <Ban className="h-4 w-4" />
+                  )}
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </div>
         </CardContent>

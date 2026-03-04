@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -13,54 +15,164 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Settings, CreditCard, Bell, Shield, Globe, Save } from 'lucide-react';
+import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { logger } from "@/lib/logger";
 
-export default function AdminSettings() {
-  const [settings, setSettings] = useState({
+interface SettingsData {
+  general: {
+    siteName: string;
+    siteDescription: string;
+    maintenanceMode: boolean;
+    allowRegistrations: boolean;
+    defaultPlan: string;
+    currency: string;
+  };
+  notifications: {
+    supportEmail: string;
+    notificationEmail: string;
+    enableEmailNotifications: boolean;
+    enableSmsNotifications: boolean;
+  };
+  security: {
+    maxUploadSize: number;
+    sessionTimeout: number;
+    twoFactorEnabled: boolean;
+  };
+  integrations: {
+    googleAnalyticsId: string;
+    recaptchaSiteKey: string;
+    recaptchaSecretKey: string;
+  };
+  payments: {
+    enableCreditCard: boolean;
+    enablePix: boolean;
+    enableBoleto: boolean;
+    maxInstallments: number;
+  };
+}
+
+const defaultSettings: SettingsData = {
+  general: {
     siteName: 'Novità Telemedicina',
     siteDescription: 'Plataforma de telemedicina e entrega de medicamentos',
     maintenanceMode: false,
     allowRegistrations: true,
     defaultPlan: 'bronze',
     currency: 'BRL',
+  },
+  notifications: {
     supportEmail: 'suporte@novita.com',
     notificationEmail: 'notificacoes@novita.com',
     enableEmailNotifications: true,
     enableSmsNotifications: false,
+  },
+  security: {
     maxUploadSize: 5,
     sessionTimeout: 30,
+    twoFactorEnabled: false,
+  },
+  integrations: {
     googleAnalyticsId: '',
     recaptchaSiteKey: '',
-    recaptchaSecretKey: ''
-  });
+    recaptchaSecretKey: '',
+  },
+  payments: {
+    enableCreditCard: true,
+    enablePix: true,
+    enableBoleto: false,
+    maxInstallments: 12,
+  },
+};
 
-  const handleSaveSettings = () => {
-    // In a real app, this would save settings to the database
-    logger.info("[AdminSettings] Settings saved", settings);
-    toast({
-      title: 'Sucesso',
-      description: 'Configurações salvas com sucesso'
-    });
+export default function AdminSettings() {
+  const [settings, setSettings] = useState<SettingsData>(defaultSettings);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  const fetchSettings = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await AdminQueries.getSettings();
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        const loadedSettings = { ...defaultSettings };
+        
+        data.forEach((setting: { key: string; value: unknown }) => {
+          if (setting.key in loadedSettings) {
+            loadedSettings[setting.key as keyof SettingsData] = {
+              ...loadedSettings[setting.key as keyof SettingsData],
+              ...(setting.value as Record<string, unknown>),
+            };
+          }
+        });
+        
+        setSettings(loadedSettings);
+      }
+    } catch (error) {
+      logger.error('Error fetching settings:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao carregar configurações',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value, type } = e.target;
-    const checked = type === 'checkbox' ? (e.target as HTMLInputElement).checked : undefined;
-    
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const handleSaveSettings = async (category: keyof SettingsData) => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await AdminQueries.updateSetting(category, settings[category], user?.id);
+      
+      if (error) throw error;
+      
+      logger.info("[AdminSettings] Settings saved", { category, settings: settings[category] });
+      toast({
+        title: 'Sucesso',
+        description: 'Configurações salvas com sucesso'
+      });
+    } catch (error) {
+      logger.error('Error saving settings:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao salvar configurações',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateSetting = <K extends keyof SettingsData>(
+    category: K,
+    field: keyof SettingsData[K],
+    value: unknown
+  ) => {
     setSettings(prev => ({
       ...prev,
-      [name]: checked !== undefined ? checked : value
+      [category]: {
+        ...prev[category],
+        [field]: value,
+      },
     }));
   };
 
-  const handleSwitchChange = (name: string, checked: boolean) => {
-    setSettings(prev => ({
-      ...prev,
-      [name]: checked
-    }));
-  };
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -105,25 +217,23 @@ export default function AdminSettings() {
                   <Label htmlFor="siteName">Nome do Site</Label>
                   <Input
                     id="siteName"
-                    name="siteName"
-                    value={settings.siteName}
-                    onChange={handleInputChange}
+                    value={settings.general.siteName}
+                    onChange={(e) => updateSetting('general', 'siteName', e.target.value)}
                   />
                 </div>
                 <div>
                   <Label htmlFor="siteDescription">Descrição do Site</Label>
                   <Input
                     id="siteDescription"
-                    name="siteDescription"
-                    value={settings.siteDescription}
-                    onChange={handleInputChange}
+                    value={settings.general.siteDescription}
+                    onChange={(e) => updateSetting('general', 'siteDescription', e.target.value)}
                   />
                 </div>
                 <div>
                   <Label htmlFor="defaultPlan">Plano Padrão</Label>
                   <Select
-                    value={settings.defaultPlan}
-                    onValueChange={(value) => setSettings(prev => ({ ...prev, defaultPlan: value }))}
+                    value={settings.general.defaultPlan}
+                    onValueChange={(value) => updateSetting('general', 'defaultPlan', value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione um plano" />
@@ -139,8 +249,8 @@ export default function AdminSettings() {
                 <div>
                   <Label htmlFor="currency">Moeda</Label>
                   <Select
-                    value={settings.currency}
-                    onValueChange={(value) => setSettings(prev => ({ ...prev, currency: value }))}
+                    value={settings.general.currency}
+                    onValueChange={(value) => updateSetting('general', 'currency', value)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione uma moeda" />
@@ -159,8 +269,8 @@ export default function AdminSettings() {
                   <Label htmlFor="maintenanceMode">Modo de Manutenção</Label>
                   <Switch
                     id="maintenanceMode"
-                    checked={settings.maintenanceMode}
-                    onCheckedChange={(checked) => handleSwitchChange('maintenanceMode', checked)}
+                    checked={settings.general.maintenanceMode}
+                    onCheckedChange={(checked) => updateSetting('general', 'maintenanceMode', checked)}
                   />
                 </div>
                 
@@ -168,11 +278,16 @@ export default function AdminSettings() {
                   <Label htmlFor="allowRegistrations">Permitir Novos Cadastros</Label>
                   <Switch
                     id="allowRegistrations"
-                    checked={settings.allowRegistrations}
-                    onCheckedChange={(checked) => handleSwitchChange('allowRegistrations', checked)}
+                    checked={settings.general.allowRegistrations}
+                    onCheckedChange={(checked) => updateSetting('general', 'allowRegistrations', checked)}
                   />
                 </div>
               </div>
+              
+              <Button onClick={() => handleSaveSettings('general')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações Gerais
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -184,61 +299,55 @@ export default function AdminSettings() {
               <CardTitle>Configurações de Pagamento</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div>
-                <h3 className="font-medium mb-4">Gateways de Pagamento</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">Stripe</h4>
-                      <p className="text-sm text-gray-500">Integração com Stripe para pagamentos</p>
-                    </div>
-                    <Switch
-                      checked={true}
-                      onCheckedChange={() => {}}
-                    />
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">Cartão de Crédito</h4>
+                    <p className="text-sm text-gray-500">Aceitar pagamentos via cartão de crédito</p>
                   </div>
-                  
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">PagSeguro</h4>
-                      <p className="text-sm text-gray-500">Integração com PagSeguro</p>
-                    </div>
-                    <Switch
-                      checked={false}
-                      onCheckedChange={() => {}}
-                    />
-                  </div>
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="stripePublicKey">Stripe Public Key</Label>
-                  <Input
-                    id="stripePublicKey"
-                    placeholder="pk_test_..."
-                    type="password"
+                  <Switch
+                    checked={settings.payments.enableCreditCard}
+                    onCheckedChange={(checked) => updateSetting('payments', 'enableCreditCard', checked)}
                   />
                 </div>
-                <div>
-                  <Label htmlFor="stripeSecretKey">Stripe Secret Key</Label>
-                  <Input
-                    id="stripeSecretKey"
-                    placeholder="sk_test_..."
-                    type="password"
+                
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">PIX</h4>
+                    <p className="text-sm text-gray-500">Aceitar pagamentos via PIX</p>
+                  </div>
+                  <Switch
+                    checked={settings.payments.enablePix}
+                    onCheckedChange={(checked) => updateSetting('payments', 'enablePix', checked)}
+                  />
+                </div>
+                
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">Boleto</h4>
+                    <p className="text-sm text-gray-500">Aceitar pagamentos via boleto bancário</p>
+                  </div>
+                  <Switch
+                    checked={settings.payments.enableBoleto}
+                    onCheckedChange={(checked) => updateSetting('payments', 'enableBoleto', checked)}
                   />
                 </div>
               </div>
               
               <div>
-                <Label htmlFor="taxRate">Taxa de Imposto Padrão (%)</Label>
+                <Label htmlFor="maxInstallments">Máximo de Parcelas</Label>
                 <Input
-                  id="taxRate"
+                  id="maxInstallments"
                   type="number"
-                  placeholder="10"
-                  className="w-[200px]"
+                  value={settings.payments.maxInstallments}
+                  onChange={(e) => updateSetting('payments', 'maxInstallments', parseInt(e.target.value) || 1)}
                 />
               </div>
+              
+              <Button onClick={() => handleSaveSettings('payments')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações de Pagamento
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -255,9 +364,8 @@ export default function AdminSettings() {
                   <Label htmlFor="supportEmail">Email de Suporte</Label>
                   <Input
                     id="supportEmail"
-                    name="supportEmail"
-                    value={settings.supportEmail}
-                    onChange={handleInputChange}
+                    value={settings.notifications.supportEmail}
+                    onChange={(e) => updateSetting('notifications', 'supportEmail', e.target.value)}
                     type="email"
                   />
                 </div>
@@ -265,9 +373,8 @@ export default function AdminSettings() {
                   <Label htmlFor="notificationEmail">Email de Notificações</Label>
                   <Input
                     id="notificationEmail"
-                    name="notificationEmail"
-                    value={settings.notificationEmail}
-                    onChange={handleInputChange}
+                    value={settings.notifications.notificationEmail}
+                    onChange={(e) => updateSetting('notifications', 'notificationEmail', e.target.value)}
                     type="email"
                   />
                 </div>
@@ -278,8 +385,8 @@ export default function AdminSettings() {
                   <Label htmlFor="enableEmailNotifications">Notificações por Email</Label>
                   <Switch
                     id="enableEmailNotifications"
-                    checked={settings.enableEmailNotifications}
-                    onCheckedChange={(checked) => handleSwitchChange('enableEmailNotifications', checked)}
+                    checked={settings.notifications.enableEmailNotifications}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'enableEmailNotifications', checked)}
                   />
                 </div>
                 
@@ -287,19 +394,16 @@ export default function AdminSettings() {
                   <Label htmlFor="enableSmsNotifications">Notificações por SMS</Label>
                   <Switch
                     id="enableSmsNotifications"
-                    checked={settings.enableSmsNotifications}
-                    onCheckedChange={(checked) => handleSwitchChange('enableSmsNotifications', checked)}
+                    checked={settings.notifications.enableSmsNotifications}
+                    onCheckedChange={(checked) => updateSetting('notifications', 'enableSmsNotifications', checked)}
                   />
                 </div>
               </div>
               
-              <div>
-                <Label>Template de Email Padrão</Label>
-                <Textarea
-                  placeholder="Digite o template de email padrão..."
-                  className="min-h-[150px]"
-                />
-              </div>
+              <Button onClick={() => handleSaveSettings('notifications')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações de Notificação
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -316,10 +420,9 @@ export default function AdminSettings() {
                   <Label htmlFor="maxUploadSize">Tamanho Máximo de Upload (MB)</Label>
                   <Input
                     id="maxUploadSize"
-                    name="maxUploadSize"
                     type="number"
-                    value={settings.maxUploadSize}
-                    onChange={handleInputChange}
+                    value={settings.security.maxUploadSize}
+                    onChange={(e) => updateSetting('security', 'maxUploadSize', parseInt(e.target.value) || 5)}
                     className="w-[200px]"
                   />
                 </div>
@@ -327,61 +430,27 @@ export default function AdminSettings() {
                   <Label htmlFor="sessionTimeout">Timeout de Sessão (minutos)</Label>
                   <Input
                     id="sessionTimeout"
-                    name="sessionTimeout"
                     type="number"
-                    value={settings.sessionTimeout}
-                    onChange={handleInputChange}
+                    value={settings.security.sessionTimeout}
+                    onChange={(e) => updateSetting('security', 'sessionTimeout', parseInt(e.target.value) || 30)}
                     className="w-[200px]"
                   />
                 </div>
               </div>
               
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="passwordMinLength">Comprimento Mínimo de Senha</Label>
-                  <Input
-                    id="passwordMinLength"
-                    type="number"
-                    defaultValue={8}
-                    className="w-[200px]"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="maxLoginAttempts">Máximo de Tentativas de Login</Label>
-                  <Input
-                    id="maxLoginAttempts"
-                    type="number"
-                    defaultValue={5}
-                    className="w-[200px]"
-                  />
-                </div>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="twoFactorEnabled">Autenticação de Dois Fatores</Label>
+                <Switch
+                  id="twoFactorEnabled"
+                  checked={settings.security.twoFactorEnabled}
+                  onCheckedChange={(checked) => updateSetting('security', 'twoFactorEnabled', checked)}
+                />
               </div>
               
-              <div>
-                <h3 className="font-medium mb-4">reCAPTCHA</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="recaptchaSiteKey">Site Key</Label>
-                    <Input
-                      id="recaptchaSiteKey"
-                      name="recaptchaSiteKey"
-                      value={settings.recaptchaSiteKey}
-                      onChange={handleInputChange}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="recaptchaSecretKey">Secret Key</Label>
-                    <Input
-                      id="recaptchaSecretKey"
-                      name="recaptchaSecretKey"
-                      value={settings.recaptchaSecretKey}
-                      onChange={handleInputChange}
-                      type="password"
-                    />
-                  </div>
-                </div>
-              </div>
+              <Button onClick={() => handleSaveSettings('security')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações de Segurança
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
@@ -397,65 +466,43 @@ export default function AdminSettings() {
                 <Label htmlFor="googleAnalyticsId">Google Analytics ID</Label>
                 <Input
                   id="googleAnalyticsId"
-                  name="googleAnalyticsId"
-                  value={settings.googleAnalyticsId}
-                  onChange={handleInputChange}
+                  value={settings.integrations.googleAnalyticsId}
+                  onChange={(e) => updateSetting('integrations', 'googleAnalyticsId', e.target.value)}
                   placeholder="UA-XXXXXX-X ou G-XXXXXXXX"
                 />
               </div>
               
               <div>
-                <h3 className="font-medium mb-4">APIs Externas</h3>
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">Integração com Farmácias</h4>
-                      <p className="text-sm text-gray-500">Conexão com rede de farmácias parceiras</p>
-                    </div>
-                    <Switch
-                      checked={false}
-                      onCheckedChange={() => {}}
+                <h3 className="font-medium mb-4">reCAPTCHA</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="recaptchaSiteKey">Site Key</Label>
+                    <Input
+                      id="recaptchaSiteKey"
+                      value={settings.integrations.recaptchaSiteKey}
+                      onChange={(e) => updateSetting('integrations', 'recaptchaSiteKey', e.target.value)}
                     />
                   </div>
-                  
-                  <div className="flex items-center justify-between p-4 border rounded-lg">
-                    <div>
-                      <h4 className="font-medium">Integração com Convênios</h4>
-                      <p className="text-sm text-gray-500">Conexão com operadoras de saúde</p>
-                    </div>
-                    <Switch
-                      checked={false}
-                      onCheckedChange={() => {}}
+                  <div>
+                    <Label htmlFor="recaptchaSecretKey">Secret Key</Label>
+                    <Input
+                      id="recaptchaSecretKey"
+                      value={settings.integrations.recaptchaSecretKey}
+                      onChange={(e) => updateSetting('integrations', 'recaptchaSecretKey', e.target.value)}
+                      type="password"
                     />
                   </div>
                 </div>
               </div>
               
-              <div>
-                <h3 className="font-medium mb-4">Webhooks</h3>
-                <div className="space-y-4">
-                  <div>
-                    <Label>URL de Webhook para Novos Pedidos</Label>
-                    <Input placeholder="https://seu-site.com/webhooks/orders" />
-                  </div>
-                  <div>
-                    <Label>URL de Webhook para Novas Receitas</Label>
-                    <Input placeholder="https://seu-site.com/webhooks/prescriptions" />
-                  </div>
-                </div>
-              </div>
+              <Button onClick={() => handleSaveSettings('integrations')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações de Integração
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Save Button */}
-      <div className="fixed bottom-6 right-6">
-        <Button onClick={handleSaveSettings} size="lg">
-          <Save className="h-4 w-4 mr-2" />
-          Salvar Configurações
-        </Button>
-      </div>
     </div>
   );
 }

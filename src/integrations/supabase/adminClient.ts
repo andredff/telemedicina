@@ -1,26 +1,16 @@
 // Admin client for Supabase with additional admin functionalities
-import { createClient } from '@supabase/supabase-js';
-import type { Database } from './types';
+import { supabase } from './client';
 import { logger } from "@/lib/logger";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-
-// Check if Supabase is configured
-const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY);
 const CAN_USE_MOCKS = import.meta.env.DEV;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
-export const supabaseAdmin = isSupabaseConfigured 
-  ? createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
-      auth: {
-        storage: localStorage,
-        persistSession: true,
-        autoRefreshToken: true,
-      }
-    })
-  : null;
+// Use the same supabase client to share auth session
+export const supabaseAdmin = supabase;
 if (import.meta.env.DEV) {
-  logger.info("[AdminClient] init", { isSupabaseConfigured, hasClient: Boolean(supabaseAdmin) });
+  logger.info("[AdminClient] init - using shared supabase client", { isSupabaseConfigured });
 }
 
 // RBAC (Role-Based Access Control) utility functions
@@ -512,6 +502,332 @@ export const AdminQueries = {
             totalPrescriptions: 0,
             activeSubscriptions: 0
           };
+    }
+  },
+
+  // =====================
+  // Blog Posts
+  // =====================
+  async getAllBlogPosts() {
+    if (!supabaseAdmin) {
+      return { data: [], error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('blog_posts')
+        .select('*, profiles(full_name)')
+        .order('created_at', { ascending: false });
+      
+      if (result.error) return { data: [], error: result.error };
+      
+      const posts = (result.data || []).map((post: Record<string, unknown>) => ({
+        ...post,
+        author: (post.profiles as { full_name?: string })?.full_name || 'Admin'
+      }));
+      
+      return { data: posts, error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error fetching blog posts", error);
+      return { data: [], error: error as Error };
+    }
+  },
+
+  async createBlogPost(post: {
+    title: string;
+    slug: string;
+    content?: string;
+    excerpt?: string;
+    category: string;
+    status: string;
+    author_id?: string;
+  }) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('blog_posts')
+        .insert(post)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error creating blog post", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  async updateBlogPost(id: string, updates: Partial<{
+    title: string;
+    slug: string;
+    content: string;
+    excerpt: string;
+    category: string;
+    status: string;
+    published_at: string;
+  }>) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('blog_posts')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error updating blog post", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  async deleteBlogPost(id: string) {
+    if (!supabaseAdmin) {
+      return { error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('blog_posts')
+        .delete()
+        .eq('id', id);
+      
+      return { error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error deleting blog post", error);
+      return { error: error as Error };
+    }
+  },
+
+  // =====================
+  // Support Tickets
+  // =====================
+  async getAllTickets() {
+    if (!supabaseAdmin) {
+      return { data: [], error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('support_tickets')
+        .select('*, profiles(full_name, email)')
+        .order('created_at', { ascending: false });
+      
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error fetching tickets", error);
+      return { data: [], error: error as Error };
+    }
+  },
+
+  async updateTicketStatus(id: string, status: string, assignedTo?: string) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const updates: Record<string, unknown> = { status };
+      if (assignedTo) updates.assigned_to = assignedTo;
+      if (status === 'closed') updates.resolved_at = new Date().toISOString();
+      
+      const result = await supabaseAdmin
+        .from('support_tickets')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error updating ticket", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  async getTicketMessages(ticketId: string) {
+    if (!supabaseAdmin) {
+      return { data: [], error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('support_ticket_messages')
+        .select('*, profiles(full_name)')
+        .eq('ticket_id', ticketId)
+        .order('created_at', { ascending: true });
+      
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error fetching ticket messages", error);
+      return { data: [], error: error as Error };
+    }
+  },
+
+  async addTicketMessage(ticketId: string, message: string, senderId?: string, senderType: 'customer' | 'support' | 'system' = 'support') {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('support_ticket_messages')
+        .insert({
+          ticket_id: ticketId,
+          message,
+          sender_id: senderId,
+          sender_type: senderType
+        })
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error adding ticket message", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  // =====================
+  // Site Settings
+  // =====================
+  async getSettings() {
+    if (!supabaseAdmin) {
+      return { data: [], error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('site_settings')
+        .select('*');
+      
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error fetching settings", error);
+      return { data: [], error: error as Error };
+    }
+  },
+
+  async updateSetting(key: string, value: Record<string, unknown>, updatedBy?: string) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('site_settings')
+        .update({ value, updated_by: updatedBy })
+        .eq('key', key)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error updating setting", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  // =====================
+  // Knowledge Base Articles
+  // =====================
+  async getAllKnowledgeArticles() {
+    if (!supabaseAdmin) {
+      return { data: [], error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('knowledge_articles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (result.error) return { data: [], error: result.error };
+      return { data: result.data || [], error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error fetching knowledge articles", error);
+      return { data: [], error: error as Error };
+    }
+  },
+
+  async createKnowledgeArticle(article: {
+    title: string;
+    slug: string;
+    content: string;
+    excerpt?: string;
+    category?: string;
+    status?: string;
+    author_id?: string;
+  }) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('knowledge_articles')
+        .insert(article)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error creating knowledge article", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  async updateKnowledgeArticle(id: string, updates: Partial<{
+    title: string;
+    slug: string;
+    content: string;
+    excerpt: string;
+    category: string;
+    status: string;
+  }>) {
+    if (!supabaseAdmin) {
+      return { data: null, error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('knowledge_articles')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+      
+      return { data: result.data, error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error updating knowledge article", error);
+      return { data: null, error: error as Error };
+    }
+  },
+
+  async deleteKnowledgeArticle(id: string) {
+    if (!supabaseAdmin) {
+      return { error: new Error("Supabase admin client not configured") };
+    }
+    
+    try {
+      const result = await supabaseAdmin
+        .from('knowledge_articles')
+        .delete()
+        .eq('id', id);
+      
+      return { error: result.error };
+    } catch (error) {
+      logger.error("[AdminQueries] Error deleting knowledge article", error);
+      return { error: error as Error };
     }
   }
 };

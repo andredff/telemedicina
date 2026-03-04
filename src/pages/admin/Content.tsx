@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,58 +32,71 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen, Eye } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen, Eye, Loader2 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface BlogPost {
   id: string;
   title: string;
+  slug: string;
   category: string;
   status: string;
   author: string;
-  date: string;
+  author_id?: string;
+  created_at: string;
+  published_at?: string;
   views: number;
   content?: string;
+  excerpt?: string;
 }
 
 export default function AdminContent() {
-  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([
-    {
-      id: '1',
-      title: 'Como cuidar da saúde mental durante a pandemia',
-      category: 'Saúde Mental',
-      status: 'published',
-      author: 'Dr. Carlos Silva',
-      date: '2023-05-15',
-      views: 1245,
-      content: 'Conteúdo do artigo sobre saúde mental...'
-    },
-    {
-      id: '2',
-      title: 'Os benefícios da telemedicina para pacientes crônicos',
-      category: 'Telemedicina',
-      status: 'draft',
-      author: 'Dra. Ana Souza',
-      date: '2023-06-22',
-      views: 872,
-      content: 'Conteúdo do artigo sobre telemedicina...'
-    },
-    {
-      id: '3',
-      title: 'Dicas para uma alimentação saudável no inverno',
-      category: 'Nutrição',
-      status: 'published',
-      author: 'Nut. Maria Oliveira',
-      date: '2023-07-10',
-      views: 1563,
-      content: 'Conteúdo do artigo sobre nutrição...'
-    }
-  ]);
-
+  const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [editingPost, setEditingPost] = useState<BlogPost | null>(null);
+  const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+
+  const fetchPosts = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await AdminQueries.getAllBlogPosts();
+      
+      if (error) throw error;
+      
+      const formattedPosts = (data || []).map((post: Record<string, unknown>) => ({
+        id: post.id as string,
+        title: post.title as string,
+        slug: post.slug as string,
+        category: post.category as string,
+        status: post.status as string,
+        author: (post.author as string) || 'Admin',
+        author_id: post.author_id as string,
+        created_at: post.created_at as string,
+        published_at: post.published_at as string,
+        views: (post.views as number) || 0,
+        content: post.content as string,
+        excerpt: post.excerpt as string,
+      }));
+      
+      setBlogPosts(formattedPosts);
+    } catch (error) {
+      logger.error('Error fetching blog posts:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao carregar posts',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
 
   const filteredPosts = blogPosts.filter(post => {
     const matchesSearch = post.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -92,47 +107,104 @@ export default function AdminContent() {
   });
 
   const handleEditPost = (post: BlogPost) => {
-    setEditingPost(post);
+    setEditingPost({ ...post });
     setIsDialogOpen(true);
   };
 
-  const handleSavePost = () => {
-    if (!editingPost) return;
-    
-    if (editingPost.id) {
-      // Update existing post
-      setBlogPosts(blogPosts.map(post => 
-        post.id === editingPost.id ? editingPost : post
-      ));
-      toast({
-        title: 'Sucesso',
-        description: 'Post atualizado com sucesso'
-      });
-    } else {
-      // Add new post
-      const newPost = {
-        ...editingPost,
-        id: (blogPosts.length + 1).toString(),
-        date: new Date().toISOString().split('T')[0],
-        views: 0
-      };
-      setBlogPosts([...blogPosts, newPost]);
-      toast({
-        title: 'Sucesso',
-        description: 'Novo post criado com sucesso'
-      });
-    }
-    
-    setIsDialogOpen(false);
-    setEditingPost(null);
+  const generateSlug = (title: string): string => {
+    return title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '');
   };
 
-  const handleDeletePost = (postId: string) => {
-    setBlogPosts(blogPosts.filter(post => post.id !== postId));
-    toast({
-      title: 'Sucesso',
-      description: 'Post excluído com sucesso'
-    });
+  const handleSavePost = async () => {
+    if (!editingPost || !editingPost.title || !editingPost.category) {
+      toast({
+        title: 'Erro',
+        description: 'Preencha todos os campos obrigatórios',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setSaving(true);
+    try {
+      const slug = editingPost.slug || generateSlug(editingPost.title);
+      
+      if (editingPost.id) {
+        // Update existing post
+        const { error } = await AdminQueries.updateBlogPost(editingPost.id, {
+          title: editingPost.title,
+          slug,
+          content: editingPost.content,
+          excerpt: editingPost.excerpt,
+          category: editingPost.category,
+          status: editingPost.status,
+          published_at: editingPost.status === 'published' ? new Date().toISOString() : undefined,
+        });
+        
+        if (error) throw error;
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Post atualizado com sucesso'
+        });
+      } else {
+        // Create new post
+        const { error } = await AdminQueries.createBlogPost({
+          title: editingPost.title,
+          slug,
+          content: editingPost.content,
+          excerpt: editingPost.excerpt,
+          category: editingPost.category,
+          status: editingPost.status || 'draft',
+        });
+        
+        if (error) throw error;
+        
+        toast({
+          title: 'Sucesso',
+          description: 'Novo post criado com sucesso'
+        });
+      }
+      
+      setIsDialogOpen(false);
+      setEditingPost(null);
+      fetchPosts();
+    } catch (error) {
+      logger.error('Error saving post:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao salvar post',
+        variant: 'destructive'
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    try {
+      const { error } = await AdminQueries.deleteBlogPost(postId);
+      
+      if (error) throw error;
+      
+      setBlogPosts(blogPosts.filter(post => post.id !== postId));
+      toast({
+        title: 'Sucesso',
+        description: 'Post excluído com sucesso'
+      });
+    } catch (error) {
+      logger.error('Error deleting post:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao excluir post',
+        variant: 'destructive'
+      });
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -153,16 +225,22 @@ export default function AdminContent() {
     );
   };
 
-  const buildEmptyPost = (): BlogPost => ({
-    id: '',
+  const buildEmptyPost = (): Partial<BlogPost> => ({
     title: '',
+    slug: '',
     category: '',
     status: 'draft',
-    author: '',
-    date: new Date().toISOString().split('T')[0],
-    views: 0,
     content: '',
+    excerpt: '',
   });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -258,17 +336,17 @@ export default function AdminContent() {
                   <SelectContent>
                     <SelectItem value="draft">Rascunho</SelectItem>
                     <SelectItem value="published">Publicado</SelectItem>
-                    <SelectItem value="scheduled">Agendado</SelectItem>
+                    <SelectItem value="archived">Arquivado</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               
               <div>
-                <label className="block text-sm font-medium mb-2">Autor</label>
+                <label className="block text-sm font-medium mb-2">Resumo</label>
                 <Input
-                  value={editingPost?.author || ''}
-                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, author: e.target.value } : null)}
-                  placeholder="Nome do autor"
+                  value={editingPost?.excerpt || ''}
+                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, excerpt: e.target.value } : null)}
+                  placeholder="Breve descrição do post"
                 />
               </div>
               
@@ -282,8 +360,15 @@ export default function AdminContent() {
                 />
               </div>
               
-              <Button onClick={handleSavePost} className="w-full">
-                Salvar Post
+              <Button onClick={handleSavePost} className="w-full" disabled={saving}>
+                {saving ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Salvar Post'
+                )}
               </Button>
             </div>
           </DialogContent>
@@ -316,7 +401,7 @@ export default function AdminContent() {
                   <TableCell>
                     <div className="font-medium">{post.title}</div>
                     <div className="text-sm text-gray-500">
-                      {new Date(post.date).toLocaleDateString('pt-BR', {
+                      {new Date(post.created_at).toLocaleDateString('pt-BR', {
                         day: '2-digit',
                         month: '2-digit',
                         year: 'numeric'

@@ -7,15 +7,27 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 DO $$
 DECLARE
   admin_id uuid := gen_random_uuid();
+  novoadmin_id uuid := gen_random_uuid();
   doctor1_id uuid := gen_random_uuid();
   doctor2_id uuid := gen_random_uuid();
   support1_id uuid := gen_random_uuid();
   support2_id uuid := gen_random_uuid();
 BEGIN
-  -- Admin user
+  -- Admin user (legacy)
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
   VALUES (admin_id, 'authenticated', 'authenticated', 'admin@novita.com', crypt('Admin#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Admin Novita"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
+
+  -- Novo Admin user (primary admin account)
+  INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+  VALUES (novoadmin_id, 'authenticated', 'authenticated', 'novoadmin@novita.com', crypt('Admin123!', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Novo Admin Novita"}'::jsonb, now(), now())
+  ON CONFLICT DO NOTHING;
+  
+  INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
+  VALUES (novoadmin_id::text, novoadmin_id, jsonb_build_object('sub', novoadmin_id::text, 'email', 'novoadmin@novita.com', 'email_verified', true), 'email', now(), now(), now())
+  ON CONFLICT DO NOTHING;
+
+  UPDATE public.profiles SET full_name = 'Novo Admin Novita', role = 'admin', address = 'Av. Principal, 1001', city = 'Brasilia', state = 'DF', zip_code = '70000-000' WHERE id = novoadmin_id;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
   VALUES (admin_id::text, admin_id, jsonb_build_object('sub', admin_id::text, 'email', 'admin@novita.com', 'email_verified', true), 'email', now(), now(), now())

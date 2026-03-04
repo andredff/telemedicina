@@ -1,4 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { supabase } from '@/integrations/supabase/client';
+import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -30,48 +33,282 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail, Save, BookOpen } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail, Save, BookOpen, Loader2, RefreshCw, Edit, Trash2, Eye } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
-export default function AdminSupport() {
-  const [tickets, setTickets] = useState([
-    {
-      id: '1',
-      subject: 'Problema com login',
-      customer: 'joao.silva@email.com',
-      status: 'open',
-      priority: 'medium',
-      createdAt: '2023-07-15T10:30:00',
-      lastUpdate: '2023-07-15T14:45:00'
-    },
-    {
-      id: '2',
-      subject: 'Receita não encontrada',
-      customer: 'maria.oliveira@email.com',
-      status: 'in_progress',
-      priority: 'high',
-      createdAt: '2023-07-14T09:15:00',
-      lastUpdate: '2023-07-14T16:20:00'
-    },
-    {
-      id: '3',
-      subject: 'Problema com pagamento',
-      customer: 'carlos.santos@email.com',
-      status: 'closed',
-      priority: 'low',
-      createdAt: '2023-07-13T14:20:00',
-      lastUpdate: '2023-07-13T18:30:00'
-    }
-  ]);
+interface Ticket {
+  id: string;
+  ticket_number: string;
+  subject: string;
+  description?: string;
+  user_email: string;
+  user_name?: string;
+  status: string;
+  priority: string;
+  category?: string;
+  created_at: string;
+  updated_at: string;
+}
 
+interface KnowledgeArticle {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  excerpt?: string;
+  category: string;
+  status: string;
+  views: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export default function AdminSupport() {
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
+  
+  // Knowledge Base state
+  const [articles, setArticles] = useState<KnowledgeArticle[]>([]);
+  const [articlesLoading, setArticlesLoading] = useState(false);
+  const [articleSearchTerm, setArticleSearchTerm] = useState('');
+  const [showArticleDialog, setShowArticleDialog] = useState(false);
+  const [editingArticle, setEditingArticle] = useState<KnowledgeArticle | null>(null);
+  const [articleForm, setArticleForm] = useState({
+    title: '',
+    content: '',
+    excerpt: '',
+    category: 'geral',
+    status: 'draft',
+  });
+  const [savingArticle, setSavingArticle] = useState(false);
+
+  const fetchTickets = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await AdminQueries.getAllTickets();
+      
+      if (error) throw error;
+      
+      const formattedTickets = (data || []).map((ticket: Record<string, unknown>) => ({
+        id: ticket.id as string,
+        ticket_number: ticket.ticket_number as string,
+        subject: ticket.subject as string,
+        description: ticket.description as string,
+        user_email: ticket.user_email as string,
+        user_name: ticket.user_name as string,
+        status: ticket.status as string,
+        priority: ticket.priority as string,
+        category: ticket.category as string,
+        created_at: ticket.created_at as string,
+        updated_at: ticket.updated_at as string,
+      }));
+      
+      setTickets(formattedTickets);
+    } catch (error) {
+      logger.error('Error fetching tickets:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao carregar tickets',
+        variant: 'destructive'
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Knowledge Base functions
+  const fetchArticles = async () => {
+    try {
+      setArticlesLoading(true);
+      const { data, error } = await AdminQueries.getAllKnowledgeArticles();
+      
+      if (error) throw error;
+      
+      const formattedArticles = (data || []).map((article: Record<string, unknown>) => ({
+        id: article.id as string,
+        title: article.title as string,
+        slug: article.slug as string,
+        content: article.content as string,
+        excerpt: article.excerpt as string,
+        category: article.category as string,
+        status: article.status as string,
+        views: article.views as number,
+        created_at: article.created_at as string,
+        updated_at: article.updated_at as string,
+      }));
+      
+      setArticles(formattedArticles);
+    } catch (error) {
+      logger.error('Error fetching articles:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao carregar artigos',
+        variant: 'destructive'
+      });
+    } finally {
+      setArticlesLoading(false);
+    }
+  };
+
+  const generateSlug = (title: string) => {
+    return title
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/(^-|-$)/g, '');
+  };
+
+  const handleOpenArticleDialog = (article?: KnowledgeArticle) => {
+    if (article) {
+      setEditingArticle(article);
+      setArticleForm({
+        title: article.title,
+        content: article.content,
+        excerpt: article.excerpt || '',
+        category: article.category,
+        status: article.status,
+      });
+    } else {
+      setEditingArticle(null);
+      setArticleForm({
+        title: '',
+        content: '',
+        excerpt: '',
+        category: 'geral',
+        status: 'draft',
+      });
+    }
+    setShowArticleDialog(true);
+  };
+
+  const handleSaveArticle = async () => {
+    if (!articleForm.title || !articleForm.content) {
+      toast({
+        title: 'Erro',
+        description: 'Título e conteúdo são obrigatórios',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    setSavingArticle(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (editingArticle) {
+        // Update existing article
+        const { error } = await AdminQueries.updateKnowledgeArticle(editingArticle.id, {
+          title: articleForm.title,
+          slug: generateSlug(articleForm.title),
+          content: articleForm.content,
+          excerpt: articleForm.excerpt,
+          category: articleForm.category,
+          status: articleForm.status,
+        });
+        
+        if (error) throw error;
+        
+        toast({ title: 'Sucesso', description: 'Artigo atualizado!' });
+      } else {
+        // Create new article
+        const { error } = await AdminQueries.createKnowledgeArticle({
+          title: articleForm.title,
+          slug: generateSlug(articleForm.title),
+          content: articleForm.content,
+          excerpt: articleForm.excerpt,
+          category: articleForm.category,
+          status: articleForm.status,
+          author_id: user?.id,
+        });
+        
+        if (error) throw error;
+        
+        toast({ title: 'Sucesso', description: 'Artigo criado!' });
+      }
+      
+      setShowArticleDialog(false);
+      fetchArticles();
+    } catch (error) {
+      logger.error('Error saving article:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao salvar artigo',
+        variant: 'destructive'
+      });
+    } finally {
+      setSavingArticle(false);
+    }
+  };
+
+  const handleDeleteArticle = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este artigo?')) return;
+    
+    try {
+      const { error } = await AdminQueries.deleteKnowledgeArticle(id);
+      
+      if (error) throw error;
+      
+      setArticles(articles.filter(a => a.id !== id));
+      toast({ title: 'Sucesso', description: 'Artigo excluído!' });
+    } catch (error) {
+      logger.error('Error deleting article:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao excluir artigo',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const filteredArticles = articles.filter(article =>
+    article.title.toLowerCase().includes(articleSearchTerm.toLowerCase()) ||
+    article.excerpt?.toLowerCase().includes(articleSearchTerm.toLowerCase())
+  );
+
+  useEffect(() => {
+    fetchTickets();
+    fetchArticles();
+  }, []);
+
+  const handleUpdateStatus = async (ticketId: string, newStatus: string) => {
+    try {
+      const { error } = await AdminQueries.updateTicketStatus(ticketId, newStatus);
+      
+      if (error) throw error;
+      
+      setTickets(tickets.map(ticket => 
+        ticket.id === ticketId ? { ...ticket, status: newStatus } : ticket
+      ));
+      
+      toast({
+        title: 'Sucesso',
+        description: 'Status atualizado com sucesso'
+      });
+    } catch (error) {
+      logger.error('Error updating ticket status:', error);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao atualizar status',
+        variant: 'destructive'
+      });
+    }
+  };
 
   const filteredTickets = tickets.filter(ticket => {
     const matchesSearch = ticket.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         ticket.id.includes(searchTerm);
+                         ticket.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         ticket.ticket_number.includes(searchTerm);
     const matchesStatus = statusFilter === 'all' || ticket.status === statusFilter;
     const matchesPriority = priorityFilter === 'all' || ticket.priority === priorityFilter;
     return matchesSearch && matchesStatus && matchesPriority;
@@ -176,18 +413,23 @@ export default function AdminSupport() {
                 </SelectContent>
               </Select>
               
-              <Button>
-                <Plus className="h-4 w-4 mr-2" />
-                Novo Ticket
+              <Button onClick={fetchTickets}>
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Atualizar
               </Button>
             </div>
 
             {/* Tickets Table */}
+            {loading ? (
+              <div className="flex items-center justify-center h-64">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : (
             <div className="border rounded-lg">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>ID</TableHead>
+                    <TableHead>Ticket</TableHead>
                     <TableHead>Assunto</TableHead>
                     <TableHead>Cliente</TableHead>
                     <TableHead>Status</TableHead>
@@ -206,18 +448,36 @@ export default function AdminSupport() {
                   ) : (
                     filteredTickets.map((ticket) => (
                       <TableRow key={ticket.id}>
-                        <TableCell className="font-mono text-sm">#{ticket.id}</TableCell>
+                        <TableCell className="font-mono text-sm">{ticket.ticket_number}</TableCell>
                         <TableCell>
                           <div className="font-medium">{ticket.subject}</div>
                           <div className="text-sm text-gray-500">
-                            Criado: {new Date(ticket.createdAt).toLocaleDateString('pt-BR')}
+                            Criado: {new Date(ticket.created_at).toLocaleDateString('pt-BR')}
                           </div>
                         </TableCell>
-                        <TableCell>{ticket.customer}</TableCell>
-                        <TableCell>{getStatusBadge(ticket.status)}</TableCell>
+                        <TableCell>
+                          <div>{ticket.user_name || 'N/A'}</div>
+                          <div className="text-sm text-gray-500">{ticket.user_email}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Select
+                            value={ticket.status}
+                            onValueChange={(value) => handleUpdateStatus(ticket.id, value)}
+                          >
+                            <SelectTrigger className="w-[140px]">
+                              {getStatusBadge(ticket.status)}
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="open">Aberto</SelectItem>
+                              <SelectItem value="in_progress">Em Progresso</SelectItem>
+                              <SelectItem value="pending">Pendente</SelectItem>
+                              <SelectItem value="closed">Fechado</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </TableCell>
                         <TableCell>{getPriorityBadge(ticket.priority)}</TableCell>
                         <TableCell>
-                          {new Date(ticket.lastUpdate).toLocaleString('pt-BR', {
+                          {new Date(ticket.updated_at).toLocaleString('pt-BR', {
                             day: '2-digit',
                             month: '2-digit',
                             year: 'numeric',
@@ -236,6 +496,7 @@ export default function AdminSupport() {
                 </TableBody>
               </Table>
             </div>
+            )}
 
             {/* Summary */}
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
@@ -296,33 +557,158 @@ export default function AdminSupport() {
                     <Input
                       placeholder="Buscar artigos..."
                       className="pl-10"
+                      value={articleSearchTerm}
+                      onChange={(e) => setArticleSearchTerm(e.target.value)}
                     />
                   </div>
-                  <Button>
+                  <Button onClick={() => fetchArticles()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Atualizar
+                  </Button>
+                  <Button onClick={() => handleOpenArticleDialog()}>
                     <Plus className="h-4 w-4 mr-2" />
                     Novo Artigo
                   </Button>
                 </div>
                 
-                <div className="space-y-2">
-                  <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium">Como criar uma conta na Novità</h3>
-                    <p className="text-sm text-gray-500">Guia passo a passo para novos usuários</p>
+                {articlesLoading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
-                  
-                  <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium">Como agendar uma consulta</h3>
-                    <p className="text-sm text-gray-500">Processo para agendamento de consultas médicas</p>
+                ) : filteredArticles.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    Nenhum artigo encontrado
                   </div>
-                  
-                  <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer">
-                    <h3 className="font-medium">Problemas com login</h3>
-                    <p className="text-sm text-gray-500">Soluções para problemas comuns de autenticação</p>
+                ) : (
+                  <div className="space-y-2">
+                    {filteredArticles.map((article) => (
+                      <div 
+                        key={article.id} 
+                        className="p-4 border rounded-lg hover:bg-gray-50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-1">
+                              <h3 className="font-medium">{article.title}</h3>
+                              <span className={`text-xs px-2 py-0.5 rounded-full ${
+                                article.status === 'published' 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : article.status === 'draft'
+                                  ? 'bg-yellow-100 text-yellow-800'
+                                  : 'bg-gray-100 text-gray-800'
+                              }`}>
+                                {article.status === 'published' ? 'Publicado' : article.status === 'draft' ? 'Rascunho' : 'Arquivado'}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-500">{article.excerpt || 'Sem descrição'}</p>
+                            <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
+                              <span>Categoria: {article.category}</span>
+                              <span className="flex items-center gap-1">
+                                <Eye className="h-3 w-3" /> {article.views} visualizações
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={() => handleOpenArticleDialog(article)}>
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                            <Button variant="outline" size="sm" onClick={() => handleDeleteArticle(article.id)}>
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
             </CardContent>
           </Card>
+          
+          {/* Article Dialog */}
+          <Dialog open={showArticleDialog} onOpenChange={setShowArticleDialog}>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader>
+                <DialogTitle>{editingArticle ? 'Editar Artigo' : 'Novo Artigo'}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div>
+                  <Label htmlFor="articleTitle">Título</Label>
+                  <Input
+                    id="articleTitle"
+                    value={articleForm.title}
+                    onChange={(e) => setArticleForm({ ...articleForm, title: e.target.value })}
+                    placeholder="Título do artigo"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="articleExcerpt">Resumo</Label>
+                  <Input
+                    id="articleExcerpt"
+                    value={articleForm.excerpt}
+                    onChange={(e) => setArticleForm({ ...articleForm, excerpt: e.target.value })}
+                    placeholder="Breve descrição do artigo"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="articleCategory">Categoria</Label>
+                    <Select
+                      value={articleForm.category}
+                      onValueChange={(value) => setArticleForm({ ...articleForm, category: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Categoria" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="geral">Geral</SelectItem>
+                        <SelectItem value="conta">Conta</SelectItem>
+                        <SelectItem value="consultas">Consultas</SelectItem>
+                        <SelectItem value="pedidos">Pedidos</SelectItem>
+                        <SelectItem value="planos">Planos</SelectItem>
+                        <SelectItem value="pagamentos">Pagamentos</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="articleStatus">Status</Label>
+                    <Select
+                      value={articleForm.status}
+                      onValueChange={(value) => setArticleForm({ ...articleForm, status: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="draft">Rascunho</SelectItem>
+                        <SelectItem value="published">Publicado</SelectItem>
+                        <SelectItem value="archived">Arquivado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="articleContent">Conteúdo (HTML)</Label>
+                  <Textarea
+                    id="articleContent"
+                    value={articleForm.content}
+                    onChange={(e) => setArticleForm({ ...articleForm, content: e.target.value })}
+                    placeholder="<h2>Título</h2><p>Conteúdo do artigo...</p>"
+                    className="min-h-[200px] font-mono text-sm"
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowArticleDialog(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={handleSaveArticle} disabled={savingArticle}>
+                  {savingArticle ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* Templates Tab */}
@@ -442,56 +828,5 @@ export default function AdminSupport() {
         </TabsContent>
       </Tabs>
     </div>
-  );
-}
-
-// Helper components
-function Select({ children, value, onValueChange, defaultValue }: { children: React.ReactNode; value: string; onValueChange: (value: string) => void; defaultValue?: string }) {
-  return (
-    <div className="relative">
-      <select
-        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-        value={value}
-        onChange={(e) => onValueChange(e.target.value)}
-        defaultValue={defaultValue}
-      >
-        {children}
-      </select>
-    </div>
-  );
-}
-
-function SelectTrigger({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-      {children}
-    </div>
-  );
-}
-
-function SelectContent({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="absolute z-10 mt-1 w-full rounded-md bg-white shadow-lg border">
-      {children}
-    </div>
-  );
-}
-
-function SelectItem({ value, children }: { value: string; children: React.ReactNode }) {
-  return (
-    <div
-      className="px-4 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-      onClick={() => {
-        // This would be handled by the parent select
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function SelectValue({ placeholder }: { placeholder: string }) {
-  return (
-    <span className="text-gray-500">{placeholder}</span>
   );
 }

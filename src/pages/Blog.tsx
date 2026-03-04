@@ -1,38 +1,60 @@
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import PublicHeader from "@/components/layout/PublicHeader";
 import Footer from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Calendar, ArrowRight } from "lucide-react";
+import { Calendar, ArrowRight, Loader2 } from "lucide-react";
+
+interface BlogPost {
+  id: string;
+  title: string;
+  slug: string;
+  excerpt: string | null;
+  category: string;
+  created_at: string;
+  published_at: string | null;
+  featured_image: string | null;
+  views: number;
+}
 
 const Blog = () => {
   const navigate = useNavigate();
-  const posts = [
-    {
-      id: 1,
-      title: "Janeiro Branco: Cuidados com a Saúde Mental",
-      excerpt: "Descubra a importância de cuidar da saúde mental e como a telemedicina pode ajudar.",
-      category: "Saúde Mental",
-      date: "2024-01-15",
-      image: "https://images.unsplash.com/photo-1544027993-37dbfe43562a?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 2,
-      title: "5 Dicas para Manter a Imunidade em Alta",
-      excerpt: "Conheça hábitos simples que podem fortalecer seu sistema imunológico.",
-      category: "Bem-estar",
-      date: "2024-01-10",
-      image: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80"
-    },
-    {
-      id: 3,
-      title: "Telemedicina: O Futuro da Saúde",
-      excerpt: "Entenda como as consultas online estão transformando o atendimento médico.",
-      category: "Telemedicina",
-      date: "2024-01-05",
-      image: "https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80"
-    },
-  ];
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchPosts = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('blog_posts')
+          .select('id, title, slug, excerpt, category, created_at, published_at, featured_image, views')
+          .eq('status', 'published')
+          .order('published_at', { ascending: false });
+
+        if (error) throw error;
+        setPosts(data || []);
+      } catch (err) {
+        console.error('Erro ao carregar posts:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchPosts();
+  }, []);
+
+  // Imagens padrão por categoria
+  const getCategoryImage = (category: string) => {
+    const images: Record<string, string> = {
+      'Saúde Mental': 'https://images.unsplash.com/photo-1544027993-37dbfe43562a?auto=format&fit=crop&w=800&q=80',
+      'Nutrição': 'https://images.unsplash.com/photo-1498837167922-ddd27525d352?auto=format&fit=crop&w=800&q=80',
+      'Telemedicina': 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80',
+      'Bem-estar': 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=800&q=80',
+    };
+    return images[category] || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=800&q=80';
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -49,35 +71,51 @@ const Blog = () => {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {posts.map((post) => (
-              <Card 
-              key={post.id} 
-              className="bg-card border-border/50 hover:shadow-card transition-all cursor-pointer group overflow-hidden"
-              onClick={() => navigate(`/blog/${post.id}`)}
-            >
-                <div className="h-48 overflow-hidden">
-                  <img src={post.image} alt={post.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                </div>
-                <CardContent className="p-6 space-y-4">
-                  <Badge variant="secondary">{post.category}</Badge>
-                  <h3 className="text-xl font-heading font-semibold text-foreground group-hover:text-primary transition-colors">
-                    {post.title}
-                  </h3>
-                  <p className="text-muted-foreground text-sm">{post.excerpt}</p>
-                  <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      {new Date(post.date).toLocaleDateString("pt-BR")}
-                    </div>
-                    <span className="flex items-center gap-1 text-primary">
-                      Ler mais <ArrowRight className="h-4 w-4" />
-                    </span>
+          {loading ? (
+            <div className="flex justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : posts.length === 0 ? (
+            <div className="text-center py-12">
+              <p className="text-muted-foreground">Nenhum post publicado ainda.</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {posts.map((post) => (
+                <Card 
+                  key={post.id} 
+                  className="bg-card border-border/50 hover:shadow-card transition-all cursor-pointer group overflow-hidden"
+                  onClick={() => navigate(`/blog/${post.slug}`)}
+                >
+                  <div className="h-48 overflow-hidden">
+                    <img 
+                      src={post.featured_image || getCategoryImage(post.category)} 
+                      alt={post.title} 
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+                    />
                   </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+                  <CardContent className="p-6 space-y-4">
+                    <Badge variant="secondary">{post.category}</Badge>
+                    <h3 className="text-xl font-heading font-semibold text-foreground group-hover:text-primary transition-colors">
+                      {post.title}
+                    </h3>
+                    <p className="text-muted-foreground text-sm line-clamp-2">
+                      {post.excerpt || 'Leia mais sobre este artigo...'}
+                    </p>
+                    <div className="flex items-center justify-between text-sm text-muted-foreground">
+                      <div className="flex items-center gap-2">
+                        <Calendar className="h-4 w-4" />
+                        {new Date(post.published_at || post.created_at).toLocaleDateString("pt-BR")}
+                      </div>
+                      <span className="flex items-center gap-1 text-primary">
+                        Ler mais <ArrowRight className="h-4 w-4" />
+                      </span>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
