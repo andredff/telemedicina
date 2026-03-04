@@ -23,6 +23,7 @@ const signupSchema = z.object({
   password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
   cpf: z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "CPF inválido" }),
   phone: z.string().min(10, { message: "Telefone inválido" }).max(20),
+  birthDate: z.string().min(10, { message: "Data de nascimento é obrigatória" }),
 });
 
 const forgotPasswordSchema = z.object({
@@ -58,6 +59,7 @@ const Auth = () => {
   const [forgotPasswordSent, setForgotPasswordSent] = useState(false);
   const [cpfValue, setCpfValue] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
+  const [birthDateValue, setBirthDateValue] = useState("");
 
   const selectedPlan = searchParams.get("plan");
   const consultationType = searchParams.get("type");
@@ -239,9 +241,10 @@ const Auth = () => {
     const password = formData.get("password") as string;
     const cpf = formData.get("cpf") as string;
     const phone = formData.get("phone") as string;
+    const birthDate = formData.get("birthDate") as string;
 
     // Validate input
-    const result = signupSchema.safeParse({ name, email, password, cpf, phone });
+    const result = signupSchema.safeParse({ name, email, password, cpf, phone, birthDate });
     if (!result.success) {
       toast({
         title: "Dados inválidos",
@@ -264,6 +267,7 @@ const Auth = () => {
             full_name: result.data.name,
             cpf: result.data.cpf,
             phone: result.data.phone,
+            birth_date: result.data.birthDate,
           }
         }
       });
@@ -543,6 +547,18 @@ const Auth = () => {
                           required
                           value={cpfValue}
                           onChange={(e) => setCpfValue(formatCPF(e.target.value))}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="birthDate">Data de Nascimento</Label>
+                        <Input
+                          id="birthDate"
+                          name="birthDate"
+                          type="date"
+                          required
+                          value={birthDateValue}
+                          onChange={(e) => setBirthDateValue(e.target.value)}
+                          max={new Date().toISOString().split('T')[0]}
                         />
                       </div>
                       <div className="space-y-2">

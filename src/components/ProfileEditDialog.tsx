@@ -22,6 +22,7 @@ interface ProfileEditDialogProps {
     email: string;
     phone?: string;
     cpf?: string;
+    birth_date?: string;
   };
   userId: string;
   onSuccess: () => void;
@@ -41,6 +42,7 @@ export function ProfileEditDialog({
     email: currentData.email || "",
     phone: currentData.phone || "",
     cpf: currentData.cpf || "",
+    birth_date: currentData.birth_date || "",
   });
 
   const handleInputChange = (field: string, value: string) => {
@@ -108,6 +110,9 @@ export function ProfileEditDialog({
         .update({
           full_name: formData.full_name.trim(),
           email: formData.email.trim(),
+          phone: formData.phone.trim() || null,
+          cpf: formData.cpf.trim() || null,
+          birth_date: formData.birth_date || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", userId);
@@ -120,6 +125,7 @@ export function ProfileEditDialog({
           full_name: formData.full_name.trim(),
           phone: formData.phone.trim() || null,
           cpf: formData.cpf.trim() || null,
+          birth_date: formData.birth_date || null,
         },
       });
 
@@ -220,6 +226,18 @@ export function ProfileEditDialog({
                 placeholder="000.000.000-00"
                 disabled={loading}
                 maxLength={14}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="birth_date">Data de Nascimento</Label>
+              <Input
+                id="birth_date"
+                type="date"
+                value={formData.birth_date}
+                onChange={(e) => handleInputChange("birth_date", e.target.value)}
+                disabled={loading}
+                max={new Date().toISOString().split('T')[0]}
               />
             </div>
           </div>

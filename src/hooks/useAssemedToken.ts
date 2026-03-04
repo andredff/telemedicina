@@ -36,14 +36,30 @@ export function useAssemedToken() {
         setAccessToken(loginResponse.accessToken);
         assemedClient.setAccessToken(loginResponse.accessToken);
       } catch (loginError: unknown) {
-        // Se falhar com 404 (não cadastrado), silently fail
+        // Se falhar com 401/404 (não cadastrado), tenta cadastro e login novamente
         const isNotRegistered =
           (loginError instanceof Error &&
-            (loginError.message.includes("404") ||
+            (loginError.message.includes("401") ||
+              loginError.message.includes("404") ||
+              loginError.message.toLowerCase().includes("unauthorized") ||
               loginError.message.toLowerCase().includes("não cadastrado")));
 
         if (isNotRegistered) {
-          logger.info("[useAssemedToken] Paciente não registrado no Assemed");
+          logger.info("[useAssemedToken] Paciente não registrado, tentando cadastro...");
+          try {
+            // Tenta cadastrar e fazer login novamente
+            const registerData = buildRegisterData(cpf, profile);
+            await assemedClient.registerPatient(registerData);
+            logger.info("[useAssemedToken] Cadastro realizado, tentando login...");
+            
+            const retryLogin = await assemedClient.login(cpf);
+            console.log("[useAssemedToken] Login após cadastro OK");
+            setAccessToken(retryLogin.accessToken);
+            assemedClient.setAccessToken(retryLogin.accessToken);
+            return;
+          } catch (registerErr) {
+            logger.error("[useAssemedToken] Erro ao cadastrar/relogar:", registerErr);
+          }
         } else {
           logger.error("[useAssemedToken] Erro ao fazer login:", loginError);
         }
@@ -112,4 +128,44 @@ export function useAssemedToken() {
   }, [authenticate]);
 
   return { accessToken, isLoading };
+}
+
+function buildRegisterData(
+  cpf: string,
+  profile: ProfileData,
+) {
+  const gender = profile.gender === "F" ? "F" : "M";
+
+  let dataNascimento = "1990-01-01T00:00:00.000Z";
+  if (profile.birth_date) {
+    if (profile.birth_date.includes("/")) {
+      const [day, month, year] = profile.birth_date.split("/");
+      dataNascimento = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}T00:00:00.000Z`;
+    } else if (profile.birth_date.includes("-")) {
+      dataNascimento = profile.birth_date.includes("T")
+        ? profile.birth_date
+        : `${profile.birth_date}T00:00:00.000Z`;
+    }
+  }
+
+  let telefone = profile.phone?.replace(/\D/g, "") || "";
+  if (telefone.length < 10) {
+    telefone = "00000000000";
+  }
+
+  // Gera alias de email para telemedicina
+  let username = "";
+  if (profile.email) {
+    username = profile.email.split("@")[0].replace(/[^a-zA-Z0-9]/g, "");
+  }
+  const aliasEmail = `paciente+${username}@novitatelemedicina.com.br`;
+
+  return {
+    nome: (profile.full_name || "Paciente").substring(0, 250),
+    cpf,
+    dataNascimento,
+    sexo: gender,
+    telefone: telefone.substring(0, 20),
+    email: aliasEmail.substring(0, 100),
+  };
 }

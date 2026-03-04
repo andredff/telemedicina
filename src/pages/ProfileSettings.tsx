@@ -53,6 +53,7 @@ const ProfileSettings = () => {
     email: "",
     phone: "",
     cpf: "",
+    birth_date: "",
   });
 
   useEffect(() => {
@@ -72,7 +73,7 @@ const ProfileSettings = () => {
         // Buscar dados do perfil
         const { data: profile } = await supabase
           .from("profiles")
-          .select("full_name, email")
+          .select("full_name, email, phone, cpf, birth_date")
           .eq("id", user.id)
           .single();
 
@@ -80,8 +81,9 @@ const ProfileSettings = () => {
           setFormData({
             full_name: profile.full_name || "",
             email: profile.email || "",
-            phone: user.user_metadata?.phone || "",
-            cpf: user.user_metadata?.cpf || "",
+            phone: profile.phone || user.user_metadata?.phone || "",
+            cpf: profile.cpf || user.user_metadata?.cpf || "",
+            birth_date: profile.birth_date || user.user_metadata?.birth_date || "",
           });
         }
 
@@ -196,6 +198,9 @@ const ProfileSettings = () => {
         .update({
           full_name: formData.full_name.trim(),
           email: formData.email.trim(),
+          phone: formData.phone.trim() || null,
+          cpf: formData.cpf.trim() || null,
+          birth_date: formData.birth_date || null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);
@@ -208,6 +213,7 @@ const ProfileSettings = () => {
           full_name: formData.full_name.trim(),
           phone: formData.phone.trim() || null,
           cpf: formData.cpf.trim() || null,
+          birth_date: formData.birth_date || null,
         },
       });
 
@@ -417,6 +423,22 @@ const ProfileSettings = () => {
                       disabled={saving}
                       maxLength={14}
                       className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="birth_date">Data de Nascimento</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="birth_date"
+                      type="date"
+                      value={formData.birth_date}
+                      onChange={(e) => handleInputChange("birth_date", e.target.value)}
+                      disabled={saving}
+                      className="pl-10"
+                      max={new Date().toISOString().split('T')[0]}
                     />
                   </div>
                 </div>

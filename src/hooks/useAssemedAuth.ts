@@ -38,14 +38,17 @@ export function useAssemedAuth() {
 
         throw new Error("Falha ao autenticar na plataforma de telemedicina");
       } catch (loginError: unknown) {
-        // Detecta paciente não cadastrado: 400 "não cadastrado", 404, "not found", "não encontrado"
+        // Detecta paciente não cadastrado: 400 "não cadastrado", 401, 404, "not found", "não encontrado"
         const isNotRegistered =
           (loginError instanceof AssemedApiError &&
             (loginError.statusCode === 404 ||
+              loginError.statusCode === 401 ||
               (loginError.statusCode === 400 &&
                 loginError.message.toLowerCase().includes("não cadastrado")))) ||
           (loginError instanceof Error &&
             (loginError.message.includes("404") ||
+              loginError.message.includes("401") ||
+              loginError.message.toLowerCase().includes("unauthorized") ||
               loginError.message.toLowerCase().includes("not found") ||
               loginError.message.toLowerCase().includes("não encontrado") ||
               loginError.message.toLowerCase().includes("não cadastrado")));
@@ -58,6 +61,12 @@ export function useAssemedAuth() {
           setError(msg);
           throw loginError;
         }
+
+        // Log: tentando cadastro após falha no login
+        logger.info("[useAssemedAuth] Paciente não cadastrado, tentando registro automático...", {
+          cpf: cleanCpf.substring(0, 3) + "***",
+          errorCode: loginError instanceof AssemedApiError ? loginError.statusCode : "unknown",
+        });
 
         // Registra o paciente
         const registerData = buildRegisterData(cleanCpf, profile);

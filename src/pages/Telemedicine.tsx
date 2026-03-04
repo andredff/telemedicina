@@ -61,7 +61,7 @@ const Telemedicine = () => {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .select("full_name, email")
+        .select("full_name, email, birth_date, phone, cpf, gender")
         .eq("id", userId)
         .single();
 
@@ -70,15 +70,15 @@ const Telemedicine = () => {
         const metadata = userData.user?.user_metadata;
         const identity = userData.user?.identities?.[0];
         const identityCpf = identity?.identity_data?.cpf as string | undefined;
-        const cpf = (metadata?.cpf as string | undefined) || identityCpf || "";
+        const cpf = data.cpf || (metadata?.cpf as string | undefined) || identityCpf || "";
 
         setProfile({
           full_name: data.full_name,
           email: data.email,
           cpf,
-          phone: metadata?.phone || "",
-          birth_date: metadata?.birth_date || "",
-          gender: metadata?.gender || "M",
+          phone: data.phone || metadata?.phone || "",
+          birth_date: data.birth_date || metadata?.birth_date || "",
+          gender: data.gender || metadata?.gender || "M",
         });
       }
     } catch (error) {
