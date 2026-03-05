@@ -200,7 +200,7 @@ function ConsultationHistoryCard({
               )}
             </Button>
           )}
-          {normalizedStatus === "AGUARDANDO" && (
+          {normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO" && (
             <Button
               size="sm"
               variant="outline"
