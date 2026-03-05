@@ -239,6 +239,48 @@ const mockPrescriptions = [
 
 // Admin-specific queries
 export const AdminQueries = {
+    // Get consultations by user ID
+    async getConsultationsByUserId(userId: string) {
+      // Consulta mock para ambiente de desenvolvimento
+      if (!supabaseAdmin) {
+        // Exemplo de consultas mock
+        return {
+          data: [
+            {
+              id: 'CONS-001',
+              user_id: userId,
+              doctor_name: 'Dr. Carlos Silva',
+              specialty: 'Clínico Geral',
+              status: 'finalizada',
+              started_at: '2024-12-01T10:00:00Z',
+              finished_at: '2024-12-01T10:30:00Z',
+            },
+            {
+              id: 'CONS-002',
+              user_id: userId,
+              doctor_name: 'Dra. Ana Costa',
+              specialty: 'Dermatologia',
+              status: 'cancelada',
+              started_at: '2024-11-15T14:00:00Z',
+              finished_at: '2024-11-15T14:10:00Z',
+            }
+          ],
+          error: null
+        };
+      }
+      try {
+        // Busca na tabela de consultas (ajuste o nome da tabela conforme o schema real)
+        const result = await supabaseAdmin
+          .from('consultations')
+          .select('*')
+          .eq('user_id', userId)
+          .order('started_at', { ascending: false });
+        return { data: result.data || [], error: result.error };
+      } catch (error) {
+        logger.error('[AdminQueries] Error fetching user consultations', error);
+        return { data: [], error };
+      }
+    },
   // Get all users
   async getAllUsers() {
     if (!supabaseAdmin) {

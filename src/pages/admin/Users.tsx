@@ -301,6 +301,14 @@ export default function AdminUsers() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => window.open(`/admin/usuarios/${user.id}`, '_self')}
+                        title="Ver detalhes do usuário"
+                      >
+                        <UserCheck className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleEditUser(user)}
                       >
                         <Edit className="h-4 w-4" />

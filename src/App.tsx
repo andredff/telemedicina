@@ -44,6 +44,7 @@ import TestSupabase from "./pages/TestSupabase";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
+import AdminUserDetail from "./pages/admin/UserDetail";
 
 const queryClient = new QueryClient();
 
@@ -100,6 +101,7 @@ const App = () => (
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
             <Route path="usuarios" element={<AdminUsers />} />
+            <Route path="usuarios/:userId" element={<AdminUserDetail />} />
             <Route path="pedidos" element={<AdminOrders />} />
             <Route path="receitas" element={<AdminPrescriptions />} />
             <Route path="conteudo" element={<AdminContent />} />
