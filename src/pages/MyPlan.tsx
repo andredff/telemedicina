@@ -411,7 +411,7 @@ const MyPlan = () => {
     const isCurrent = relation === 'current';
     const isUpgrade = relation === 'upgrade';
     const isDowngrade = relation === 'downgrade';
-    
+    const hasNoPlan = !subscription;
     const planColors = getPlanColor(plan.type);
     
     return (
@@ -488,7 +488,7 @@ const MyPlan = () => {
           ) : isUpgrade ? (
             <Button className="w-full gradient-hero text-white">
               <ArrowUp className="mr-2 h-4 w-4" />
-              Fazer Upgrade
+              {hasNoPlan ? 'Assinar Plano' : 'Fazer Upgrade'}
             </Button>
           ) : isDowngrade ? (
             <Button className="w-full" variant="outline">

@@ -315,7 +315,7 @@ function ConsultationIframe({
   const isSandbox = getIsSandbox();
 
   // Build url to the iframe wrapper. When we have a token we will load Assemed's sala URL directly.
-  const iframeWrapperBase = `/iframe.html?sala=${atendimentoId}&sandbox=${isSandbox}&especialidade=${encodeURIComponent(
+  const iframeWrapperBase = `https://telemedicina.novitahomecare.com.br/?sala=${atendimentoId}&sandbox=${isSandbox}&especialidade=${encodeURIComponent(
     especialidade
   )}`;
   const iframeWrapperUrl = localToken ? `${iframeWrapperBase}&token=${encodeURIComponent(localToken)}` : iframeWrapperBase;

@@ -322,7 +322,7 @@ function ConsultationIframe({
   const isSandbox = getIsSandbox();
 
   const safeToken = pacienteToken || "";
-  const iframePageUrl = `/iframe.html?atendimentoId=${atendimentoId}&token=${encodeURIComponent(
+  const iframePageUrl = `https://telemedicina.novitahomecare.com.br/?atendimentoId=${atendimentoId}&token=${encodeURIComponent(
     safeToken
   )}&especialidade=${encodeURIComponent(especialidade)}&sandbox=${isSandbox}&tipo=especialista`;
 
