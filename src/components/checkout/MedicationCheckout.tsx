@@ -462,7 +462,7 @@ export function MedicationCheckout({
                                   <span>
                                     <span className="font-medium">{option.name}</span>
                                     <span className="text-muted-foreground text-xs ml-1">
-                                      ({option.deadline} dias úteis)
+                                      (1 a 2 dias úteis)
                                     </span>
                                   </span>
                                   <span className={finalPrice === 0 ? "text-green-600 font-medium" : ""}>
@@ -569,7 +569,7 @@ export function MedicationCheckout({
                       <div>
                         <span className="font-medium">{selectedShipping.name}</span>
                         <span className="text-muted-foreground text-xs ml-1">
-                          ({selectedShipping.deadline} dias úteis)
+                          (1 a 2 dias úteis)
                         </span>
                       </div>
                     </div>

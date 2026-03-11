@@ -251,21 +251,23 @@ export async function getShippingQuote(
  * @param cartValue - Total cart value
  * @returns Array of shipping options
  */
+
+// Custom shipping for medication: only "Entrega Própria" (1 a 2 dias úteis)
 export async function calculateCartShipping(
   zipCode: string,
   itemCount: number,
   cartValue: number
 ): Promise<ShippingOption[]> {
-  const dimensions = calculatePackageDimensions(itemCount);
-  
-  return calculateShipping({
-    zipCode,
-    weight: dimensions.weight,
-    length: dimensions.length,
-    width: dimensions.width,
-    height: dimensions.height,
-    value: cartValue,
-  });
+  return [
+    {
+      id: 'entrega-propria',
+      name: 'Entrega Própria',
+      description: 'Entrega realizada pela equipe Novità',
+      price: 5.90, // valor fixo, ajuste se necessário
+      deadline: 2, // sempre mostrar "1 a 2 dias úteis" na UI
+      carrier: 'Novità',
+    },
+  ];
 }
 
 /**

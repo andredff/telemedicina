@@ -412,18 +412,24 @@ class AssemedClient {
    */
   async evaluateConsultation(
     id: number,
-    nota: number,
+    notaAtendimento: number,
+    notaAplicativo: number,
     comentario?: string
   ): Promise<void> {
     if (this.useMock) {
-      return assemedMockClient.evaluateConsultation(id, nota, comentario);
+      return assemedMockClient.evaluateConsultation(id, notaAtendimento, comentario);
     }
 
     await this.request<void>(
       `/api/Atendimentos/${id}/avaliar`,
       {
         method: "POST",
-        body: JSON.stringify({ nota, comentario }),
+        body: JSON.stringify({
+          notaAtendimento,
+          notaAplicativo,
+          comentario: comentario ?? "",
+          atendimentoId: id,
+        }),
       },
       true
     );

@@ -75,7 +75,8 @@ const Auth = () => {
     if (isAdmin) {
       return "/admin";
     }
-    if (plan) {
+    // Only redirect to checkout if plan is a non-empty string
+    if (plan && plan.trim() && plan !== 'undefined' && plan !== 'null') {
       return `/checkout/subscription?plan=${plan}`;
     }
     return "/dashboard";
@@ -93,26 +94,34 @@ const Auth = () => {
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
 
         // Redirect if logged in
         if (session?.user) {
-          const role = await checkUserRole(session.user.id);
-          navigate(getRedirectPath(selectedPlan, role === 'admin'));
+          const defaultPath = getRedirectPath(selectedPlan || null, false);
+          navigate(defaultPath);
+          // Check admin role in background and redirect if needed
+          checkUserRole(session.user.id).then(role => {
+            if (role === 'admin') navigate('/admin');
+          }).catch(() => {});
         }
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (session?.user) {
-        const role = await checkUserRole(session.user.id);
-        navigate(getRedirectPath(selectedPlan, role === 'admin'));
+        const defaultPath = getRedirectPath(selectedPlan || null, false);
+        navigate(defaultPath);
+        // Check admin role in background and redirect if needed
+        checkUserRole(session.user.id).then(role => {
+          if (role === 'admin') navigate('/admin');
+        }).catch(() => {});
       }
     });
 
@@ -219,8 +228,14 @@ const Auth = () => {
         description: "Bem-vindo à Novità",
       });
 
-      const role = await checkUserRole(data.user.id);
-      navigate(getRedirectPath(selectedPlan, role === 'admin'));
+      setIsLoading(false);
+
+      // Navigate immediately; check admin role in background
+      const defaultPath = getRedirectPath(selectedPlan || null, false) || '/dashboard';
+      navigate(defaultPath);
+      checkUserRole(data.user.id).then(role => {
+        if (role === 'admin') navigate('/admin');
+      }).catch(() => {});
     } catch (error) {
       toast({
         title: "Erro ao fazer login",
@@ -297,7 +312,7 @@ const Auth = () => {
 
       // Auto-login after signup (since auto-confirm is enabled)
       if (data.session) {
-        navigate(getRedirectPath(selectedPlan));
+        navigate(getRedirectPath(selectedPlan || null));
       }
       
       setIsLoading(false);

@@ -153,6 +153,9 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
     }
   }, [accessToken, checkConsultationStatus]);
 
+  // Rastreia consultas para as quais já redirecionamos (evita loop)
+  const redirectedIds = useRef<Set<number>>(new Set());
+
   /**
    * Polling periódico usando endpoint simplificado
    */
@@ -167,9 +170,9 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
 
     const pollStatus = async () => {
       const status = await checkConsultationStatus(activeConsultation.id);
-      
+
       if (!status) return;
-      
+
       if (status.situacao === "CONCLUIDO" || status.situacao === "CANCELADO") {
         // Consulta finalizada - limpa cache e estado
         console.log("[ActiveConsultationBanner] Consulta finalizada:", status.situacao);
@@ -177,16 +180,31 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
         setActiveConsultation(null);
         return;
       }
-      
+
+      // Redireciona automaticamente quando médico inicia atendimento
+      if (status.situacao === "EM_ATENDIMENTO" && !redirectedIds.current.has(activeConsultation.id)) {
+        const alreadyInRoom = location.pathname.startsWith("/sala-espera");
+        if (!alreadyInRoom) {
+          redirectedIds.current.add(activeConsultation.id);
+          console.log("[ActiveConsultationBanner] Médico iniciou atendimento, redirecionando...");
+          navigate(
+            `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(
+              activeConsultation.especialidadeNome || "Consulta"
+            )}`
+          );
+          return;
+        }
+      }
+
       // Atualiza dados do profissional se mudou
-      if (status.profissionalNome !== activeConsultation.profissionalNome || 
+      if (status.profissionalNome !== activeConsultation.profissionalNome ||
           status.situacao !== activeConsultation.status) {
         setActiveConsultation(prev => prev ? {
           ...prev,
           profissionalNome: status.profissionalNome,
           status: status.situacao,
         } : null);
-        
+
         const cached = getCachedConsultation();
         if (cached) {
           setCachedConsultation({
@@ -198,7 +216,8 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       }
     };
 
-    // Inicia polling
+    // Verifica imediatamente e depois a cada intervalo
+    pollStatus();
     pollingRef.current = setInterval(pollStatus, POLL_INTERVAL);
 
     return () => {
@@ -207,7 +226,7 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
         pollingRef.current = null;
       }
     };
-  }, [accessToken, isDismissed, activeConsultation, checkConsultationStatus]);
+  }, [accessToken, isDismissed, activeConsultation, checkConsultationStatus, navigate, location.pathname]);
 
   useEffect(() => {
     if (!isDismissed) {

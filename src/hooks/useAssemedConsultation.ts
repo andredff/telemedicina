@@ -57,6 +57,7 @@ import type {
   Consultation,
   Specialty,
   CreateConsultationResponse,
+  AnamneseResposta,
 } from "@/integrations/assemed/types";
 
 interface ProfileData {
@@ -302,7 +303,11 @@ export function useAssemedConsultation() {
    * Retorna true se criado com sucesso, false se houver erro
    */
   const createConsultation = useCallback(
-    async (specialty: Specialty): Promise<boolean> => {
+    async (
+      specialty: Specialty,
+      respostasAnamnese?: AnamneseResposta[],
+      exames?: { arquivoBase64: string }[]
+    ): Promise<boolean> => {
       if (!state.accessToken) {
         setError("Token de acesso não disponível. Tente novamente.");
         return false;
@@ -320,10 +325,12 @@ export function useAssemedConsultation() {
         const pacienteId = parseInt(decoded.pacienteId, 10);
 
         const consultation = await assemedClient.createConsultation({
+          formatoAtendimento: 0,
           tipoProfissional: specialty.tipoProfissionalId,
           especialidadeId: specialty.id,
           pacienteId,
-          exames: [],
+          respostasAnamnese: respostasAnamnese || [],
+          exames: exames || [],
         });
 
         setState((prev) => ({

@@ -14,18 +14,23 @@ import {
   Star,
   Plus,
   RefreshCw,
+  Upload,
+  Trash2,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
@@ -33,7 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
-import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
+import type { Consultation, Specialty, ConsultationStatus, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -126,10 +131,14 @@ function ConsultationHistoryCard({
   consultation,
   onJoin,
   onCancel,
+  onEvaluate,
+  hasBeenEvaluated,
 }: {
   consultation: Consultation;
   onJoin: (c: Consultation) => void;
   onCancel: (id: number) => void;
+  onEvaluate: (c: Consultation) => void;
+  hasBeenEvaluated: boolean;
 }) {
   const normalizedStatus = normalizeConsultationStatus(consultation);
   const status = statusConfig[normalizedStatus];
@@ -216,14 +225,506 @@ function ConsultationHistoryCard({
             </Button>
           )}
           {normalizedStatus === "CONCLUIDO" && (
-            <Button size="sm" variant="ghost" className="gap-2" disabled>
-              <Star className="h-4 w-4" />
-              Avaliar
+            <Button
+              size="sm"
+              variant={hasBeenEvaluated ? "ghost" : "outline"}
+              className="gap-2"
+              onClick={() => !hasBeenEvaluated && onEvaluate(consultation)}
+              disabled={hasBeenEvaluated}
+            >
+              <Star className={`h-4 w-4 ${hasBeenEvaluated ? "fill-amber-400 text-amber-400" : ""}`} />
+              {hasBeenEvaluated ? "Avaliada" : "Avaliar"}
             </Button>
           )}
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+// ─── Consulta Wizard Modal ────────────────────────────────────────────────────
+
+const SINTOMAS_OPTIONS = [
+  { id: 1, label: "Dor no corpo" },
+  { id: 2, label: "Dores articulares" },
+  { id: 3, label: "Dor lombar" },
+  { id: 4, label: "Náuseas" },
+  { id: 5, label: "Dor de garganta" },
+];
+
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+type WizardStep = "sintomas" | "sintomaForte" | "exames";
+
+interface WizardData {
+  sintomasSelecionados: number[];
+  sintomaForteId: number | null;
+  medicamentos: string;
+  exames: { name: string; base64: string }[];
+}
+
+function ConsultaWizardModal({
+  onClose,
+  onSubmit,
+}: {
+  onClose: () => void;
+  onSubmit: (respostasAnamnese: AnamneseResposta[], exames: { arquivoBase64: string }[]) => void;
+}) {
+  const [step, setStep] = useState<WizardStep>("sintomas");
+  const [data, setData] = useState<WizardData>({
+    sintomasSelecionados: [],
+    sintomaForteId: null,
+    medicamentos: "",
+    exames: [],
+  });
+  const [isAddingFile, setIsAddingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const stepIndex = step === "sintomas" ? 0 : step === "sintomaForte" ? 1 : 2;
+  const steps = [
+    { label: "Anamnese 1/2", key: "sintomas" },
+    { label: "Anamnese 2/2", key: "sintomaForte" },
+    { label: "Anexar Exame", key: "exames" },
+  ];
+
+  // Sintomas marcados no passo 1 (para exibir no passo 2)
+  const sintomasMarcados = SINTOMAS_OPTIONS.filter((s) =>
+    data.sintomasSelecionados.includes(s.id)
+  );
+
+  const toggleSintoma = (id: number) => {
+    setData((prev) => ({
+      ...prev,
+      sintomasSelecionados: prev.sintomasSelecionados.includes(id)
+        ? prev.sintomasSelecionados.filter((s) => s !== id)
+        : [...prev.sintomasSelecionados, id],
+      // Limpa o sintoma forte se ele foi desmarcado
+      sintomaForteId:
+        prev.sintomaForteId === id && prev.sintomasSelecionados.includes(id)
+          ? null
+          : prev.sintomaForteId,
+    }));
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setIsAddingFile(true);
+    const newExames = await Promise.all(
+      files.map(async (f) => ({ name: f.name, base64: await fileToBase64(f) }))
+    );
+    setData((prev) => ({ ...prev, exames: [...prev.exames, ...newExames] }));
+    setIsAddingFile(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeExame = (index: number) => {
+    setData((prev) => ({ ...prev, exames: prev.exames.filter((_, i) => i !== index) }));
+  };
+
+  const handleSubmit = () => {
+    const sintomaForteLabel =
+      SINTOMAS_OPTIONS.find((s) => s.id === data.sintomaForteId)?.label || "";
+
+    const sintomaTexto =
+      data.sintomaForteId
+        ? `Sintomas mais fortes: ${sintomaForteLabel}.`
+        : data.sintomasSelecionados.length > 0
+        ? `Sintomas: ${sintomasMarcados.map((s) => s.label).join(", ")}.`
+        : "Nenhum sintoma selecionado.";
+
+    const respostasAnamnese: AnamneseResposta[] = [
+      {
+        perguntaQuestionarioAnamneseId: 1,
+        opcoesRespondidas: data.sintomasSelecionados.map((id) => ({
+          opcoesPerguntaQuestionarioAnamneseId: id,
+        })),
+        texto: sintomaTexto,
+      },
+      {
+        perguntaQuestionarioAnamneseId: 2,
+        opcoesRespondidas: [],
+        texto: data.medicamentos.trim() || "Nenhum",
+      },
+    ];
+
+    onSubmit(respostasAnamnese, data.exames.map((e) => ({ arquivoBase64: e.base64 })));
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-lg">
+        {/* Step indicator */}
+        <div className="flex items-center gap-0 mb-2">
+          {steps.map((s, i) => (
+            <div key={s.key} className="flex items-center flex-1">
+              <div className="flex flex-col items-center flex-1">
+                <div
+                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
+                    i < stepIndex
+                      ? "bg-primary border-primary text-primary-foreground"
+                      : i === stepIndex
+                      ? "border-primary text-primary bg-primary/10"
+                      : "border-muted-foreground/30 text-muted-foreground"
+                  }`}
+                >
+                  {i < stepIndex ? <CheckCircle className="h-4 w-4" /> : i + 1}
+                </div>
+                <span className={`text-[10px] mt-0.5 text-center leading-tight ${i === stepIndex ? "text-primary font-medium" : "text-muted-foreground"}`}>
+                  {s.label}
+                </span>
+              </div>
+              {i < steps.length - 1 && (
+                <div className={`h-0.5 flex-1 mx-1 mb-4 transition-colors ${i < stepIndex ? "bg-primary" : "bg-muted-foreground/20"}`} />
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Step: Sintomas */}
+        {step === "sintomas" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Marque os sintomas que você tem sentido</DialogTitle>
+            </DialogHeader>
+            <div className="divide-y divide-border rounded-lg border overflow-hidden mt-2">
+              {SINTOMAS_OPTIONS.map((s) => {
+                const checked = data.sintomasSelecionados.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => toggleSintoma(s.id)}
+                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${checked ? "bg-primary/5" : ""}`}
+                  >
+                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
+                      {checked && <CheckCircle className="h-3 w-3 text-primary-foreground" />}
+                    </div>
+                    <span className="text-sm">{s.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <DialogFooter className="mt-4">
+              <Button onClick={() => setStep("sintomaForte")} className="gap-2">
+                Avançar <ChevronRight className="h-4 w-4" />
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* Step: Sintoma mais forte + Medicamentos */}
+        {step === "sintomaForte" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Onde você sente a dor mais forte?</DialogTitle>
+              {sintomasMarcados.length > 0 ? (
+                <DialogDescription>
+                  Selecione o sintoma mais intenso entre os que você marcou.
+                </DialogDescription>
+              ) : (
+                <DialogDescription>
+                  Você não marcou nenhum sintoma no passo anterior.
+                </DialogDescription>
+              )}
+            </DialogHeader>
+
+            <div className="space-y-4 mt-2">
+              {/* Radio: sintoma mais forte (apenas os marcados no passo 1) */}
+              {sintomasMarcados.length > 0 ? (
+                <div className="divide-y divide-border rounded-lg border overflow-hidden">
+                  {sintomasMarcados.map((s) => {
+                    const selected = data.sintomaForteId === s.id;
+                    return (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() =>
+                          setData((prev) => ({ ...prev, sintomaForteId: s.id }))
+                        }
+                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selected ? "bg-primary/5" : ""}`}
+                      >
+                        {/* Radio circle */}
+                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? "border-primary" : "border-muted-foreground/40"}`}>
+                          {selected && (
+                            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
+                          )}
+                        </div>
+                        <span className="text-sm">{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  Nenhum sintoma foi selecionado anteriormente.
+                </p>
+              )}
+
+              {/* Medicamentos */}
+              <div className="space-y-1.5 pt-1">
+                <p className="text-sm font-medium text-foreground">
+                  Você toma algum medicamento?{" "}
+                  <span className="font-normal text-muted-foreground">(opcional)</span>
+                </p>
+                <Textarea
+                  placeholder="Ex: Dipirona, Losartana..."
+                  value={data.medicamentos}
+                  onChange={(e) =>
+                    setData((prev) => ({ ...prev, medicamentos: e.target.value }))
+                  }
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 mt-4">
+              <Button variant="outline" onClick={() => setStep("sintomas")}>
+                Voltar
+              </Button>
+              <Button
+                onClick={() => setStep("exames")}
+                disabled={sintomasMarcados.length > 0 && !data.sintomaForteId}
+                className="gap-2"
+              >
+                Avançar <ChevronRight className="h-4 w-4" />
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {/* Step: Exames */}
+        {step === "exames" && (
+          <>
+            <DialogHeader>
+              <DialogTitle>Gostaria de fornecer algum exame?</DialogTitle>
+              <DialogDescription>Anexe imagens ou PDFs (opcional).</DialogDescription>
+            </DialogHeader>
+            <div className="mt-2 space-y-3">
+              {/* Drop zone */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 flex flex-col items-center gap-2 hover:border-primary/50 hover:bg-muted/30 transition-colors"
+              >
+                <Upload className="h-8 w-8 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground text-center">
+                  {isAddingFile ? "Carregando..." : "Clique aqui ou arraste o arquivo para esta área"}
+                </p>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+
+              {/* File list */}
+              {data.exames.length > 0 && (
+                <div className="space-y-2">
+                  {data.exames.map((exame, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20"
+                    >
+                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm flex-1 truncate">{exame.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeExame(i)}
+                        className="text-muted-foreground hover:text-destructive transition-colors"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <DialogFooter className="gap-2 mt-4">
+              <Button variant="outline" onClick={() => setStep("medicamentos")}>
+                Voltar
+              </Button>
+              <Button onClick={handleSubmit} className="gap-2">
+                <Stethoscope className="h-4 w-4" />
+                Iniciar Consulta
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─── Evaluation Modal ─────────────────────────────────────────────────────────
+
+function StarRating({
+  value,
+  onChange,
+  label,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  label: string;
+}) {
+  const [hovered, setHovered] = useState(0);
+  const display = hovered || value;
+  const labels = ["", "Muito ruim", "Ruim", "Regular", "Bom", "Excelente"];
+
+  return (
+    <div className="space-y-1">
+      <p className="text-sm font-medium text-foreground">{label}</p>
+      <div className="flex items-center gap-2">
+        <div className="flex gap-0.5">
+          {[1, 2, 3, 4, 5].map((star) => (
+            <button
+              key={star}
+              type="button"
+              className="p-0.5 transition-transform hover:scale-110 focus:outline-none"
+              onMouseEnter={() => setHovered(star)}
+              onMouseLeave={() => setHovered(0)}
+              onClick={() => onChange(star)}
+            >
+              <Star
+                className={`h-7 w-7 transition-colors ${
+                  star <= display ? "text-amber-400 fill-amber-400" : "text-muted-foreground"
+                }`}
+              />
+            </button>
+          ))}
+        </div>
+        <span className="text-sm text-muted-foreground w-20">
+          {display > 0 ? labels[display] : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function EvaluationModal({
+  consultation,
+  accessToken,
+  onClose,
+  onSuccess,
+}: {
+  consultation: Consultation;
+  accessToken: string | null;
+  onClose: () => void;
+  onSuccess: (id: number) => void;
+}) {
+  const { toast } = useToast();
+  const [notaAtendimento, setNotaAtendimento] = useState(0);
+  const [notaAplicativo, setNotaAplicativo] = useState(0);
+  const [comentario, setComentario] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async () => {
+    if (notaAtendimento === 0 || notaAplicativo === 0) {
+      toast({
+        title: "Avaliação incompleta",
+        description: "Por favor, avalie o atendimento e o aplicativo.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      if (accessToken) assemedClient.setAccessToken(accessToken);
+      await assemedClient.evaluateConsultation(
+        consultation.id,
+        notaAtendimento,
+        notaAplicativo,
+        comentario || undefined
+      );
+      toast({
+        title: "Avaliação enviada!",
+        description: "Obrigado pelo seu feedback.",
+      });
+      onSuccess(consultation.id);
+    } catch {
+      toast({
+        title: "Erro ao enviar avaliação",
+        description: "Não foi possível enviar sua avaliação. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Star className="h-5 w-5 text-amber-500" fill="currentColor" />
+            Avaliar consulta #{consultation.id}
+          </DialogTitle>
+          <DialogDescription>
+            {consultation.profissionalNome
+              ? `Como foi sua consulta com ${consultation.profissionalNome}?`
+              : "Como foi sua consulta?"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-5 py-2">
+          <StarRating
+            label="Avaliação do atendimento"
+            value={notaAtendimento}
+            onChange={setNotaAtendimento}
+          />
+          <StarRating
+            label="Avaliação do aplicativo"
+            value={notaAplicativo}
+            onChange={setNotaAplicativo}
+          />
+          <div className="space-y-1.5">
+            <label className="text-sm font-medium text-foreground">
+              Comentário <span className="text-muted-foreground font-normal">(opcional)</span>
+            </label>
+            <Textarea
+              placeholder="Conte como foi sua experiência..."
+              value={comentario}
+              onChange={(e) => setComentario(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose} disabled={isSubmitting}>
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            disabled={isSubmitting || notaAtendimento === 0 || notaAplicativo === 0}
+            className="gap-2"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Enviando...
+              </>
+            ) : (
+              "Enviar avaliação"
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -414,6 +915,15 @@ const Teleconsultas = () => {
     useState<Consultation | null>(null);
   const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
+  const [showWizardModal, setShowWizardModal] = useState(false);
+  const [evaluatingConsultation, setEvaluatingConsultation] = useState<Consultation | null>(null);
+  const [evaluatedIds, setEvaluatedIds] = useState<Set<number>>(new Set());
+
+  // Dados coletados no wizard (anamnese + exames) para usar na criação do atendimento
+  const pendingAnamneseRef = useRef<{
+    respostasAnamnese: AnamneseResposta[];
+    exames: { arquivoBase64: string }[];
+  } | null>(null);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("Consulta Imediata");
   const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
   const [activeConsultationCreditId, setActiveConsultationCreditId] = useState<string | null>(null); // Crédito usado na consulta ativa atual
@@ -773,11 +1283,19 @@ const Teleconsultas = () => {
   // ── Polling para atualizar status de consultas ativas usando endpoint simplificado ──
   // Usa refs para evitar re-execução do effect quando consultations muda
   const consultationsRef = useRef(consultations);
-  
-  // Mantém ref atualizado
+  // Rastreia consultas para as quais já navegamos (evita navegar mais de uma vez)
+  const navigatedToConsultationRef = useRef<Set<number>>(new Set());
+  // Ref para sempre ter o accessToken mais recente dentro do polling (evita closure stale)
+  const accessTokenRef = useRef<string | null>(accessToken);
+
+  // Mantém refs atualizados
   useEffect(() => {
     consultationsRef.current = consultations;
   }, [consultations]);
+
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   useEffect(() => {
     if (!accessToken) return;
@@ -796,9 +1314,27 @@ const Teleconsultas = () => {
       const activeIds = getActiveConsultationIds();
       if (activeIds.length === 0) return;
 
+      // Tenta re-autenticar se o token expirou
+      const currentToken = accessTokenRef.current;
+      if (!currentToken) return;
+
       try {
         const { assemedClient } = await import("@/integrations/assemed/client");
-        assemedClient.setAccessToken(accessToken);
+        assemedClient.setAccessToken(currentToken);
+
+        // Verifica se o token ainda é válido tentando uma chamada simples
+        // Se der 401, re-autentica antes de continuar
+        const decoded = assemedClient.decodeToken(currentToken);
+        if (decoded && decoded.exp * 1000 < Date.now() + 30000) {
+          // Token expira em menos de 30s, re-autentica
+          if (profile) {
+            const cpf = profile.cpf.replace(/\D/g, "");
+            if (cpf.length === 11) {
+              const newToken = await silentAuthenticate(cpf, profile);
+              if (newToken) assemedClient.setAccessToken(newToken);
+            }
+          }
+        }
         
         for (const consultationId of activeIds) {
           try {
@@ -813,18 +1349,40 @@ const Teleconsultas = () => {
             
             const currentStatus = normalizeConsultationStatus(currentConsultation);
             
+            // Navega para sala de espera quando EM_ATENDIMENTO (independente de mudança de status)
+            if (normalizedStatus === "EM_ATENDIMENTO" && !navigatedToConsultationRef.current.has(consultationId)) {
+              navigatedToConsultationRef.current.add(consultationId);
+              toast({
+                title: "Médico Disponível",
+                description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo. Entrando na consulta...`,
+              });
+              // Busca dados completos (incluindo pacienteToken) antes de navegar
+              try {
+                const fullConsultation = await assemedClient.getConsultation(consultationId);
+                const token = fullConsultation?.pacienteToken;
+                const especialidade = encodeURIComponent(currentConsultation.especialidadeNome || "Consulta");
+                if (token) {
+                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}&token=${encodeURIComponent(token)}`);
+                } else {
+                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}`);
+                }
+              } catch {
+                navigate(`/sala-espera/${consultationId}?especialidade=${encodeURIComponent(currentConsultation.especialidadeNome || "Consulta")}`);
+              }
+            }
+
             // Verifica se houve mudança
-            if (normalizedStatus !== currentStatus || 
+            if (normalizedStatus !== currentStatus ||
                 response.profissionalNome !== currentConsultation.profissionalNome) {
-              
+
               // Atualiza a consulta localmente sem chamar /obter novamente
-              const updatedConsultations = consultationsRef.current.map(c => 
-                c.id === consultationId 
+              const updatedConsultations = consultationsRef.current.map(c =>
+                c.id === consultationId
                   ? { ...c, status: normalizedStatus, situacao: normalizedStatus, profissionalNome: response.profissionalNome }
                   : c
               );
               consultationsRef.current = updatedConsultations;
-              
+
               // Força re-render via hook - precisa chamar loadConsultations apenas uma vez
               // Notifica o usuário
               if (normalizedStatus === "CONCLUIDO") {
@@ -833,6 +1391,13 @@ const Teleconsultas = () => {
                 toast({
                   title: "Consulta Finalizada",
                   description: "Sua teleconsulta foi concluída com sucesso.",
+                });
+                // Abre modal de avaliação automaticamente (se ainda não avaliada)
+                setEvaluatedIds(prev => {
+                  if (!prev.has(consultationId)) {
+                    setEvaluatingConsultation({ ...currentConsultation, status: "CONCLUIDO" });
+                  }
+                  return prev;
                 });
                 // Recarrega apenas quando consulta finaliza para atualizar histórico
                 loadConsultations();
@@ -884,15 +1449,28 @@ const Teleconsultas = () => {
                   });
                 }
                 loadConsultations();
-              } else if (normalizedStatus === "EM_ATENDIMENTO" && currentStatus === "AGUARDANDO") {
-                toast({
-                  title: "Médico Disponível",
-                  description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo.`,
-                });
               }
             }
-          } catch (err) {
-            console.error(`[Teleconsultas] Erro ao verificar status da consulta ${consultationId}:`, err);
+          } catch (err: unknown) {
+            // Se 401, tenta re-autenticar e aguarda próximo ciclo
+            const is401 = err instanceof Error && (
+              (err as { statusCode?: number }).statusCode === 401 ||
+              err.message.includes("401") ||
+              err.message.toLowerCase().includes("unauthorized")
+            );
+            if (is401 && profile) {
+              console.warn(`[Teleconsultas] 401 na consulta ${consultationId}, re-autenticando...`);
+              const cpf = profile.cpf.replace(/\D/g, "");
+              if (cpf.length === 11) {
+                const newToken = await silentAuthenticate(cpf, profile);
+                if (newToken) {
+                  const { assemedClient: client } = await import("@/integrations/assemed/client");
+                  client.setAccessToken(newToken);
+                }
+              }
+            } else {
+              console.error(`[Teleconsultas] Erro ao verificar status da consulta ${consultationId}:`, err);
+            }
           }
         }
       } catch (err) {
@@ -904,7 +1482,7 @@ const Teleconsultas = () => {
     const initialDelay = setTimeout(() => {
       pollActiveConsultations();
     }, 5000);
-    
+
     // Depois executa a cada 10 segundos
     const interval = setInterval(pollActiveConsultations, 10000);
 
@@ -912,7 +1490,7 @@ const Teleconsultas = () => {
       clearTimeout(initialDelay);
       clearInterval(interval);
     };
-  }, [accessToken, toast, loadConsultations, loadAvailableCredits]);
+  }, [accessToken, toast, loadConsultations, loadAvailableCredits, navigate, profile, silentAuthenticate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -932,22 +1510,26 @@ const Teleconsultas = () => {
         return nome.includes("cl") && nome.includes("geral");
       });
 
+      const pending = pendingAnamneseRef.current;
       if (clinicoGeral) {
         setSelectedSpecialtyName(clinicoGeral.nome);
-        createConsultation(clinicoGeral);
+        createConsultation(clinicoGeral, pending?.respostasAnamnese, pending?.exames);
       } else if (specialties.length > 0) {
         // Fallback: use first available specialty
         setSelectedSpecialtyName(specialties[0].nome);
-        createConsultation(specialties[0]);
+        createConsultation(specialties[0], pending?.respostasAnamnese, pending?.exames);
       }
       
       setIsAutoSelecting(false);
     }
   }, [step, specialties, isAutoSelecting, createConsultation]);
 
+  // Ref para lembrar qual crédito usar quando o wizard completar
+  const pendingCreditForWizardRef = useRef<string | null>(null);
+
   // ── Start new consultation flow ───────────────────────────────────────────
 
-  const handleStartNewConsultation = async () => {
+  const handleStartNewConsultation = () => {
     if (!profile) {
       toast({
         title: "Perfil não carregado",
@@ -998,106 +1580,66 @@ const Teleconsultas = () => {
 
     // Se não tem plano ativo
     if (!hasActivePlan) {
-      // Se tem créditos de clínico geral disponíveis, usa o primeiro automaticamente
       if (effectiveAvailableCredits.length > 0) {
-        const firstCredit = effectiveAvailableCredits[0];
-        toast({
-          title: "Usando crédito disponível",
-          description: "Você tem uma consulta avulsa disponível. Iniciando...",
-        });
-        
-        // Marca o crédito como "used" IMEDIATAMENTE (antes de criar consulta)
-        // Isso garante que não aparece como disponível se o usuário navegar rápido
-        setPendingCreditId(firstCredit.id);
-        setActiveConsultationCreditId(firstCredit.id);
-        
-        // Atualiza no banco agora (consultation_id será atualizado depois)
-        await (supabase as any)
-          .from("consultation_credits")
-          .update({
-            status: "used",
-            used_at: new Date().toISOString(),
-          })
-          .eq("id", firstCredit.id);
-        
-        // Remove da lista local imediatamente
-        setAvailableCredits(prev => prev.filter(c => c.id !== firstCredit.id));
-        
-        setIsAutoSelecting(true);
-        await startConsultationFlow(cpf, profile);
+        // Tem crédito: salva o ID e abre o wizard
+        pendingCreditForWizardRef.current = effectiveAvailableCredits[0].id;
+        setShowWizardModal(true);
         return;
       }
-      // Sem créditos, mostra modal para comprar
+      // Sem créditos: mostra modal para comprar
       setShowStandaloneModal(true);
       return;
     }
 
-    // Inicia o fluxo diretamente com clínico geral (sem modal)
-    setIsAutoSelecting(true);
-    await startConsultationFlow(cpf, profile);
+    // Tem plano: abre o wizard diretamente
+    pendingCreditForWizardRef.current = null;
+    setShowWizardModal(true);
   };
 
-  // Usa um crédito existente para iniciar consulta
-  const handleUseExistingCredit = async (creditId: string) => {
+  // Chamado quando o wizard é concluído — inicia o fluxo real com os dados coletados
+  const handleWizardSubmit = async (
+    respostasAnamnese: AnamneseResposta[],
+    exames: { arquivoBase64: string }[]
+  ) => {
     if (!profile) return;
-    
-    setShowStandaloneModal(false);
-    
-    toast({
-      title: "Usando crédito disponível",
-      description: "Iniciando sua consulta...",
-    });
-    
-    // Marca o crédito como usado IMEDIATAMENTE (antes de criar consulta)
-    setPendingCreditId(creditId);
-    setActiveConsultationCreditId(creditId);
-    
-    // Atualiza no banco agora (consultation_id será associado depois)
-    await (supabase as any)
-      .from("consultation_credits")
-      .update({
-        status: "used",
-        used_at: new Date().toISOString(),
-      })
-      .eq("id", creditId);
-    
-    // Remove da lista local imediatamente
-    setAvailableCredits(prev => prev.filter(c => c.id !== creditId));
-    
-    // Agora inicia o fluxo
-    const cpf = profile.cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) return;
-    
-    setIsAutoSelecting(true);
-    await startConsultationFlow(cpf, profile);
-  };
 
-  // Inicia consulta após pagamento de consulta avulsa
-  const handleStartAfterPayment = async (creditId?: string) => {
-    if (!profile) return;
+    // Armazena dados da anamnese para uso em createConsultation
+    pendingAnamneseRef.current = { respostasAnamnese, exames };
+    setShowWizardModal(false);
+
     const cpf = profile.cpf.replace(/\D/g, "");
     if (cpf.length !== 11) return;
 
-    // Se temos um creditId, marcamos como usado IMEDIATAMENTE
+    const creditId = pendingCreditForWizardRef.current;
+    pendingCreditForWizardRef.current = null;
+
     if (creditId) {
+      // Usa crédito avulso
       setPendingCreditId(creditId);
       setActiveConsultationCreditId(creditId);
-      
-      // Atualiza no banco agora (consultation_id será associado depois)
       await (supabase as any)
         .from("consultation_credits")
-        .update({
-          status: "used",
-          used_at: new Date().toISOString(),
-        })
+        .update({ status: "used", used_at: new Date().toISOString() })
         .eq("id", creditId);
-      
-      // Remove da lista local imediatamente
-      setAvailableCredits(prev => prev.filter(c => c.id !== creditId));
+      setAvailableCredits((prev) => prev.filter((c) => c.id !== creditId));
     }
 
     setIsAutoSelecting(true);
     await startConsultationFlow(cpf, profile);
+  };
+
+  // Usa um crédito existente para iniciar consulta — abre o wizard
+  const handleUseExistingCredit = (creditId: string) => {
+    setShowStandaloneModal(false);
+    pendingCreditForWizardRef.current = creditId;
+    setShowWizardModal(true);
+  };
+
+  // Inicia consulta após pagamento de consulta avulsa — abre o wizard
+  const handleStartAfterPayment = (creditId?: string) => {
+    if (!profile) return;
+    pendingCreditForWizardRef.current = creditId || null;
+    setShowWizardModal(true);
   };
 
   // Associa o consultation_id ao crédito e navega para sala de espera
@@ -1633,6 +2175,8 @@ const Teleconsultas = () => {
                   consultation={consultation}
                   onJoin={handleJoinConsultation}
                   onCancel={handleCancelConsultation}
+                  onEvaluate={setEvaluatingConsultation}
+                  hasBeenEvaluated={evaluatedIds.has(consultation.id)}
                 />
               ))}
             </div>
@@ -1661,6 +2205,27 @@ const Teleconsultas = () => {
             )}
         </div>
       </main>
+
+      {/* Wizard de nova consulta (anamnese + exames) */}
+      {showWizardModal && (
+        <ConsultaWizardModal
+          onClose={() => setShowWizardModal(false)}
+          onSubmit={handleWizardSubmit}
+        />
+      )}
+
+      {/* Modal de avaliação */}
+      {evaluatingConsultation && (
+        <EvaluationModal
+          consultation={evaluatingConsultation}
+          accessToken={accessToken}
+          onClose={() => setEvaluatingConsultation(null)}
+          onSuccess={(id) => {
+            setEvaluatedIds((prev) => new Set([...prev, id]));
+            setEvaluatingConsultation(null);
+          }}
+        />
+      )}
     </div>
   );
 };

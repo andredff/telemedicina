@@ -99,11 +99,19 @@ export interface GetSpecialtiesResponse {
 // ATENDIMENTOS
 // ==========================================
 
+export interface AnamneseResposta {
+  perguntaQuestionarioAnamneseId: number;
+  opcoesRespondidas: { opcoesPerguntaQuestionarioAnamneseId: number }[];
+  texto: string;
+}
+
 export interface CreateConsultationRequest {
+  formatoAtendimento?: number;
   tipoAtendimento: number; // Sempre 1 para primeira consulta
   tipoProfissional: number;
   especialidadeId: number;
   pacienteId: number;
+  respostasAnamnese?: AnamneseResposta[];
   exames?: { arquivoBase64: string }[];
 }
 

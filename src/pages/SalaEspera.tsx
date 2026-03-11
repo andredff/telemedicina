@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
 import { Loader2, ChevronLeft } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -31,17 +31,15 @@ export default function SalaEspera() {
   const [showEnter, setShowEnter] = useState(false);
   const [consultationStatus, setConsultationStatus] = useState<ConsultationStatus>("AGUARDANDO");
   const [profissionalNome, setProfissionalNome] = useState<string | null>(null);
+  // Evita abrir o iframe mais de uma vez automaticamente
+  const autoEnteredRef = useRef(false);
 
   const q = new URLSearchParams(location.search);
   const especialidade = q.get("especialidade") || "Clínico Geral";
   const atendimentoId = Number(id || q.get("sala") || 0);
 
-  useEffect(() => {
-    // if token provided in query, show enter button
-    const token = q.get("token");
-    if (token) setShowEnter(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Token da URL — guardado em ref para uso no polling
+  const urlTokenRef = useRef<string | null>(q.get("token"));
 
   // Polling para verificar status do atendimento usando endpoint simplificado
   useEffect(() => {
@@ -60,7 +58,28 @@ export default function SalaEspera() {
         // Atualiza status e profissional
         setConsultationStatus(normalizedStatus);
         setProfissionalNome(response.profissionalNome);
-        
+
+        // Entra automaticamente quando médico inicia o atendimento
+        if (normalizedStatus === "EM_ATENDIMENTO" && !autoEnteredRef.current) {
+          autoEnteredRef.current = true;
+          console.log('[SalaEspera] Médico iniciou atendimento, entrando automaticamente...');
+          try {
+            const { assemedClient } = await import("@/integrations/assemed/client");
+            // Prefere token da URL, senão busca token fresco da API
+            const urlToken = urlTokenRef.current;
+            const token = urlToken || (await assemedClient.getConsultation(atendimentoId))?.pacienteToken;
+            if (token) {
+              const isSandbox = getIsSandbox();
+              const base = isSandbox ? "https://dev-app-assemed.azurewebsites.net" : "https://app.assemedtelemedicina.com";
+              setIframeSrc(`${base}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`);
+              setShowEnter(false);
+            }
+          } catch (enterErr) {
+            console.error('[SalaEspera] Erro ao entrar automaticamente:', enterErr);
+            autoEnteredRef.current = false; // permite tentar de novo no próximo ciclo
+          }
+        }
+
         if (normalizedStatus === "CONCLUIDO") {
           // Fecha o iframe e mostra mensagem
           setIframeSrc(null);
@@ -146,6 +165,7 @@ export default function SalaEspera() {
       const fresh = await assemedClient.getConsultation(atendimentoId);
       if (!fresh || !fresh.pacienteToken) {
         toast({ title: "Consulta indisponível", description: "Token do paciente não disponível.", variant: "destructive" });
+        setIframeSrc(null); // Fecha o iframe se estava aberto
         setIsLoading(false);
         return;
       }
