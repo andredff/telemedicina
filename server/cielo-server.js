@@ -18,9 +18,11 @@ app.use(cors());
 app.use(express.json());
 
 // Supabase Client (optional - only if credentials are provided)
+// Falls back to VITE_ prefixed URLs for convenience when sharing .env.local with the frontend.
 let supabase = null;
-if (process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  supabase = createClient(supabaseUrl, process.env.SUPABASE_SERVICE_ROLE_KEY);
   console.log("✓ Supabase client initialized");
 } else {
   console.log("⚠ Supabase credentials not provided - logging disabled");
@@ -61,6 +63,52 @@ function redactSensitive(value) {
   }
 
   return cloned;
+}
+
+// Sanitize card fields before sending to Cielo
+function sanitizeCardNumber(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function sanitizeSecurityCode(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function sanitizeHolder(value) {
+  if (!value) return "";
+  return String(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove accents
+    .replace(/[^A-Za-z\s]/g, "")     // Keep only letters and spaces
+    .trim()
+    .substring(0, 25);
+}
+
+function validateCardFields(card) {
+  const errors = [];
+  const cardNumber = sanitizeCardNumber(card?.cardNumber);
+  const securityCode = sanitizeSecurityCode(card?.securityCode);
+  const holder = sanitizeHolder(card?.holder);
+  const expirationDate = card?.expirationDate || "";
+  const brand = card?.brand || "";
+
+  if (cardNumber.length < 13 || cardNumber.length > 19) {
+    errors.push("Número do cartão inválido");
+  }
+  if (securityCode.length < 3 || securityCode.length > 4) {
+    errors.push("CVV deve ter 3 ou 4 dígitos");
+  }
+  if (holder.length < 2) {
+    errors.push("Nome do titular é obrigatório");
+  }
+  if (!/^(0[1-9]|1[0-2])\/20\d{2}$/.test(expirationDate)) {
+    errors.push("Data de validade inválida (formato MM/AAAA)");
+  }
+  if (!brand) {
+    errors.push("Bandeira do cartão é obrigatória");
+  }
+
+  return errors;
 }
 
 // Build Cielo request
@@ -122,10 +170,10 @@ function buildCieloRequest(request) {
       Capture: true,
       SoftDescriptor: "NOVITA",
       CreditCard: {
-        CardNumber: request.card.cardNumber.replace(/\s/g, ""),
-        Holder: request.card.holder,
+        CardNumber: sanitizeCardNumber(request.card.cardNumber),
+        Holder: sanitizeHolder(request.card.holder),
         ExpirationDate: request.card.expirationDate,
-        SecurityCode: request.card.securityCode,
+        SecurityCode: sanitizeSecurityCode(request.card.securityCode),
         Brand: request.card.brand,
         SaveCard: request.paymentType === "recurrent",
       },
@@ -178,6 +226,19 @@ app.post("/api/cielo/payment", async (req, res) => {
       return res.status(400).json({ success: false, message: "Missing required fields" });
     }
 
+    // Validate card fields before sending to Cielo
+    if (paymentType !== "pix" && card) {
+      const validationErrors = validateCardFields(card);
+      if (validationErrors.length > 0) {
+        console.log("Card validation failed:", validationErrors);
+        return res.status(400).json({
+          success: false,
+          message: validationErrors.join("; "),
+          errors: validationErrors,
+        });
+      }
+    }
+
     const cieloUrls = credentials.isSandbox ? CIELO_CONFIG.sandbox : CIELO_CONFIG.production;
     const cieloRequest = buildCieloRequest({ orderId, customer, card, amountInCents, installments, paymentType, interval, startDate, endDate, isSandbox: credentials.isSandbox });
 
@@ -211,30 +272,29 @@ app.post("/api/cielo/payment", async (req, res) => {
       });
     }
 
-    // Handle array response (Cielo can return errors as an array)
-    let cieloResponseObj = cieloResponse;
-    if (Array.isArray(cieloResponse)) {
-      // It's an array of errors
-      cieloResponseObj = { errors: cieloResponse };
-    }
+    // Handle array response (Cielo returns validation errors as an array)
+    // Normalize to object so error-checking works uniformly.
+    const cieloResponseObj = Array.isArray(cieloResponse)
+      ? { errors: cieloResponse }
+      : cieloResponse;
 
     // Cielo pode retornar 200 mesmo com erro (ex: credenciais inválidas)
     // A API retorna erros em diferentes formatos
-    let isCieloError = 
-      cieloResponse.errors || 
-      cieloResponse.Message || 
-      cieloResponse.returnMessage ||
-      cieloResponse.ReturnMessage || // Status de erro no nível raiz
-      cieloResponse.message ||
-      (cieloResponse.Status && cieloResponse.Status === 3) ||
-      (cieloResponse.status && cieloResponse.status === 3);
-    
+    let isCieloError =
+      cieloResponseObj.errors ||
+      cieloResponseObj.Message ||
+      cieloResponseObj.returnMessage ||
+      cieloResponseObj.ReturnMessage ||
+      cieloResponseObj.message ||
+      (cieloResponseObj.Status && cieloResponseObj.Status === 3) ||
+      (cieloResponseObj.status && cieloResponseObj.status === 3);
+
     // Se Status = 3 (negado), é um erro mesmo se Response = 200
-    const paymentStatus = cieloResponse.Status || cieloResponse.status || cieloResponse.Payment?.Status || 3;
+    const paymentStatus = cieloResponseObj.Status || cieloResponseObj.status || cieloResponseObj.Payment?.Status || 3;
     if (paymentStatus === 3) {
       isCieloError = true;
     }
-    
+
     if (!response.ok || isCieloError) {
       // Log failed payment
       if (supabase) {
@@ -243,33 +303,33 @@ app.post("/api/cielo/payment", async (req, res) => {
           payment_type: paymentType,
           amount: amountInCents,
           status: "failed",
-          error_message: JSON.stringify(cieloResponse),
+          error_message: JSON.stringify(cieloResponseObj),
           created_at: new Date().toISOString(),
         });
       }
 
       // Extract error message - Cielo returns errors in different formats
       let errorMsg = "Pagamento negado";
-      if (cieloResponse.Message) errorMsg = cieloResponse.Message;
-      else if (cieloResponse.returnMessage) errorMsg = cieloResponse.returnMessage;
-      else if (cieloResponse.ReturnMessage) errorMsg = cieloResponse.ReturnMessage;
-      else if (cieloResponse.message) errorMsg = cieloResponse.message;
-      else if (cieloResponse.errors && cieloResponse.errors.length > 0) {
-        errorMsg = cieloResponse.errors.map(e => e.Message || e.message || e).join(", ");
+      if (cieloResponseObj.Message) errorMsg = cieloResponseObj.Message;
+      else if (cieloResponseObj.returnMessage) errorMsg = cieloResponseObj.returnMessage;
+      else if (cieloResponseObj.ReturnMessage) errorMsg = cieloResponseObj.ReturnMessage;
+      else if (cieloResponseObj.message) errorMsg = cieloResponseObj.message;
+      else if (cieloResponseObj.errors && cieloResponseObj.errors.length > 0) {
+        errorMsg = cieloResponseObj.errors.map(e => e.Message || e.message || e).join(", ");
       }
 
       return res.status(400).json({
         success: false,
         message: errorMsg,
         status: paymentStatus,
-        returnCode: cieloResponse.ReturnCode || cieloResponse.returnCode,
-        errors: cieloResponse,
+        returnCode: cieloResponseObj.ReturnCode || cieloResponseObj.returnCode,
+        errors: cieloResponseObj.errors || cieloResponseObj,
       });
     }
 
     // Extrair dados do pagamento (pode estar em Payment ou no nível raiz)
-    const paymentData = cieloResponse.Payment || cieloResponse;
-    
+    const paymentData = cieloResponseObj.Payment || cieloResponseObj;
+
     const paymentResult = {
       success: true,
       paymentId: paymentData.PaymentId || paymentData.paymentId,
@@ -289,7 +349,7 @@ app.post("/api/cielo/payment", async (req, res) => {
         payment_id: paymentResult.paymentId,
         amount: amountInCents,
         status: "success",
-        cielo_response: cieloResponse,
+        cielo_response: cieloResponseObj,
         created_at: new Date().toISOString(),
       });
 

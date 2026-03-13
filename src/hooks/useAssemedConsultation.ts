@@ -178,6 +178,7 @@ export function useAssemedConsultation() {
         }
 
         assemedClient.setAccessToken(accessToken);
+        assemedClient.setCpfPaciente(cleanCpf);
         setState((prev) => ({ ...prev, step: "idle", accessToken }));
         return accessToken;
       } catch (err: unknown) {
@@ -270,6 +271,7 @@ export function useAssemedConsultation() {
           }
 
           assemedClient.setAccessToken(accessToken);
+          assemedClient.setCpfPaciente(cleanCpf);
         }
 
         // Carrega especialidades

@@ -25,9 +25,10 @@ const cardFormSchema = z.object({
   holder: z
     .string()
     .min(3, "Nome do titular é obrigatório")
+    .max(25, "Nome deve ter no máximo 25 caracteres")
     .refine(
-      (val) => /^[A-Za-zÀ-ÿ\s]+$/.test(val),
-      "Nome deve conter apenas letras"
+      (val) => /^[A-Z\s]+$/.test(val),
+      "Nome deve conter apenas letras sem acentuação"
     ),
   expirationDate: z
     .string()
@@ -176,10 +177,17 @@ export function CreditCardForm({
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="Como está impresso no cartão"
+                        placeholder="Como esta impresso no cartao"
                         className="pl-10 uppercase"
+                        maxLength={25}
                         onChange={(e) => {
-                          field.onChange(e.target.value.toUpperCase());
+                          field.onChange(
+                            e.target.value
+                              .toUpperCase()
+                              .normalize("NFD")
+                              .replace(/[\u0300-\u036f]/g, "")
+                              .replace(/[^A-Z\s]/g, "")
+                          );
                         }}
                       />
                     </FormControl>

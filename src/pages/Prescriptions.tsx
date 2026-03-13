@@ -50,7 +50,10 @@ const Prescriptions = () => {
   const [assemedReceituarios, setAssemedReceituarios] = useState<AssemedReceituario[]>([]);
   const [loadingReceituarios, setLoadingReceituarios] = useState(true);
 
-  // Carrega receituários de todas as consultas Assemed
+  // Erro geral ao buscar receituários
+  const [receituariosError, setReceituariosError] = useState<string | null>(null);
+
+  // Carrega receituários de todas as consultas Assemed (em paralelo)
   useEffect(() => {
     // Aguarda o hook terminar de autenticar antes de tomar decisão
     if (assemedLoading) {
@@ -62,6 +65,7 @@ const Prescriptions = () => {
 
     const loadReceituarios = async () => {
       setLoadingReceituarios(true);
+      setReceituariosError(null);
       try {
         const { assemedClient } = await import("@/integrations/assemed/client");
 
@@ -91,43 +95,58 @@ const Prescriptions = () => {
 
         if (cancelled) return;
 
-        // 2. Para cada consulta, buscar receituários (pula canceladas)
-        const receituarios: AssemedReceituario[] = [];
+        // 2. Buscar receituários em paralelo (pula canceladas)
+        const eligibleConsultations = consultations.filter(
+          c => normalizeConsultationStatus(c) !== "CANCELADO"
+        );
 
-        for (const consultation of consultations) {
-          const status = normalizeConsultationStatus(consultation);
-          if (status === "CANCELADO") continue;
-
-          try {
+        const results = await Promise.allSettled(
+          eligibleConsultations.map(async (consultation) => {
             const items = await assemedClient.getReceituarios(consultation.id);
-            
-            if (items && items.length > 0) {
-              console.log(`[Prescriptions] Consulta #${consultation.id}: ${items.length} receituário(s)`);
-            }
+            return { consultation, items };
+          })
+        );
 
-            for (const item of items) {
-              if (item.urlPdf) {
-                receituarios.push({
-                  consultationId: consultation.id,
-                  especialidade: consultation.especialidadeNome || "Consulta",
-                  profissional: consultation.profissionalNome || null,
-                  data: consultation.dataHoraFim || consultation.dataHoraCriacao,
-                  status: normalizeConsultationStatus(consultation),
-                  urlPdf: item.urlPdf,
-                });
-              }
+        if (cancelled) return;
+
+        const receituarios: AssemedReceituario[] = [];
+        let failCount = 0;
+
+        for (const result of results) {
+          if (result.status === "rejected") {
+            failCount++;
+            continue;
+          }
+          const { consultation, items } = result.value;
+          if (items && items.length > 0) {
+            console.log(`[Prescriptions] Consulta #${consultation.id}: ${items.length} receituário(s)`);
+          }
+          for (const item of items) {
+            if (item.urlPdf) {
+              receituarios.push({
+                consultationId: consultation.id,
+                especialidade: consultation.especialidadeNome || "Consulta",
+                profissional: consultation.profissionalNome || null,
+                data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+                status: normalizeConsultationStatus(consultation),
+                urlPdf: item.urlPdf,
+              });
             }
-          } catch (err) {
-            // Silently skip — consulta pode não ter receituários
           }
         }
 
         if (cancelled) return;
 
+        // Se todas as chamadas falharam e havia consultas elegíveis, mostra erro
+        if (failCount > 0 && failCount === eligibleConsultations.length && eligibleConsultations.length > 0) {
+          setReceituariosError("Não foi possível carregar os receituários. Tente novamente mais tarde.");
+        }
+
         console.log("[Prescriptions] Total de receituários encontrados:", receituarios.length);
         setAssemedReceituarios(receituarios);
       } catch (err) {
         console.error("[Prescriptions] Erro ao carregar receituários Assemed:", err);
+        setReceituariosError("Erro ao buscar receituários das consultas.");
       } finally {
         setLoadingReceituarios(false);
       }
@@ -425,7 +444,7 @@ const Prescriptions = () => {
         </div>
 
         {/* Receituários Assemed (da Teleconsulta) */}
-        {(assemedReceituarios.length > 0 || loadingReceituarios) && (
+        {(assemedReceituarios.length > 0 || loadingReceituarios || receituariosError) && (
           <div className="mb-8">
             <div className="flex items-center gap-2 mb-4">
               <Video className="h-5 w-5 text-primary" />
@@ -439,6 +458,13 @@ const Prescriptions = () => {
                 <CardContent className="py-8 text-center">
                   <Loader2 className="mx-auto h-8 w-8 text-primary animate-spin mb-3" />
                   <p className="text-sm text-muted-foreground">Buscando receituários das consultas...</p>
+                </CardContent>
+              </Card>
+            ) : receituariosError && assemedReceituarios.length === 0 ? (
+              <Card>
+                <CardContent className="py-8 text-center">
+                  <FileText className="mx-auto h-8 w-8 text-destructive mb-3" />
+                  <p className="text-sm text-destructive">{receituariosError}</p>
                 </CardContent>
               </Card>
             ) : (

@@ -41,9 +41,17 @@ class CieloClient {
 
     if (this.useMock) {
       console.info("[Cielo] Usando modo MOCK (pagamento simulado).");
-      if (!forceMock && serverConfigured && serverIsLocalhost && import.meta.env.PROD) {
-        // In production builds, "localhost" is never reachable from end-user browsers.
-        console.warn("[Cielo] Servidor de pagamento aponta para localhost em produção. Ajuste VITE_LOCAL_SERVER_URL ou use um backend/edge function.");
+      if (import.meta.env.PROD && !forceMock && !serverConfigured) {
+        console.warn(
+          "[Cielo] Nenhum servidor de pagamento configurado em produção. " +
+          "Pagamentos reais estão desabilitados. " +
+          "Defina VITE_LOCAL_SERVER_URL com a URL do backend de pagamento durante o build."
+        );
+      } else if (import.meta.env.PROD && !forceMock && serverConfigured && serverIsLocalhost) {
+        console.warn(
+          "[Cielo] Servidor de pagamento aponta para localhost em produção. " +
+          "Ajuste VITE_LOCAL_SERVER_URL para a URL pública do backend."
+        );
       }
     } else if (this.useLocalServer) {
       console.info(`[Cielo] Usando proxy de pagamento: ${this.localServerUrl}`);

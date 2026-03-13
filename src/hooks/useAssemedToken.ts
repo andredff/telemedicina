@@ -1,6 +1,9 @@
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { AuthService } from "@/integrations/assemed/authService";
+import { getTokenExpiration, isTokenExpired } from "@/integrations/assemed/tokenUtils";
 
 interface ProfileData {
   cpf?: string;
@@ -19,22 +22,33 @@ export function useAssemedToken() {
   const [accessToken, setAccessToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+
   const authenticate = useCallback(async (profile: ProfileData) => {
     if (!profile?.cpf || !profile?.email) return;
-
     const cpf = profile.cpf.replace(/\D/g, "");
     if (cpf.length !== 11) return;
 
     setIsLoading(true);
     try {
       const { assemedClient } = await import("@/integrations/assemed/client");
-      
-      // Tenta login direto
+      assemedClient.setCpfPaciente(cpf);
+
+      // 1. Tenta restaurar token do storage
+      const stored = AuthService.getToken();
+      if (stored && stored.accessToken && !AuthService.isTokenExpired(stored)) {
+        setAccessToken(stored.accessToken);
+        assemedClient.setAccessToken(stored.accessToken);
+        return;
+      }
+
+      // 2. Faz login-externo e salva token
       try {
         const loginResponse = await assemedClient.login(cpf);
-        console.log("[useAssemedToken] Login Assemed OK, token obtido");
+        const expiresAt = getTokenExpiration(loginResponse.accessToken) || (Date.now() + 60 * 60 * 1000);
+        AuthService.saveToken(loginResponse.accessToken, expiresAt);
         setAccessToken(loginResponse.accessToken);
         assemedClient.setAccessToken(loginResponse.accessToken);
+        return;
       } catch (loginError: unknown) {
         // Se falhar com 401/404 (não cadastrado), tenta cadastro e login novamente
         const isNotRegistered =
@@ -51,9 +65,9 @@ export function useAssemedToken() {
             const registerData = buildRegisterData(cpf, profile);
             await assemedClient.registerPatient(registerData);
             logger.info("[useAssemedToken] Cadastro realizado, tentando login...");
-            
             const retryLogin = await assemedClient.login(cpf);
-            console.log("[useAssemedToken] Login após cadastro OK");
+            const expiresAt = getTokenExpiration(retryLogin.accessToken) || (Date.now() + 60 * 60 * 1000);
+            AuthService.saveToken(retryLogin.accessToken, expiresAt);
             setAccessToken(retryLogin.accessToken);
             assemedClient.setAccessToken(retryLogin.accessToken);
             return;

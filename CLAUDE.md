@@ -126,10 +126,17 @@ Required in `.env`:
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_PUBLISHABLE_KEY`
 
-Optional (Cielo - uses mock if not set):
-- `VITE_CIELO_MERCHANT_ID` - Cielo store identifier
-- `VITE_CIELO_MERCHANT_KEY` - Cielo API key
-- `VITE_CIELO_SANDBOX` - Set to "true" for sandbox environment
+Frontend payment config (in `.env` / `.env.local`):
+- `VITE_LOCAL_SERVER_URL` - Payment proxy server URL (e.g. `http://localhost:5174` for dev, production backend URL for prod)
+- `VITE_CIELO_FORCE_MOCK` - Set to `"true"` to force mock payments regardless of server config
+- `VITE_USE_LOCAL_SERVER` - Set to `"true"` to auto-default to `localhost:5174` in dev
+
+Server-side Cielo credentials (in `.env.local`, used by `cielo-server.js` only):
+- `CIELO_MERCHANT_ID` - Cielo store identifier
+- `CIELO_MERCHANT_KEY` - Cielo API key
+- `CIELO_SANDBOX` - Set to `"true"` for sandbox environment
+
+**Important**: Cielo credentials must NOT use the `VITE_` prefix to avoid leaking into the frontend bundle.
 
 ## AWS Deploy (S3 + CloudFront)
 

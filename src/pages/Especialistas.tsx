@@ -648,26 +648,31 @@ const Especialistas = () => {
     loadAvailableCredits();
   }, [user, specialistConsultations, loadAvailableCredits, pendingCreditId, activeConsultationCreditId]);
 
-  // Carrega créditos quando o usuário é definido
-  useEffect(() => {
-    loadAvailableCredits();
-  }, [loadAvailableCredits]);
 
-  // Restaura créditos órfãos quando as consultas são carregadas
-  const hasRestoredOrphans = useRef(false);
+  // Carrega créditos quando o usuário é definido, mas só se não houver créditos já carregados
   useEffect(() => {
-    if (!isLoadingConsultations && user && !hasRestoredOrphans.current) {
-      hasRestoredOrphans.current = true;
+    if (user && availableCredits.length === 0) {
+      loadAvailableCredits();
+    }
+  }, [user, availableCredits.length, loadAvailableCredits]);
+
+
+  // Restaura créditos órfãos quando as consultas são carregadas (apenas uma vez por usuário)
+  const hasRestoredOrphans = useRef<string | null>(null);
+  useEffect(() => {
+    if (!isLoadingConsultations && user && hasRestoredOrphans.current !== user.id) {
+      hasRestoredOrphans.current = user.id;
       restoreOrphanCredits();
     }
   }, [isLoadingConsultations, user, restoreOrphanCredits]);
 
-  // Recarrega créditos quando abre o modal (para garantir dados atualizados)
+
+  // Recarrega créditos quando abre o modal, mas só se o modal abrir e não estiver carregando
   useEffect(() => {
-    if (showStandaloneModal) {
+    if (showStandaloneModal && !isLoadingConsultations) {
       loadAvailableCredits();
     }
-  }, [showStandaloneModal, loadAvailableCredits]);
+  }, [showStandaloneModal, isLoadingConsultations, loadAvailableCredits]);
 
   // Carrega créditos em uso (para consultas ativas) e sincroniza activeConsultationCreditId
   const loadCreditsInUse = useCallback(async () => {
@@ -757,16 +762,19 @@ const Especialistas = () => {
       setActiveConsultationCreditId(null);
     }
     
-    // Recarrega créditos disponíveis após correções
-    if (activeConsultationIds.length > 0) {
+    // Recarrega créditos disponíveis após correções, mas só se realmente houve alteração
+    if (activeConsultationIds.length > 0 && allUsedCredits && allUsedCredits.length !== activeCredits.length) {
       loadAvailableCredits();
     }
   }, [user, specialistConsultations, pendingCreditId, activeConsultationCreditId, loadAvailableCredits]);
 
-  // Atualiza créditos em uso quando consultas mudam
+
+  // Atualiza créditos em uso quando consultas mudam, mas só se houver consultas carregadas
   useEffect(() => {
-    loadCreditsInUse();
-  }, [loadCreditsInUse]);
+    if (!isLoadingConsultations) {
+      loadCreditsInUse();
+    }
+  }, [isLoadingConsultations, loadCreditsInUse]);
 
   // Calcula créditos efetivamente disponíveis (exclui pendentes e em uso na consulta ativa)
   const effectiveAvailableCredits = useMemo(() => {

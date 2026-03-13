@@ -213,9 +213,11 @@ function ConsultationHistoryCard({
             <Button
               size="sm"
               variant="outline"
+              className="gap-2 text-destructive hover:text-destructive"
               onClick={() => onCancel(consultation.id)}
             >
-              Cancelar
+              <XCircle className="h-4 w-4" />
+              Cancelar consulta
             </Button>
           )}
           {normalizedStatus === "CONCLUIDO" && (
@@ -918,6 +920,8 @@ const Teleconsultas = () => {
   const [showWizardModal, setShowWizardModal] = useState(false);
   const [evaluatingConsultation, setEvaluatingConsultation] = useState<Consultation | null>(null);
   const [evaluatedIds, setEvaluatedIds] = useState<Set<number>>(new Set());
+  const [cancelConfirmId, setCancelConfirmId] = useState<number | null>(null);
+  const [isCancellingConsultation, setIsCancellingConsultation] = useState(false);
 
   // Dados coletados no wizard (anamnese + exames) para usar na criação do atendimento
   const pendingAnamneseRef = useRef<{
@@ -1729,59 +1733,75 @@ const Teleconsultas = () => {
 
   // ── Cancel consultation ───────────────────────────────────────────────────
 
-  const handleCancelConsultation = async (id: number) => {
-    await cancelConsultation(id);
-    
-    // Tenta restaurar o crédito avulso se existir
-    let hadCredit = false;
+  const handleRequestCancel = (id: number) => {
+    setCancelConfirmId(id);
+  };
+
+  const handleConfirmCancel = async () => {
+    if (!cancelConfirmId) return;
+    const id = cancelConfirmId;
+    setIsCancellingConsultation(true);
     try {
-      // Primeiro tenta restaurar pelo consultation_id (consulta já associada)
-      const { data: creditByConsultation, error: error1 } = await (supabase as any)
-        .from("consultation_credits")
-        .update({
-          status: "available",
-          consultation_id: null,
-          used_at: null,
-        })
-        .eq("consultation_id", id)
-        .eq("status", "used")
-        .select();
-      
-      if (creditByConsultation && creditByConsultation.length > 0) {
-        logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
-        setActiveConsultationCreditId(null); // Limpa o crédito da consulta ativa
-        loadAvailableCredits();
-        hadCredit = true;
-      } else if (pendingCreditId || activeConsultationCreditId) {
-        // Se não encontrou pelo consultation_id, tenta restaurar pelo pendingCreditId ou activeConsultationCreditId
-        const creditIdToRestore = pendingCreditId || activeConsultationCreditId;
-        const { error: error2 } = await (supabase as any)
+      await cancelConsultation(id);
+
+      // Tenta restaurar o crédito avulso se existir
+      let hadCredit = false;
+      try {
+        const { data: creditByConsultation } = await (supabase as any)
           .from("consultation_credits")
           .update({
             status: "available",
             consultation_id: null,
             used_at: null,
           })
-          .eq("id", creditIdToRestore);
-        
-        if (!error2) {
-          logger.info(`Crédito ${creditIdToRestore} restaurado`);
-          setPendingCreditId(null);
+          .eq("consultation_id", id)
+          .eq("status", "used")
+          .select();
+
+        if (creditByConsultation && creditByConsultation.length > 0) {
+          logger.info(`Crédito restaurado para consulta cancelada pelo usuário ${id}`);
           setActiveConsultationCreditId(null);
           loadAvailableCredits();
           hadCredit = true;
+        } else if (pendingCreditId || activeConsultationCreditId) {
+          const creditIdToRestore = pendingCreditId || activeConsultationCreditId;
+          const { error: error2 } = await (supabase as any)
+            .from("consultation_credits")
+            .update({
+              status: "available",
+              consultation_id: null,
+              used_at: null,
+            })
+            .eq("id", creditIdToRestore);
+
+          if (!error2) {
+            logger.info(`Crédito ${creditIdToRestore} restaurado`);
+            setPendingCreditId(null);
+            setActiveConsultationCreditId(null);
+            loadAvailableCredits();
+            hadCredit = true;
+          }
         }
+      } catch (err) {
+        logger.error("Erro ao restaurar crédito:", err);
       }
-    } catch (err) {
-      logger.error("Erro ao restaurar crédito:", err);
+
+      toast({
+        title: "Consulta cancelada",
+        description: hadCredit
+          ? "Sua consulta foi cancelada e seu crédito foi restaurado."
+          : "Sua consulta foi cancelada.",
+      });
+    } catch {
+      toast({
+        title: "Erro ao cancelar",
+        description: "Não foi possível cancelar a consulta. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCancellingConsultation(false);
+      setCancelConfirmId(null);
     }
-    
-    toast({
-      title: "Consulta cancelada",
-      description: hadCredit 
-        ? "Sua consulta foi cancelada e seu crédito foi restaurado."
-        : "Sua consulta foi cancelada.",
-    });
   };
 
   // ── Close iframe ──────────────────────────────────────────────────────────
@@ -2174,7 +2194,7 @@ const Teleconsultas = () => {
                   key={consultation.id}
                   consultation={consultation}
                   onJoin={handleJoinConsultation}
-                  onCancel={handleCancelConsultation}
+                  onCancel={handleRequestCancel}
                   onEvaluate={setEvaluatingConsultation}
                   hasBeenEvaluated={evaluatedIds.has(consultation.id)}
                 />
@@ -2226,6 +2246,39 @@ const Teleconsultas = () => {
           }}
         />
       )}
+
+      {/* Modal de confirmação de cancelamento */}
+      <Dialog open={cancelConfirmId !== null} onOpenChange={(open) => { if (!open) setCancelConfirmId(null); }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancelar consulta?</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja cancelar esta consulta? Esta ação não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => setCancelConfirmId(null)}
+              disabled={isCancellingConsultation}
+            >
+              Voltar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancel}
+              disabled={isCancellingConsultation}
+              className="gap-2"
+            >
+              {isCancellingConsultation ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />Cancelando...</>
+              ) : (
+                "Cancelar consulta"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

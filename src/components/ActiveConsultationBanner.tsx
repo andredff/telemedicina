@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Video, X, Clock, Loader2, Ban } from "lucide-react";
+import { Video, X, Clock, Loader2, Ban, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -58,11 +58,14 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
    * GET /api/Atendimentos/{id}/simplificado
    */
   const checkConsultationStatus = useCallback(async (consultationId: number): Promise<ConsultationSimplified | null> => {
-    if (!accessToken) return null;
-
     try {
       const { assemedClient } = await import("@/integrations/assemed/client");
-      assemedClient.setAccessToken(accessToken);
+      // Usa token da prop ou fallback para o token persistido no client
+      if (accessToken) {
+        assemedClient.setAccessToken(accessToken);
+      } else if (!assemedClient.hasValidToken()) {
+        return null;
+      }
       const response = await assemedClient.getConsultationStatus(consultationId);
       // Normaliza o status (API pode retornar em diferentes formatos)
       const normalizedStatus = normalizeSimplifiedStatus(response);
@@ -79,11 +82,14 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
    * Se não houver cache, busca lista completa de consultas
    */
   const loadActiveConsultation = useCallback(async () => {
-    if (!accessToken) return;
-
     try {
       const { assemedClient } = await import("@/integrations/assemed/client");
-      assemedClient.setAccessToken(accessToken);
+      // Usa token da prop ou fallback para token persistido no client
+      if (accessToken) {
+        assemedClient.setAccessToken(accessToken);
+      } else if (!assemedClient.hasValidToken()) {
+        return;
+      }
       
       // Primeiro tenta usar cache e verificar com endpoint simplificado
       const cached = getCachedConsultation();
@@ -244,6 +250,24 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
     }
   };
 
+  const handleOpenNewTab = async () => {
+    if (!activeConsultation || !accessToken) return;
+    try {
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      assemedClient.setAccessToken(accessToken);
+      const fresh = await assemedClient.getConsultation(activeConsultation.id);
+      if (!fresh?.pacienteToken) {
+        toast({ title: "Consulta indisponível", description: "Token do paciente não disponível.", variant: "destructive" });
+        return;
+      }
+      const isSandbox = import.meta.env.VITE_ASSEMED_SANDBOX === "true" || import.meta.env.DEV;
+      const base = isSandbox ? "https://dev-app-assemed.azurewebsites.net" : "https://app.assemedtelemedicina.com";
+      window.open(`${base}/sala-espera-externa/${activeConsultation.id}?token=${encodeURIComponent(fresh.pacienteToken)}`, "_blank");
+    } catch (err) {
+      toast({ title: "Erro", description: "Não foi possível abrir a consulta.", variant: "destructive" });
+    }
+  };
+
   const handleDismiss = () => {
     setIsDismissed(true);
   };
@@ -346,6 +370,15 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
                       Entrar
                     </>
                   )}
+                </Button>
+                <Button
+                  onClick={handleOpenNewTab}
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  title="Abrir em nova aba"
+                >
+                  <ExternalLink className="h-4 w-4" />
                 </Button>
                 <Button
                   onClick={handleCancel}

@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useLocation, useNavigate } from "react-router-dom";
-import { Loader2, ChevronLeft } from "lucide-react";
+import { Loader2, ChevronLeft, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -40,10 +40,58 @@ export default function SalaEspera() {
 
   // Token da URL — guardado em ref para uso no polling
   const urlTokenRef = useRef<string | null>(q.get("token"));
+  // Controla se o token já foi recuperado/validado no mount
+  const [tokenReady, setTokenReady] = useState(false);
+
+  // Recupera token do sessionStorage ou re-autentica via login-externo
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { assemedClient } = await import("@/integrations/assemed/client");
+        if (assemedClient.hasValidToken()) {
+          console.log("[SalaEspera] Token válido encontrado no client");
+          if (!cancelled) setTokenReady(true);
+          return;
+        }
+        // Sem token válido — tenta re-autenticar usando CPF do perfil
+        console.log("[SalaEspera] Sem token válido, tentando re-autenticar...");
+        const cpf = assemedClient.getCpfPaciente();
+        if (cpf) {
+          await assemedClient.login(cpf);
+          console.log("[SalaEspera] Re-autenticação com CPF em cache OK");
+          if (!cancelled) setTokenReady(true);
+          return;
+        }
+        // Fallback: busca CPF do perfil Supabase
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("cpf")
+            .eq("id", user.id)
+            .single();
+          if (profile?.cpf) {
+            const cleanCpf = profile.cpf.replace(/\D/g, "");
+            if (cleanCpf.length === 11) {
+              assemedClient.setCpfPaciente(cleanCpf);
+              await assemedClient.login(cleanCpf);
+              console.log("[SalaEspera] Re-autenticação via Supabase profile OK");
+            }
+          }
+        }
+      } catch (err) {
+        console.error("[SalaEspera] Erro ao recuperar token:", err);
+      } finally {
+        if (!cancelled) setTokenReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   // Polling para verificar status do atendimento usando endpoint simplificado
   useEffect(() => {
-    if (!atendimentoId) return;
+    if (!atendimentoId || !tokenReady) return;
 
     const checkConsultationStatus = async () => {
       try {
@@ -69,9 +117,7 @@ export default function SalaEspera() {
             const urlToken = urlTokenRef.current;
             const token = urlToken || (await assemedClient.getConsultation(atendimentoId))?.pacienteToken;
             if (token) {
-              const isSandbox = getIsSandbox();
-              const base = isSandbox ? "https://dev-app-assemed.azurewebsites.net" : "https://app.assemedtelemedicina.com";
-              setIframeSrc(`${base}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(token)}`);
+              setIframeSrc(buildConsultationUrl(atendimentoId, token));
               setShowEnter(false);
             }
           } catch (enterErr) {
@@ -155,26 +201,51 @@ export default function SalaEspera() {
     const interval = setInterval(checkConsultationStatus, 10000);
 
     return () => clearInterval(interval);
-  }, [atendimentoId, toast, navigate]);
+  }, [atendimentoId, toast, navigate, tokenReady]);
+
+  const buildConsultationUrl = (consultationId: number, token: string) => {
+    const isSandbox = getIsSandbox();
+    const base = isSandbox ? "https://dev-app-assemed.azurewebsites.net" : "https://app.assemedtelemedicina.com";
+    return `${base}/sala-espera-externa/${consultationId}?token=${encodeURIComponent(token)}`;
+  };
+
+  const fetchFreshToken = async (): Promise<string | null> => {
+    const { assemedClient } = await import("@/integrations/assemed/client");
+    const fresh = await assemedClient.getConsultation(atendimentoId);
+    return fresh?.pacienteToken || null;
+  };
 
   const handleEnter = async () => {
     if (!atendimentoId) return;
     setIsLoading(true);
     try {
-      const { assemedClient } = await import("@/integrations/assemed/client");
-      const fresh = await assemedClient.getConsultation(atendimentoId);
-      if (!fresh || !fresh.pacienteToken) {
+      const token = await fetchFreshToken();
+      if (!token) {
         toast({ title: "Consulta indisponível", description: "Token do paciente não disponível.", variant: "destructive" });
-        setIframeSrc(null); // Fecha o iframe se estava aberto
+        setIframeSrc(null);
         setIsLoading(false);
         return;
       }
-
-      const isSandbox = getIsSandbox();
-      const base = isSandbox ? "https://dev-app-assemed.azurewebsites.net" : "https://app.assemedtelemedicina.com";
-      const url = `${base}/sala-espera-externa/${atendimentoId}?token=${encodeURIComponent(fresh.pacienteToken)}`;
-      setIframeSrc(url);
+      setIframeSrc(buildConsultationUrl(atendimentoId, token));
       setShowEnter(false);
+    } catch (err) {
+      toast({ title: "Erro", description: "Não foi possível obter a consulta.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleOpenNewTab = async () => {
+    if (!atendimentoId) return;
+    setIsLoading(true);
+    try {
+      const token = await fetchFreshToken();
+      if (!token) {
+        toast({ title: "Consulta indisponível", description: "Token do paciente não disponível.", variant: "destructive" });
+        setIsLoading(false);
+        return;
+      }
+      window.open(buildConsultationUrl(atendimentoId, token), "_blank");
     } catch (err) {
       toast({ title: "Erro", description: "Não foi possível obter a consulta.", variant: "destructive" });
     } finally {
@@ -276,11 +347,11 @@ export default function SalaEspera() {
       <div className="sala-container">
         <div className="sala-content" id="waitingRoom">
           <div className="waiting-room">
-            <div className="waiting-icon">
+            {/* <div className="waiting-icon">
               <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                 <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z" fill="currentColor"/>
               </svg>
-            </div>
+            </div> */}
 
             <h1 className="waiting-title">Sala de Espera</h1>
 
@@ -320,11 +391,22 @@ export default function SalaEspera() {
               </Button>
             </div> */}
 
-            {/* Secondary enter button (kept for compatibility) */}
-            <button id="enterButton" className={`enter-button`} onClick={handleEnter}>
-              <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
-              {isLoading ? 'Carregando...' : 'Entrar na Consulta'}
-            </button>
+            {/* Botões de entrada */}
+            <div style={{ display: "flex", gap: "12px", marginTop: "24px" }}>
+              <button id="enterButton" className="enter-button" style={{ marginTop: 0, flex: 1 }} onClick={handleEnter} disabled={isLoading || !atendimentoId}>
+                <svg viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/></svg>
+                {isLoading ? 'Carregando...' : 'Entrar na Consulta'}
+              </button>
+              {/* <Button
+                variant="outline"
+                onClick={handleOpenNewTab}
+                disabled={isLoading || !atendimentoId}
+                className="gap-2 h-auto py-4 px-6 rounded-xl text-base font-semibold border-2 border-amber-400 text-amber-700 hover:bg-amber-50"
+              >
+                <ExternalLink className="h-5 w-5" />
+                Abrir em nova aba
+              </Button> */}
+            </div>
 
             <div className="info-cards">
               <div className="info-card">
@@ -371,7 +453,7 @@ export default function SalaEspera() {
         </div>
 
         {/* Iframe para a consulta real quando conectado (zIndex below header so header stays visible) */}
-        <iframe id="consultationFrame" style={{ display: iframeSrc ? "block" : "none", width: "100%", height: "100%", border: "none", position: "fixed", inset: 0, zIndex: 20 }} src={iframeSrc ?? undefined} allow="camera; microphone; fullscreen; display-capture" />
+        <iframe id="consultationFrame" style={{ display: iframeSrc ? "block" : "none", width: "100%", height: "100%", border: "none", position: "fixed", inset: 0, zIndex: 20, top: 50 }} src={iframeSrc ?? undefined} allow="camera; microphone; fullscreen; display-capture" />
       </div>
     </div>
   );

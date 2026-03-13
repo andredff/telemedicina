@@ -18,6 +18,10 @@ import type {
   DecodedToken,
 } from "./types";
 
+
+const STORAGE_KEY_TOKEN = "assemed_access_token";
+const STORAGE_KEY_CPF = "assemed_cpf_paciente";
+
 class AssemedClient {
   private clientId: string;
   private clientSecret: string;
@@ -25,6 +29,21 @@ class AssemedClient {
   private apiUrl: string;
   private useMock: boolean;
   private accessToken: string | null = null;
+  private cpfPaciente: string | null = null; // CPF do paciente para retry de login
+  /**
+   * Define o CPF do paciente para retry automático de login
+   */
+  setCpfPaciente(cpf: string) {
+    this.cpfPaciente = cpf;
+    try { sessionStorage.setItem(STORAGE_KEY_CPF, cpf); } catch { /* ignore */ }
+  }
+
+  /**
+   * Obtém o CPF do paciente salvo
+   */
+  getCpfPaciente(): string | null {
+    return this.cpfPaciente;
+  }
 
   constructor() {
     const credentials = getAssemedCredentials();
@@ -43,13 +62,32 @@ class AssemedClient {
         "[Assemed] Credenciais não configuradas. Usando modo MOCK para testes locais."
       );
     }
+
+    // Recupera token e CPF do sessionStorage (persistência entre refreshes)
+    try {
+      const storedToken = sessionStorage.getItem(STORAGE_KEY_TOKEN);
+      const storedCpf = sessionStorage.getItem(STORAGE_KEY_CPF);
+      if (storedToken && !this.isTokenExpired(storedToken)) {
+        this.accessToken = storedToken;
+        console.info("[Assemed] Token recuperado do sessionStorage");
+      } else if (storedToken) {
+        // Token expirado — limpa
+        sessionStorage.removeItem(STORAGE_KEY_TOKEN);
+        console.info("[Assemed] Token expirado removido do sessionStorage");
+      }
+      if (storedCpf) {
+        this.cpfPaciente = storedCpf;
+      }
+    } catch { /* ignore storage errors */ }
   }
 
   /**
    * Define o token de acesso para requisições autenticadas
+   * Persiste no sessionStorage para sobreviver a refreshes de página
    */
   setAccessToken(token: string): void {
     this.accessToken = token;
+    try { sessionStorage.setItem(STORAGE_KEY_TOKEN, token); } catch { /* ignore */ }
   }
 
   /**
@@ -57,6 +95,21 @@ class AssemedClient {
    */
   getAccessToken(): string | null {
     return this.accessToken;
+  }
+
+  /**
+   * Verifica se o client tem um token válido (não expirado)
+   */
+  hasValidToken(): boolean {
+    return !!this.accessToken && !this.isTokenExpired(this.accessToken);
+  }
+
+  /**
+   * Limpa o token (logout ou expiração)
+   */
+  clearToken(): void {
+    this.accessToken = null;
+    try { sessionStorage.removeItem(STORAGE_KEY_TOKEN); } catch { /* ignore */ }
   }
 
   /**
@@ -107,11 +160,12 @@ class AssemedClient {
   private async request<T>(
     endpoint: string,
     options: RequestInit,
-    authenticated: boolean = false
+    authenticated: boolean = false,
+    retryOn401: boolean = true
   ): Promise<T> {
     const url = `${this.apiUrl}${endpoint}`;
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       ...options,
       headers: {
         ...this.getHeaders(authenticated),
@@ -120,8 +174,29 @@ class AssemedClient {
     });
 
     // Verifica se a resposta é JSON válido
-    const contentType = response.headers.get("content-type");
-    const isJson = contentType?.includes("application/json") || contentType?.includes("text/json");
+    let contentType = response.headers.get("content-type");
+    let isJson = contentType?.includes("application/json") || contentType?.includes("text/json");
+
+    // Retry automático de login-externo se 401
+    if (response.status === 401 && authenticated && retryOn401 && this.cpfPaciente) {
+      console.warn("[Assemed] 401 detectado. Tentando login-externo automático e retry...");
+      try {
+        await this.login(this.cpfPaciente);
+        // Repete a requisição original com novo token, mas sem retry recursivo
+        response = await fetch(url, {
+          ...options,
+          headers: {
+            ...this.getHeaders(authenticated),
+            ...options.headers,
+          },
+        });
+        contentType = response.headers.get("content-type");
+        isJson = contentType?.includes("application/json") || contentType?.includes("text/json");
+      } catch (retryErr) {
+        console.error("[Assemed] Falha ao tentar login-externo automático após 401:", retryErr);
+        // Continua para tratamento de erro padrão
+      }
+    }
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
@@ -255,6 +330,7 @@ class AssemedClient {
         clientSecret: this.clientSecret,
       });
       this.accessToken = response.accessToken;
+      try { sessionStorage.setItem(STORAGE_KEY_TOKEN, response.accessToken); } catch { /* ignore */ }
       return response;
     }
 
@@ -281,6 +357,7 @@ class AssemedClient {
     );
 
     this.accessToken = response.accessToken;
+    try { sessionStorage.setItem(STORAGE_KEY_TOKEN, response.accessToken); } catch { /* ignore */ }
     return response;
   }
 
