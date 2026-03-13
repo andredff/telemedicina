@@ -91,11 +91,11 @@ echo "----------------------------------------"
 [ -f "src/integrations/supabase/searchClient.ts" ] && test_item 0 "Search Client" || test_item 1 "Search Client"
 
 echo ""
-echo "7. DADOS MOCK"
+echo "7. DADOS MOCK (removidos — projeto usa apenas APIs reais)"
 echo "----------------------------------------"
 
-[ -f "src/data/mockPrescriptions.ts" ] && test_item 0 "Mock Prescriptions" || test_item 1 "Mock Prescriptions"
-[ -f "src/mock-search-client.ts" ] && test_item 0 "Mock Search Client" || test_item 1 "Mock Search Client"
+[ ! -f "src/data/mockPrescriptions.ts" ] && test_item 0 "Mock Prescriptions removido" || test_item 1 "Mock Prescriptions ainda existe"
+[ ! -f "src/mock-search-client.ts" ] && test_item 0 "Mock Search Client removido" || test_item 1 "Mock Search Client ainda existe"
 
 echo ""
 echo "8. VERIFICAÇÃO DE CONSOLE.LOG"

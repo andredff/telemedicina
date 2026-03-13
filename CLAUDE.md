@@ -75,20 +75,13 @@ The project integrates with Cielo E-commerce API for payment processing.
 
 ### Files Structure
 - `src/integrations/cielo/` - Cielo API client, types, and configuration
-  - `client.ts` - Main client (auto-switches to mock when no credentials)
-  - `mockClient.ts` - Mock client for local testing without API credentials
+  - `client.ts` - Main client (requires payment proxy server configured via VITE_LOCAL_SERVER_URL)
   - `types.ts` - TypeScript types for API requests/responses
   - `config.ts` - URLs and test card configurations
 - `src/services/paymentService.ts` - High-level payment functions
 - `src/components/checkout/` - Payment UI components
 - `src/pages/CheckoutSubscription.tsx` - Subscription checkout page
 - `src/pages/CheckoutMedication.tsx` - Medication checkout page
-
-### Mock Mode
-When Cielo credentials are not configured, the client automatically uses a mock implementation that simulates the API behavior locally. The mock:
-- Simulates network delay (800-1500ms)
-- Uses the last digit of card number to determine success/failure
-- Stores transactions in memory
 
 ### Key Functions (paymentService.ts)
 - `processMedicationPayment()` - Single payment for medication orders
@@ -128,8 +121,6 @@ Required in `.env`:
 
 Frontend payment config (in `.env` / `.env.local`):
 - `VITE_LOCAL_SERVER_URL` - Payment proxy server URL (e.g. `http://localhost:5174` for dev, production backend URL for prod)
-- `VITE_CIELO_FORCE_MOCK` - Set to `"true"` to force mock payments regardless of server config
-- `VITE_USE_LOCAL_SERVER` - Set to `"true"` to auto-default to `localhost:5174` in dev
 
 Server-side Cielo credentials (in `.env.local`, used by `cielo-server.js` only):
 - `CIELO_MERCHANT_ID` - Cielo store identifier

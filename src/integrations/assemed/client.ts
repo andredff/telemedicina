@@ -1,5 +1,4 @@
 import { getAssemedCredentials, getAssemedUrls } from "./config";
-import { assemedMockClient } from "./mockClient";
 import type {
   RegisterPatientRequest,
   RegisterPatientResponse,
@@ -12,9 +11,7 @@ import type {
   GetConsultationsRequest,
   GetConsultationsResponse,
   ConsultationSimplified,
-  GetPrescriptionsResponse,
   Consultation,
-  AssemedError,
   DecodedToken,
 } from "./types";
 
@@ -27,7 +24,6 @@ class AssemedClient {
   private clientSecret: string;
   private cnpj: string;
   private apiUrl: string;
-  private useMock: boolean;
   private accessToken: string | null = null;
   private cpfPaciente: string | null = null; // CPF do paciente para retry de login
   /**
@@ -54,12 +50,9 @@ class AssemedClient {
     this.cnpj = credentials.cnpj;
     this.apiUrl = urls.apiUrl;
 
-    // Usa mock se não houver credenciais configuradas
-    this.useMock = !this.clientId || !this.clientSecret;
-
-    if (this.useMock) {
-      console.info(
-        "[Assemed] Credenciais não configuradas. Usando modo MOCK para testes locais."
+    if (!this.clientId || !this.clientSecret) {
+      console.warn(
+        "[Assemed] Credenciais não configuradas. As chamadas à API falharão."
       );
     }
 
@@ -194,21 +187,15 @@ class AssemedClient {
         isJson = contentType?.includes("application/json") || contentType?.includes("text/json");
       } catch (retryErr) {
         console.error("[Assemed] Falha ao tentar login-externo automático após 401:", retryErr);
-        // Continua para tratamento de erro padrão
       }
     }
 
     if (!response.ok) {
       let errorMessage = `HTTP ${response.status}`;
-      
+
       if (isJson) {
         const errorData = await response.json();
 
-        // Extrai a mensagem mais específica possível:
-        // 1. errors[""] array (validation errors do .NET)
-        // 2. errors como objeto com arrays
-        // 3. message direto
-        // 4. title genérico
         if (errorData.errors) {
           const errorValues = Object.values(errorData.errors) as string[][];
           const allMessages = errorValues.flat().filter(Boolean);
@@ -247,23 +234,9 @@ class AssemedClient {
   // CADASTRO DE PACIENTE
   // ==========================================
 
-  /**
-   * Cadastra um novo paciente na plataforma
-   */
   async registerPatient(
     data: Omit<RegisterPatientRequest, "identificacao" | "cnpj">
   ): Promise<RegisterPatientResponse> {
-    if (this.useMock) {
-      return assemedMockClient.registerPatient({
-        ...data,
-        identificacao: {
-          clientId: this.clientId,
-          clientSecret: this.clientSecret,
-        },
-        cnpj: this.cnpj,
-      });
-    }
-
     const request: RegisterPatientRequest = {
       identificacao: {
         clientId: this.clientId,
@@ -273,7 +246,6 @@ class AssemedClient {
       ...data,
     };
 
-    // Debug: log da requisição para identificar campos nulos
     console.log("[Assemed] RegisterPatient request:", {
       ...request,
       identificacao: {
@@ -282,7 +254,6 @@ class AssemedClient {
       },
     });
 
-    // Validação de campos obrigatórios antes de enviar
     const camposObrigatorios = [
       { campo: "clientId", valor: this.clientId },
       { campo: "clientSecret", valor: this.clientSecret },
@@ -319,28 +290,13 @@ class AssemedClient {
   // AUTENTICAÇÃO
   // ==========================================
 
-  /**
-   * Realiza login do paciente e obtém token de acesso
-   */
   async login(cpf: string): Promise<LoginResponse> {
-    if (this.useMock) {
-      const response = await assemedMockClient.login({
-        cpfPaciente: cpf,
-        clientId: this.clientId,
-        clientSecret: this.clientSecret,
-      });
-      this.accessToken = response.accessToken;
-      try { sessionStorage.setItem(STORAGE_KEY_TOKEN, response.accessToken); } catch { /* ignore */ }
-      return response;
-    }
-
     const request: LoginRequest = {
       cpfPaciente: cpf,
       clientId: this.clientId,
       clientSecret: this.clientSecret,
     };
 
-    // Debug: log da requisição (sem expor o secret completo)
     console.log("[Assemed] Login request:", {
       cpfPaciente: cpf,
       clientId: this.clientId,
@@ -365,17 +321,10 @@ class AssemedClient {
   // ESPECIALIDADES
   // ==========================================
 
-  /**
-   * Obtém lista de especialidades disponíveis
-   */
   async getSpecialties(
     pageSize: number = 100,
     pageIndex: number = 0
   ): Promise<GetSpecialtiesResponse> {
-    if (this.useMock) {
-      return assemedMockClient.getSpecialties();
-    }
-
     const request: GetSpecialtiesRequest = { pageSize, pageIndex };
 
     return this.request<GetSpecialtiesResponse>(
@@ -392,22 +341,12 @@ class AssemedClient {
   // ATENDIMENTOS/CONSULTAS
   // ==========================================
 
-  /**
-   * Cria um novo atendimento/consulta
-   */
   async createConsultation(
     data: Omit<CreateConsultationRequest, "tipoAtendimento">
   ): Promise<CreateConsultationResponse> {
-    if (this.useMock) {
-      return assemedMockClient.createConsultation({
-        ...data,
-        tipoAtendimento: 1, // Sempre primeira consulta
-      });
-    }
-
     const request: CreateConsultationRequest = {
       ...data,
-      tipoAtendimento: 1, // Sempre primeira consulta
+      tipoAtendimento: 1,
     };
 
     return this.request<CreateConsultationResponse>("/api/Atendimentos", {
@@ -416,17 +355,10 @@ class AssemedClient {
     }, true);
   }
 
-  /**
-   * Obtém lista de consultas do paciente
-   */
   async getConsultations(
     pageSize: number = 20,
     pageIndex: number = 0
   ): Promise<GetConsultationsResponse> {
-    if (this.useMock) {
-      return assemedMockClient.getConsultations();
-    }
-
     const request: GetConsultationsRequest = { pageSize, pageIndex };
 
     return this.request<GetConsultationsResponse>("/api/Atendimentos/obter", {
@@ -435,14 +367,7 @@ class AssemedClient {
     }, true);
   }
 
-  /**
-   * Obtém detalhes de uma consulta específica
-   */
   async getConsultation(id: number): Promise<Consultation | null> {
-    if (this.useMock) {
-      return assemedMockClient.getConsultation(id);
-    }
-
     try {
       return await this.request<Consultation>(
         `/api/Atendimentos/${id}`,
@@ -454,14 +379,7 @@ class AssemedClient {
     }
   }
 
-  /**
-   * Obtém status simplificado de uma consulta (para polling)
-   */
   async getConsultationStatus(id: number): Promise<ConsultationSimplified> {
-    if (this.useMock) {
-      return assemedMockClient.getConsultationStatus(id);
-    }
-
     return this.request<ConsultationSimplified>(
       `/api/Atendimentos/${id}/simplificado`,
       { method: "GET" },
@@ -469,14 +387,7 @@ class AssemedClient {
     );
   }
 
-  /**
-   * Cancela uma consulta
-   */
   async cancelConsultation(id: number): Promise<void> {
-    if (this.useMock) {
-      return assemedMockClient.cancelConsultation(id);
-    }
-
     await this.request<void>(
       `/api/Atendimentos/${id}/cancelar`,
       { method: "PUT" },
@@ -484,19 +395,12 @@ class AssemedClient {
     );
   }
 
-  /**
-   * Envia avaliação da consulta
-   */
   async evaluateConsultation(
     id: number,
     notaAtendimento: number,
     notaAplicativo: number,
     comentario?: string
   ): Promise<void> {
-    if (this.useMock) {
-      return assemedMockClient.evaluateConsultation(id, notaAtendimento, comentario);
-    }
-
     await this.request<void>(
       `/api/Atendimentos/${id}/avaliar`,
       {
@@ -518,40 +422,17 @@ class AssemedClient {
 
   /**
    * Obtém receituários/documentos de uma consulta
-   * GET /api/Atendimentos/v2/{id}/receituario
+   * GET /api/Atendimentos/{id}/receituario
    * Retorna array de {urlPdf: string}
    */
   async getReceituarios(consultationId: number): Promise<{urlPdf: string}[]> {
-    if (this.useMock) {
-      const mock = await assemedMockClient.getPrescriptions(consultationId);
-      return mock.items.map(i => ({ urlPdf: i.url }));
-    }
-
     return this.request<{urlPdf: string}[]>(
-      `/api/Atendimentos/v2/${consultationId}/receituario`,
+      `/api/Atendimentos/${consultationId}/receituario`,
       { method: "GET" },
       true
     );
   }
 
-  /**
-   * @deprecated Use getReceituarios. Mantido para compatibilidade.
-   */
-  async getPrescriptions(consultationId: number): Promise<GetPrescriptionsResponse> {
-    if (this.useMock) {
-      return assemedMockClient.getPrescriptions(consultationId);
-    }
-
-    const items = await this.getReceituarios(consultationId);
-    return {
-      items: items.map((item, idx) => ({
-        id: consultationId * 100 + idx,
-        tipo: "RECEITA" as const,
-        url: item.urlPdf,
-        dataCriacao: new Date().toISOString(),
-      })),
-    };
-  }
 }
 
 export class AssemedApiError extends Error {

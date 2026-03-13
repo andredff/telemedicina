@@ -33,8 +33,8 @@ export function useAssemedToken() {
       const { assemedClient } = await import("@/integrations/assemed/client");
       assemedClient.setCpfPaciente(cpf);
 
-      // 1. Tenta restaurar token do storage
-      const stored = AuthService.getToken();
+      // 1. Tenta restaurar token do storage (somente se pertencer ao mesmo CPF)
+      const stored = AuthService.getTokenForCpf(cpf);
       if (stored && stored.accessToken && !AuthService.isTokenExpired(stored)) {
         setAccessToken(stored.accessToken);
         assemedClient.setAccessToken(stored.accessToken);
@@ -45,7 +45,7 @@ export function useAssemedToken() {
       try {
         const loginResponse = await assemedClient.login(cpf);
         const expiresAt = getTokenExpiration(loginResponse.accessToken) || (Date.now() + 60 * 60 * 1000);
-        AuthService.saveToken(loginResponse.accessToken, expiresAt);
+        AuthService.saveToken(loginResponse.accessToken, expiresAt, cpf);
         setAccessToken(loginResponse.accessToken);
         assemedClient.setAccessToken(loginResponse.accessToken);
         return;
@@ -67,7 +67,7 @@ export function useAssemedToken() {
             logger.info("[useAssemedToken] Cadastro realizado, tentando login...");
             const retryLogin = await assemedClient.login(cpf);
             const expiresAt = getTokenExpiration(retryLogin.accessToken) || (Date.now() + 60 * 60 * 1000);
-            AuthService.saveToken(retryLogin.accessToken, expiresAt);
+            AuthService.saveToken(retryLogin.accessToken, expiresAt, cpf);
             setAccessToken(retryLogin.accessToken);
             assemedClient.setAccessToken(retryLogin.accessToken);
             return;

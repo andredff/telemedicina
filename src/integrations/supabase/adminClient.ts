@@ -2,7 +2,6 @@
 import { supabase } from './client';
 import { logger } from "@/lib/logger";
 
-const CAN_USE_MOCKS = import.meta.env.DEV;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY);
@@ -28,7 +27,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        return CAN_USE_MOCKS ? requiredRole === this.ROLES.ADMIN : false;
+        return false;
       }
       
       const { data, error } = await supabaseAdmin
@@ -41,7 +40,7 @@ export const RBAC = {
       return data?.role === requiredRole;
     } catch (error) {
       logger.error("[RBAC] Error checking role", error);
-      return CAN_USE_MOCKS ? requiredRole === this.ROLES.ADMIN : false;
+      return false;
     }
   },
   
@@ -50,7 +49,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        return CAN_USE_MOCKS ? roles.includes(this.ROLES.ADMIN) : false;
+        return false;
       }
       
       const { data, error } = await supabaseAdmin
@@ -63,7 +62,7 @@ export const RBAC = {
       return roles.includes(data?.role);
     } catch (error) {
       logger.error("[RBAC] Error checking roles", error);
-      return CAN_USE_MOCKS ? roles.includes(this.ROLES.ADMIN) : false;
+      return false;
     }
   },
   
@@ -77,7 +76,7 @@ export const RBAC = {
     try {
       // If Supabase is not configured, use mock data for testing
       if (!supabaseAdmin) {
-        return CAN_USE_MOCKS ? this.ROLES.ADMIN : null;
+        return null;
       }
       
       const { data, error } = await supabaseAdmin
@@ -90,7 +89,7 @@ export const RBAC = {
       return data?.role || null;
     } catch (error) {
       logger.error("[RBAC] Error getting user role", error);
-      return CAN_USE_MOCKS ? this.ROLES.ADMIN : null;
+      return null;
     }
   },
   
@@ -122,152 +121,10 @@ export const RBAC = {
   }
 };
 
-// Mock data for testing when Supabase is not configured
-const mockUsers = [
-  {
-    id: '1',
-    email: 'joao.teste@example.com',
-    full_name: 'João Silva Teste',
-    role: 'admin',
-    created_at: '2024-01-15T10:00:00Z',
-    last_login: '2024-12-28T10:00:00Z'
-  },
-  {
-    id: '2',
-    email: 'maria.santos@example.com',
-    full_name: 'Maria Santos',
-    role: 'patient',
-    created_at: '2024-02-20T14:30:00Z',
-    last_login: '2024-12-27T15:20:00Z'
-  },
-  {
-    id: '3',
-    email: 'dr.silva@example.com',
-    full_name: 'Dr. Carlos Silva',
-    role: 'doctor',
-    created_at: '2024-03-10T09:15:00Z',
-    last_login: '2024-12-28T08:45:00Z'
-  }
-];
-
-const mockOrders = [
-  {
-    id: 'ORD-001',
-    user_id: '2',
-    customer: 'Maria Santos',
-    customer_email: 'maria.santos@example.com',
-    prescription_id: 'RX-2024-001',
-    medication_id: '1',
-    quantity: 2,
-    items: 2,
-    total: 156.80,
-    status: 'delivered',
-    tracking_code: undefined,
-    date: '2024-12-20T10:00:00Z',
-    created_at: '2024-12-20T10:00:00Z'
-  },
-  {
-    id: 'ORD-002',
-    user_id: '2',
-    customer: 'Maria Santos',
-    customer_email: 'maria.santos@example.com',
-    prescription_id: 'RX-2024-002',
-    medication_id: '2',
-    quantity: 1,
-    items: 1,
-    total: 89.90,
-    status: 'processing',
-    tracking_code: undefined,
-    date: '2024-12-27T14:30:00Z',
-    created_at: '2024-12-27T14:30:00Z'
-  },
-  {
-    id: 'ORD-003',
-    user_id: '1',
-    customer: 'João Silva Teste',
-    customer_email: 'joao.teste@example.com',
-    prescription_id: 'RX-2024-003',
-    medication_id: '3',
-    quantity: 3,
-    items: 3,
-    total: 234.50,
-    status: 'shipped',
-    tracking_code: undefined,
-    date: '2024-12-26T09:15:00Z',
-    created_at: '2024-12-26T09:15:00Z'
-  }
-];
-
-const mockPrescriptions = [
-  {
-    id: 'RX-2024-001',
-    patient_id: '2',
-    patient: 'Maria Santos',
-    doctor_name: 'Dr. Carlos Silva',
-    doctor: 'Dr. Carlos Silva',
-    status: 'active',
-    medications: 2,
-    date: '2024-12-15T10:00:00Z',
-    created_at: '2024-12-15T10:00:00Z',
-    expires_at: '2025-06-15T10:00:00Z'
-  },
-  {
-    id: 'RX-2024-002',
-    patient_id: '2',
-    patient: 'Maria Santos',
-    doctor_name: 'Dr. Ana Costa',
-    doctor: 'Dr. Ana Costa',
-    status: 'active',
-    medications: 1,
-    date: '2024-12-20T14:30:00Z',
-    created_at: '2024-12-20T14:30:00Z',
-    expires_at: '2025-06-20T14:30:00Z'
-  },
-  {
-    id: 'RX-2024-003',
-    patient_id: '1',
-    patient: 'João Silva Teste',
-    doctor_name: 'Dr. Carlos Silva',
-    doctor: 'Dr. Carlos Silva',
-    status: 'expired',
-    medications: 3,
-    date: '2024-06-10T09:00:00Z',
-    created_at: '2024-06-10T09:00:00Z',
-    expires_at: '2024-12-10T09:00:00Z'
-  }
-];
-
 // Admin-specific queries
 export const AdminQueries = {
     // Get consultations by user ID
     async getConsultationsByUserId(userId: string) {
-      // Consulta mock para ambiente de desenvolvimento
-      if (!supabaseAdmin) {
-        // Exemplo de consultas mock
-        return {
-          data: [
-            {
-              id: 'CONS-001',
-              user_id: userId,
-              doctor_name: 'Dr. Carlos Silva',
-              specialty: 'Clínico Geral',
-              status: 'finalizada',
-              started_at: '2024-12-01T10:00:00Z',
-              finished_at: '2024-12-01T10:30:00Z',
-            },
-            {
-              id: 'CONS-002',
-              user_id: userId,
-              doctor_name: 'Dra. Ana Costa',
-              specialty: 'Dermatologia',
-              status: 'cancelada',
-              started_at: '2024-11-15T14:00:00Z',
-              finished_at: '2024-11-15T14:10:00Z',
-            }
-          ],
-          error: null
-        };
-      }
       try {
         // Busca na tabela de consultas (ajuste o nome da tabela conforme o schema real)
         const result = await supabaseAdmin
@@ -283,34 +140,22 @@ export const AdminQueries = {
     },
   // Get all users
   async getAllUsers() {
-    if (!supabaseAdmin) {
-      return CAN_USE_MOCKS
-        ? { data: mockUsers, error: null }
-        : { data: [], error: new Error("Supabase admin client not configured") };
-    }
-    
     try {
       const result = await supabaseAdmin
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
-      
+
       if (result.error) return { data: [], error: result.error };
       return { data: result.data || [], error: null };
     } catch (error) {
       logger.error("[AdminQueries] Error fetching users", error);
-      return CAN_USE_MOCKS ? { data: mockUsers, error: null } : { data: [], error: error as Error };
+      return { data: [], error: error as Error };
     }
   },
   
   // Get all orders
   async getAllOrders() {
-    if (!supabaseAdmin) {
-      return CAN_USE_MOCKS
-        ? { data: mockOrders, error: null }
-        : { data: [], error: new Error("Supabase admin client not configured") };
-    }
-    
     try {
       // Join orders with profiles to get customer name and email
       const result = await supabaseAdmin
@@ -336,16 +181,12 @@ export const AdminQueries = {
       return { data: ordersWithCustomer, error: null };
     } catch (error) {
       logger.error("[AdminQueries] Error fetching orders", error);
-      return CAN_USE_MOCKS ? { data: mockOrders, error: null } : { data: [], error: error as Error };
+      return { data: [], error: error as Error };
     }
   },
-  
+
   // Get order by ID
   async getOrderById(orderId: string) {
-    if (!supabaseAdmin) {
-      const order = mockOrders.find(o => o.id === orderId);
-      return { data: order || null, error: null };
-    }
     
     try {
       const result = await supabaseAdmin
@@ -376,20 +217,12 @@ export const AdminQueries = {
       return { data: null, error: null };
     } catch (error) {
       logger.error("[AdminQueries] Error fetching order", error);
-      const order = mockOrders.find(o => o.id === orderId);
-      return { data: order || null, error: null };
+      return { data: null, error: null };
     }
   },
-  
+
   // Update order status
   async updateOrderStatus(orderId: string, status: string) {
-    if (!supabaseAdmin) {
-      const orderIndex = mockOrders.findIndex(o => o.id === orderId);
-      if (orderIndex >= 0) {
-        mockOrders[orderIndex].status = status;
-      }
-      return { error: null };
-    }
     
     try {
       const { error } = await supabaseAdmin
@@ -408,14 +241,6 @@ export const AdminQueries = {
 
   // Update tracking code for an order
   async updateOrderTracking(orderId: string, trackingCode: string | null) {
-    if (!supabaseAdmin) {
-      const orderIndex = mockOrders.findIndex(o => o.id === orderId);
-      if (orderIndex >= 0) {
-        mockOrders[orderIndex].tracking_code = trackingCode || undefined;
-      }
-      return { error: null };
-    }
-
     try {
       const { error } = await supabaseAdmin
         .from('orders')
@@ -435,11 +260,6 @@ export const AdminQueries = {
   
   // Get orders by user ID
   async getOrdersByUserId(userId: string) {
-    if (!supabaseAdmin) {
-      const userOrders = mockOrders.filter(o => o.user_id === userId);
-      return { data: userOrders, error: null };
-    }
-    
     try {
       const result = await supabaseAdmin
         .from('orders')
@@ -456,50 +276,22 @@ export const AdminQueries = {
   
   // Get all prescriptions
   async getAllPrescriptions() {
-    if (!supabaseAdmin) {
-      return CAN_USE_MOCKS
-        ? { data: mockPrescriptions, error: null }
-        : { data: [], error: new Error("Supabase admin client not configured") };
-    }
-    
     try {
       const result = await supabaseAdmin
         .from('prescriptions')
         .select('*, medications(*)')
         .order('created_at', { ascending: false });
-      
+
       if (result.error) return { data: [], error: result.error };
       return { data: result.data || [], error: null };
     } catch (error) {
       logger.error("[AdminQueries] Error fetching prescriptions", error);
-      return CAN_USE_MOCKS ? { data: mockPrescriptions, error: null } : { data: [], error: error as Error };
+      return { data: [], error: error as Error };
     }
   },
   
   // Get dashboard metrics
   async getDashboardMetrics() {
-    if (!supabaseAdmin) {
-      return CAN_USE_MOCKS
-        ? {
-            totalUsers: mockUsers.length,
-            totalOrders: mockOrders.length,
-            totalPrescriptions: mockPrescriptions.length,
-            activeSubscriptions: 1,
-            totalConsultationCredits: 3,
-            availableConsultationCredits: 1,
-            consultationCreditsRevenue: 447
-          }
-        : {
-            totalUsers: 0,
-            totalOrders: 0,
-            totalPrescriptions: 0,
-            activeSubscriptions: 0,
-            totalConsultationCredits: 0,
-            availableConsultationCredits: 0,
-            consultationCreditsRevenue: 0
-          };
-    }
-    
     try {
       // Get user count
       const usersPromise = supabaseAdmin
@@ -562,25 +354,15 @@ export const AdminQueries = {
       };
     } catch (error) {
       logger.error("[AdminQueries] Error getting dashboard metrics", error);
-      return CAN_USE_MOCKS
-        ? {
-            totalUsers: mockUsers.length,
-            totalOrders: mockOrders.length,
-            totalPrescriptions: mockPrescriptions.length,
-            activeSubscriptions: 1,
-            totalConsultationCredits: 3,
-            availableConsultationCredits: 1,
-            consultationCreditsRevenue: 447
-          }
-        : {
-            totalUsers: 0,
-            totalOrders: 0,
-            totalPrescriptions: 0,
-            activeSubscriptions: 0,
-            totalConsultationCredits: 0,
-            availableConsultationCredits: 0,
-            consultationCreditsRevenue: 0
-          };
+      return {
+        totalUsers: 0,
+        totalOrders: 0,
+        totalPrescriptions: 0,
+        activeSubscriptions: 0,
+        totalConsultationCredits: 0,
+        availableConsultationCredits: 0,
+        consultationCreditsRevenue: 0
+      };
     }
   },
 

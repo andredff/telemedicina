@@ -133,12 +133,14 @@ function ConsultationHistoryCard({
   onCancel,
   onEvaluate,
   hasBeenEvaluated,
+  receituarioUrl,
 }: {
   consultation: Consultation;
   onJoin: (c: Consultation) => void;
   onCancel: (id: number) => void;
   onEvaluate: (c: Consultation) => void;
   hasBeenEvaluated: boolean;
+  receituarioUrl?: string;
 }) {
   const normalizedStatus = normalizeConsultationStatus(consultation);
   const status = statusConfig[normalizedStatus];
@@ -220,8 +222,13 @@ function ConsultationHistoryCard({
               Cancelar consulta
             </Button>
           )}
-          {normalizedStatus === "CONCLUIDO" && (
-            <Button size="sm" variant="outline" className="gap-2" disabled>
+          {normalizedStatus === "CONCLUIDO" && receituarioUrl && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              onClick={() => window.open(receituarioUrl, "_blank")}
+            >
               <FileText className="h-4 w-4" />
               Ver Receita
             </Button>
@@ -923,6 +930,9 @@ const Teleconsultas = () => {
   const [cancelConfirmId, setCancelConfirmId] = useState<number | null>(null);
   const [isCancellingConsultation, setIsCancellingConsultation] = useState(false);
 
+  // Mapa de consultationId → URL do receituário (PDF)
+  const [receituarioMap, setReceituarioMap] = useState<Record<number, string>>({});
+
   // Dados coletados no wizard (anamnese + exames) para usar na criação do atendimento
   const pendingAnamneseRef = useRef<{
     respostasAnamnese: AnamneseResposta[];
@@ -1283,6 +1293,49 @@ const Teleconsultas = () => {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [accessToken]);
+
+  // ── Buscar receituários para consultas concluídas ──
+  useEffect(() => {
+    if (!accessToken || consultations.length === 0) return;
+
+    let cancelled = false;
+
+    const fetchReceituarios = async () => {
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      assemedClient.setAccessToken(accessToken);
+
+      const concluidas = consultations.filter(
+        c => normalizeConsultationStatus(c) === "CONCLUIDO"
+      );
+
+      if (concluidas.length === 0) return;
+
+      const results = await Promise.allSettled(
+        concluidas.map(async (c) => {
+          const items = await assemedClient.getReceituarios(c.id);
+          return { id: c.id, items };
+        })
+      );
+
+      if (cancelled) return;
+
+      const map: Record<number, string> = {};
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const { id, items } = result.value;
+          const firstPdf = items.find(i => i.urlPdf);
+          if (firstPdf) {
+            map[id] = firstPdf.urlPdf;
+          }
+        }
+      }
+      setReceituarioMap(map);
+    };
+
+    fetchReceituarios();
+
+    return () => { cancelled = true; };
+  }, [accessToken, consultations]);
 
   // ── Polling para atualizar status de consultas ativas usando endpoint simplificado ──
   // Usa refs para evitar re-execução do effect quando consultations muda
@@ -2197,6 +2250,7 @@ const Teleconsultas = () => {
                   onCancel={handleRequestCancel}
                   onEvaluate={setEvaluatingConsultation}
                   hasBeenEvaluated={evaluatedIds.has(consultation.id)}
+                  receituarioUrl={receituarioMap[consultation.id]}
                 />
               ))}
             </div>

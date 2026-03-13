@@ -362,7 +362,7 @@ export function useAssemedConsultation() {
     setState((prev) => ({ ...prev, isLoadingConsultations: true }));
 
     try {
-      const response = await assemedClient.getConsultations(20, 0);
+      const response = await assemedClient.getConsultations(50, 0);
       setState((prev) => ({
         ...prev,
         consultations: response.items || [],

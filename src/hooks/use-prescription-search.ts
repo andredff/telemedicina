@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
 import { SearchClient, type PrescriptionSearchParams, type PrescriptionSearchResults, type PrescriptionWithMedications } from '@/integrations/supabase/searchClient';
-import { MockSearchClient } from '@/mock-search-client';
 
 export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = {}) {
   const [searchParams, setSearchParams] = useState<PrescriptionSearchParams>(initialParams);
@@ -19,34 +18,20 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
   const performSearch = async (params: PrescriptionSearchParams) => {
     setLoading(true);
     setError(null);
-    
+
     try {
-      // Try to use the real SearchClient first
-      if (SearchClient && typeof SearchClient.searchPrescriptions === 'function') {
-        const results = await SearchClient.searchPrescriptions(params);
-        setSearchResults(results);
-      } else {
-        // Fallback to mock client if real SearchClient is not available
-        console.warn('SearchClient not available, using mock data');
-        const results = await MockSearchClient.searchPrescriptions(params);
-        setSearchResults(results);
-      }
+      const results = await SearchClient.searchPrescriptions(params);
+      setSearchResults(results);
     } catch (err) {
       console.error('Search error:', err);
-      // Fallback to mock client if there's an error with the real SearchClient
-      try {
-        const results = await MockSearchClient.searchPrescriptions(params);
-        setSearchResults(results);
-      } catch (mockErr) {
-        setError(mockErr instanceof Error ? mockErr.message : 'Unknown error occurred');
-        setSearchResults({
-          data: [],
-          count: 0,
-          page: 1,
-          pageSize: params.pageSize || 10,
-          totalPages: 0
-        });
-      }
+      setError(err instanceof Error ? err.message : 'Erro ao buscar receitas');
+      setSearchResults({
+        data: [],
+        count: 0,
+        page: 1,
+        pageSize: params.pageSize || 10,
+        totalPages: 0
+      });
     } finally {
       setLoading(false);
     }
@@ -75,26 +60,11 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
     }
 
     try {
-      // Try to use the real SearchClient first
-      if (SearchClient && typeof SearchClient.getSearchSuggestions === 'function') {
-        const suggestions = await SearchClient.getSearchSuggestions(query);
-        setSuggestions(suggestions);
-      } else {
-        // Fallback to mock client if real SearchClient is not available
-        console.warn('SearchClient not available for suggestions, using mock data');
-        const suggestions = await MockSearchClient.getSearchSuggestions(query);
-        setSuggestions(suggestions);
-      }
+      const suggestions = await SearchClient.getSearchSuggestions(query);
+      setSuggestions(suggestions);
     } catch (err) {
       console.error('Error getting suggestions:', err);
-      // Fallback to mock client if there's an error with the real SearchClient
-      try {
-        const suggestions = await MockSearchClient.getSearchSuggestions(query);
-        setSuggestions(suggestions);
-      } catch (mockErr) {
-        console.error('Mock suggestions error:', mockErr);
-        setSuggestions([]);
-      }
+      setSuggestions([]);
     }
   }, []);
 
@@ -113,12 +83,12 @@ export function usePrescriptionSearch(initialParams: PrescriptionSearchParams = 
   const adminSearch = async (params: PrescriptionSearchParams = {}) => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const results = await SearchClient.adminSearch(params);
       setSearchResults(results);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Unknown error occurred');
+      setError(err instanceof Error ? err.message : 'Erro ao buscar receitas');
       setSearchResults({
         data: [],
         count: 0,
@@ -175,20 +145,15 @@ export function usePrescriptionById(prescriptionId: string | null) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    console.log('[usePrescriptionById] Effect triggered with ID:', prescriptionId);
-    
     if (!prescriptionId) {
-      console.log('[usePrescriptionById] No prescription ID provided');
       setPrescription(null);
       setLoading(false);
       return;
     }
 
     const fetchPrescription = async () => {
-      console.log('[usePrescriptionById] Fetching prescription:', prescriptionId);
       try {
         const result = await SearchClient.getPrescriptionById(prescriptionId);
-        console.log('[usePrescriptionById] Received result:', result);
         setPrescription(result);
       } catch (err) {
         console.error('[usePrescriptionById] Error:', err);
@@ -201,6 +166,5 @@ export function usePrescriptionById(prescriptionId: string | null) {
     fetchPrescription();
   }, [prescriptionId]);
 
-  console.log('[usePrescriptionById] Current state:', { prescription, loading, error });
   return { prescription, loading, error };
 }

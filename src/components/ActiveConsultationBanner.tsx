@@ -59,13 +59,9 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
    */
   const checkConsultationStatus = useCallback(async (consultationId: number): Promise<ConsultationSimplified | null> => {
     try {
+      if (!accessToken) return null;
       const { assemedClient } = await import("@/integrations/assemed/client");
-      // Usa token da prop ou fallback para o token persistido no client
-      if (accessToken) {
-        assemedClient.setAccessToken(accessToken);
-      } else if (!assemedClient.hasValidToken()) {
-        return null;
-      }
+      assemedClient.setAccessToken(accessToken);
       const response = await assemedClient.getConsultationStatus(consultationId);
       // Normaliza o status (API pode retornar em diferentes formatos)
       const normalizedStatus = normalizeSimplifiedStatus(response);
@@ -83,13 +79,9 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
    */
   const loadActiveConsultation = useCallback(async () => {
     try {
+      if (!accessToken) return;
       const { assemedClient } = await import("@/integrations/assemed/client");
-      // Usa token da prop ou fallback para token persistido no client
-      if (accessToken) {
-        assemedClient.setAccessToken(accessToken);
-      } else if (!assemedClient.hasValidToken()) {
-        return;
-      }
+      assemedClient.setAccessToken(accessToken);
       
       // Primeiro tenta usar cache e verificar com endpoint simplificado
       const cached = getCachedConsultation();

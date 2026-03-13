@@ -227,7 +227,7 @@ export interface Prescription {
   dataCriacao: string;
 }
 
-/** Item retornado por GET /api/Atendimentos/v2/{id}/receituario */
+/** Item retornado por GET /api/Atendimentos/{id}/receituario */
 export interface ReceituarioItem {
   urlPdf: string;
 }

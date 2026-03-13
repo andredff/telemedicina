@@ -1,13 +1,10 @@
 /**
  * Client da integração com Memed (Prescrição Digital)
  *
- * Quando as credenciais do Memed estão configuradas (VITE_MEMED_API_KEY e
- * VITE_MEMED_SECRET_TOKEN), utiliza a API real. Caso contrário, usa o mock
- * client para desenvolvimento local.
+ * Requer credenciais configuradas: VITE_MEMED_API_KEY e VITE_MEMED_SECRET_TOKEN.
  */
 
 import { isMemedConfigured, getMemedCredentials, getMemedUrls } from "./config";
-import { memedMockClient } from "./mockClient";
 import type {
   MemedSearchParams,
   MemedSearchResult,
@@ -16,12 +13,9 @@ import type {
 import { logger } from "@/lib/logger";
 
 class MemedClient {
-  private useMock: boolean;
-
   constructor() {
-    this.useMock = !isMemedConfigured();
-    if (this.useMock) {
-      logger.info("[Memed] Credenciais não configuradas. Usando mock client.");
+    if (!isMemedConfigured()) {
+      logger.warn("[Memed] Credenciais não configuradas. As chamadas à API falharão.");
     } else {
       logger.info("[Memed] Client inicializado com credenciais reais.");
     }
@@ -31,15 +25,10 @@ class MemedClient {
    * Busca receita por token, ID ou CPF do paciente
    */
   async searchPrescription(params: MemedSearchParams): Promise<MemedSearchResult> {
-    if (this.useMock) {
-      return memedMockClient.searchPrescription(params);
-    }
-
     try {
       const creds = getMemedCredentials();
       const urls = getMemedUrls(creds.isSandbox);
 
-      // Monta query baseada nos params disponíveis
       let endpoint = `${urls.baseUrl}/prescriptions`;
       const headers = {
         "Authorization": `Bearer ${creds.apiKey}`,
@@ -86,10 +75,6 @@ class MemedClient {
    * Busca todas as receitas de um paciente
    */
   async getPatientPrescriptions(cpf: string): Promise<MemedPrescription[]> {
-    if (this.useMock) {
-      return memedMockClient.getPatientPrescriptions(cpf);
-    }
-
     try {
       const result = await this.searchPrescription({ patientCpf: cpf });
       return result.prescription ? [result.prescription] : [];

@@ -1,9 +1,6 @@
 // Cliente principal
 export { assemedClient, AssemedApiError } from "./client";
 
-// Mock client (para testes)
-export { assemedMockClient } from "./mockClient";
-
 // Configurações e URLs
 export {
   getAssemedCredentials,

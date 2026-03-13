@@ -453,16 +453,23 @@ const Especialistas = () => {
   } = useAssemedConsultation();
 
   // Filter consultations to exclude "Clínico Geral" (only show specialist consultations)
-  const specialistConsultations = consultations.filter((c) => {
-    const nome = (c.especialidadeNome || "").toLowerCase();
-    return !(nome.includes("clínico") || nome.includes("clinico")) || !nome.includes("geral");
-  });
+  // Memoized to keep a stable reference — used as dependency of loadCreditsInUse / restoreOrphanCredits.
+  const specialistConsultations = useMemo(() =>
+    consultations.filter((c) => {
+      const nome = (c.especialidadeNome || "").toLowerCase();
+      return !(nome.includes("clínico") || nome.includes("clinico")) || !nome.includes("geral");
+    }),
+    [consultations]
+  );
 
   // Filter specialties dropdown: exclude Clínico Geral
-  const filteredSpecialties = specialties.filter((s) => {
-    const nome = s.nome.toLowerCase();
-    return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
-  });
+  const filteredSpecialties = useMemo(() =>
+    specialties.filter((s) => {
+      const nome = s.nome.toLowerCase();
+      return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
+    }),
+    [specialties]
+  );
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -568,6 +575,13 @@ const Especialistas = () => {
     }
   }, [user]);
 
+  // Refs para evitar loop: loadCreditsInUse e restoreOrphanCredits leem e escrevem esses valores,
+  // então não podem ser deps do useCallback sem causar re-criação infinita.
+  const pendingCreditIdRef = useRef(pendingCreditId);
+  pendingCreditIdRef.current = pendingCreditId;
+  const activeConsultationCreditIdRef = useRef(activeConsultationCreditId);
+  activeConsultationCreditIdRef.current = activeConsultationCreditId;
+
   // Restaura créditos órfãos (marcados como "used" mas sem consulta ativa)
   const restoreOrphanCredits = useCallback(async () => {
     if (!user) return;
@@ -585,7 +599,7 @@ const Especialistas = () => {
     // Para cada crédito usado, verifica se a consulta ainda está ativa
     for (const credit of usedCredits) {
       // Nunca restaura créditos que estamos ativamente usando nesta sessão
-      if (credit.id === pendingCreditId || credit.id === activeConsultationCreditId) {
+      if (credit.id === pendingCreditIdRef.current || credit.id === activeConsultationCreditIdRef.current) {
         logger.info(`Crédito ${credit.id} está em uso na sessão atual, não restaurar`);
         continue;
       }
@@ -646,7 +660,7 @@ const Especialistas = () => {
     
     // Recarrega créditos após restaurar
     loadAvailableCredits();
-  }, [user, specialistConsultations, loadAvailableCredits, pendingCreditId, activeConsultationCreditId]);
+  }, [user, specialistConsultations, loadAvailableCredits]);
 
 
   // Carrega créditos quando o usuário é definido, mas só se não houver créditos já carregados
@@ -679,12 +693,12 @@ const Especialistas = () => {
     if (!user) {
       setCreditsInUse(0);
       setUsedCreditIds([]);
-      if (!pendingCreditId) {
+      if (!pendingCreditIdRef.current) {
         setActiveConsultationCreditId(null);
       }
       return;
     }
-    
+
     // Obtém IDs das consultas ativas (AGUARDANDO ou EM_ATENDIMENTO)
     const activeConsultationIds = specialistConsultations
       .filter(c => {
@@ -692,7 +706,7 @@ const Especialistas = () => {
         return status === "AGUARDANDO" || status === "EM_ATENDIMENTO";
       })
       .map(c => String(c.id));
-    
+
     // Busca TODOS os créditos "used" do usuário
     const { data: allUsedCredits, error: fetchError } = await (supabase as any)
       .from("consultation_credits")
@@ -700,12 +714,12 @@ const Especialistas = () => {
       .eq("user_id", user.id)
       .eq("status", "used")
       .eq("type", "especialista");
-    
+
     if (fetchError) {
       logger.error("Erro ao buscar créditos usados:", fetchError);
       return;
     }
-    
+
     // CORREÇÃO: Busca créditos que foram restaurados indevidamente
     // (status = 'available' mas com consultation_id de uma consulta ativa)
     if (activeConsultationIds.length > 0) {
@@ -716,7 +730,7 @@ const Especialistas = () => {
         .eq("status", "available")
         .eq("type", "especialista")
         .not("consultation_id", "is", null);
-      
+
       if (wronglyAvailableCredits && wronglyAvailableCredits.length > 0) {
         for (const credit of wronglyAvailableCredits) {
           if (activeConsultationIds.includes(String(credit.consultation_id))) {
@@ -730,12 +744,12 @@ const Especialistas = () => {
         }
       }
     }
-    
+
     // Filtra créditos que estão ativamente em uso:
     // 1. Créditos com consultation_id de uma consulta ativa
     // 2. Créditos recém-marcados como "used" (últimos 5 minutos) sem consultation_id
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-    
+
     const activeCredits = (allUsedCredits || []).filter((credit: { id: string; consultation_id: string | number | null; used_at: string | null }) => {
       // Se o crédito está associado a uma consulta ativa, está em uso
       // Converte para string para comparação correta
@@ -750,23 +764,23 @@ const Especialistas = () => {
       }
       return false;
     });
-    
+
     const ids = activeCredits.map((d: { id: string }) => d.id);
     setCreditsInUse(activeCredits.length);
     setUsedCreditIds(ids);
-    
+
     // Se encontrou crédito em uso e não temos activeConsultationCreditId setado, seta agora
-    if (ids.length > 0 && !activeConsultationCreditId && !pendingCreditId) {
+    if (ids.length > 0 && !activeConsultationCreditIdRef.current && !pendingCreditIdRef.current) {
       setActiveConsultationCreditId(ids[0]);
-    } else if (ids.length === 0 && !pendingCreditId) {
+    } else if (ids.length === 0 && !pendingCreditIdRef.current) {
       setActiveConsultationCreditId(null);
     }
-    
+
     // Recarrega créditos disponíveis após correções, mas só se realmente houve alteração
     if (activeConsultationIds.length > 0 && allUsedCredits && allUsedCredits.length !== activeCredits.length) {
       loadAvailableCredits();
     }
-  }, [user, specialistConsultations, pendingCreditId, activeConsultationCreditId, loadAvailableCredits]);
+  }, [user, specialistConsultations, loadAvailableCredits]);
 
 
   // Atualiza créditos em uso quando consultas mudam, mas só se houver consultas carregadas

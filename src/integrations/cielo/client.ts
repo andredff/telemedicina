@@ -1,5 +1,4 @@
 import { getServerUrl } from "./config";
-import { cieloMockClient } from "./mockClient";
 import type {
   CreateSaleRequest,
   CreateRecurrentSaleRequest,
@@ -14,46 +13,31 @@ function isLocalhostUrl(url: string): boolean {
     const parsed = new URL(url);
     return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1" || parsed.hostname === "::1";
   } catch {
-    // Non-URL strings (e.g. relative paths) are treated as non-localhost.
     return false;
   }
 }
 
 class CieloClient {
-  private useMock: boolean;
-  private useLocalServer: boolean;
   private localServerUrl: string;
 
   constructor() {
     const serverUrl = getServerUrl();
-
     this.localServerUrl = serverUrl;
 
     const serverConfigured = !!serverUrl;
     const serverIsLocalhost = isLocalhostUrl(serverUrl);
-    const canUseServer = serverConfigured && (import.meta.env.DEV || !serverIsLocalhost);
-    this.useLocalServer = canUseServer;
 
-    // Browser cannot call Cielo API directly (CORS).
-    // Without a proxy server, always fall back to mock.
-    const forceMock = import.meta.env.VITE_CIELO_FORCE_MOCK === "true";
-    this.useMock = forceMock || !this.useLocalServer;
-
-    if (this.useMock) {
-      console.info("[Cielo] Usando modo MOCK (pagamento simulado).");
-      if (import.meta.env.PROD && !forceMock && !serverConfigured) {
-        console.warn(
-          "[Cielo] Nenhum servidor de pagamento configurado em produção. " +
-          "Pagamentos reais estão desabilitados. " +
-          "Defina VITE_LOCAL_SERVER_URL com a URL do backend de pagamento durante o build."
-        );
-      } else if (import.meta.env.PROD && !forceMock && serverConfigured && serverIsLocalhost) {
-        console.warn(
-          "[Cielo] Servidor de pagamento aponta para localhost em produção. " +
-          "Ajuste VITE_LOCAL_SERVER_URL para a URL pública do backend."
-        );
-      }
-    } else if (this.useLocalServer) {
+    if (!serverConfigured) {
+      console.warn(
+        "[Cielo] Nenhum servidor de pagamento configurado. " +
+        "Defina VITE_LOCAL_SERVER_URL com a URL do backend de pagamento."
+      );
+    } else if (import.meta.env.PROD && serverIsLocalhost) {
+      console.warn(
+        "[Cielo] Servidor de pagamento aponta para localhost em produção. " +
+        "Ajuste VITE_LOCAL_SERVER_URL para a URL pública do backend."
+      );
+    } else {
       console.info(`[Cielo] Usando proxy de pagamento: ${this.localServerUrl}`);
     }
   }
@@ -62,6 +46,10 @@ class CieloClient {
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    if (!this.localServerUrl) {
+      throw new Error("Servidor de pagamento não configurado. Defina VITE_LOCAL_SERVER_URL.");
+    }
+
     const url = `${this.localServerUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
@@ -84,251 +72,154 @@ class CieloClient {
   // PAGAMENTO SIMPLES (Medicamentos)
   // ==========================================
 
-  /**
-   * Cria uma transação simples de cartão de crédito
-   * Usado para pagamento de medicamentos
-   */
   async createCreditCardSale(
     request: CreateSaleRequest
   ): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.createCreditCardSale(request);
-    }
-
-    if (this.useLocalServer) {
-      return this.localRequest<SaleResponse>("/api/cielo/payment", {
-        method: "POST",
-        body: JSON.stringify({
-          orderId: request.MerchantOrderId,
-          customer: {
-            name: request.Customer.Name,
-            email: request.Customer.Email,
-            cpf: request.Customer.Identity,
-            birthdate: request.Customer.Birthdate,
-            address: request.Customer.Address,
-          },
-          card: {
-            cardNumber: request.Payment.CreditCard?.CardNumber,
-            holder: request.Payment.CreditCard?.Holder,
-            expirationDate: request.Payment.CreditCard?.ExpirationDate,
-            securityCode: request.Payment.CreditCard?.SecurityCode,
-            brand: request.Payment.CreditCard?.Brand,
-          },
-          amountInCents: request.Payment.Amount,
-          installments: request.Payment.Installments,
-          paymentType: "credit_card",
-        }),
-      });
-    }
-
-    throw new Error("Cielo proxy server not configured");
+    return this.localRequest<SaleResponse>("/api/cielo/payment", {
+      method: "POST",
+      body: JSON.stringify({
+        orderId: request.MerchantOrderId,
+        customer: {
+          name: request.Customer.Name,
+          email: request.Customer.Email,
+          cpf: request.Customer.Identity,
+          birthdate: request.Customer.Birthdate,
+          address: request.Customer.Address,
+        },
+        card: {
+          cardNumber: request.Payment.CreditCard?.CardNumber,
+          holder: request.Payment.CreditCard?.Holder,
+          expirationDate: request.Payment.CreditCard?.ExpirationDate,
+          securityCode: request.Payment.CreditCard?.SecurityCode,
+          brand: request.Payment.CreditCard?.Brand,
+        },
+        amountInCents: request.Payment.Amount,
+        installments: request.Payment.Installments,
+        paymentType: "credit_card",
+      }),
+    });
   }
 
-  /**
-   * Captura uma transação pré-autorizada
-   */
   async captureSale(
     paymentId: string,
     amount?: number
   ): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.captureSale(paymentId, amount);
-    }
-
-    if (this.useLocalServer) {
-      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/capture`, {
-        method: "POST",
-        body: JSON.stringify({ amount }),
-      });
-    }
-
-    throw new Error("Cielo proxy server not configured");
+    return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/capture`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    });
   }
 
-  /**
-   * Cancela uma transação
-   */
   async cancelSale(
     paymentId: string,
     amount?: number
   ): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.cancelSale(paymentId, amount);
-    }
-
-    if (this.useLocalServer) {
-      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/cancel`, {
-        method: "POST",
-        body: JSON.stringify({ amount }),
-      });
-    }
-
-    throw new Error("Cielo proxy server not configured");
+    return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    });
   }
 
-  /**
-   * Consulta uma transação pelo PaymentId
-   */
   async getSale(paymentId: string): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.getSale(paymentId);
-    }
-
-    if (this.useLocalServer) {
-      return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}`);
-    }
-
-    throw new Error("Cielo proxy server not configured");
+    return this.localRequest<SaleResponse>(`/api/cielo/payment/${paymentId}`);
   }
 
-  /**
-   * Consulta uma transação pelo MerchantOrderId
-   */
   async getSaleByOrderId(merchantOrderId: string): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.getSaleByOrderId(merchantOrderId);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("getSaleByOrderId is not available without a proxy server implementation");
+    return this.localRequest<SaleResponse>(`/api/cielo/payment/order/${merchantOrderId}`);
   }
 
   // ==========================================
   // PAGAMENTO RECORRENTE (Planos)
   // ==========================================
 
-  /**
-   * Cria uma transação recorrente programada
-   * Usado para assinatura de planos
-   */
   async createRecurrentSale(
     request: CreateRecurrentSaleRequest
   ): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.createRecurrentSale(request);
-    }
-
-    if (this.useLocalServer) {
-      return this.localRequest<SaleResponse>("/api/cielo/payment", {
-        method: "POST",
-        body: JSON.stringify({
-          orderId: request.MerchantOrderId,
-          customer: {
-            name: request.Customer.Name,
-            email: request.Customer.Email,
-            cpf: request.Customer.Identity,
-            birthdate: request.Customer.Birthdate,
-          },
-          card: {
-            cardNumber: request.Payment.CreditCard?.CardNumber,
-            holder: request.Payment.CreditCard?.Holder,
-            expirationDate: request.Payment.CreditCard?.ExpirationDate,
-            securityCode: request.Payment.CreditCard?.SecurityCode,
-            brand: request.Payment.CreditCard?.Brand,
-          },
-          amountInCents: request.Payment.Amount,
-          installments: 1,
-          paymentType: "recurrent",
-          interval: request.Payment.RecurrentPayment?.Interval,
-          startDate: request.Payment.RecurrentPayment?.StartDate,
-          endDate: request.Payment.RecurrentPayment?.EndDate,
-        }),
-      });
-    }
-
-    throw new Error("Cielo proxy server not configured");
+    return this.localRequest<SaleResponse>("/api/cielo/payment", {
+      method: "POST",
+      body: JSON.stringify({
+        orderId: request.MerchantOrderId,
+        customer: {
+          name: request.Customer.Name,
+          email: request.Customer.Email,
+          cpf: request.Customer.Identity,
+          birthdate: request.Customer.Birthdate,
+        },
+        card: {
+          cardNumber: request.Payment.CreditCard?.CardNumber,
+          holder: request.Payment.CreditCard?.Holder,
+          expirationDate: request.Payment.CreditCard?.ExpirationDate,
+          securityCode: request.Payment.CreditCard?.SecurityCode,
+          brand: request.Payment.CreditCard?.Brand,
+        },
+        amountInCents: request.Payment.Amount,
+        installments: 1,
+        paymentType: "recurrent",
+        interval: request.Payment.RecurrentPayment?.Interval,
+        startDate: request.Payment.RecurrentPayment?.StartDate,
+        endDate: request.Payment.RecurrentPayment?.EndDate,
+      }),
+    });
   }
 
-  /**
-   * Consulta uma recorrência pelo RecurrentPaymentId
-   */
   async getRecurrence(recurrentPaymentId: string): Promise<SaleResponse> {
-    if (this.useMock) {
-      return cieloMockClient.getRecurrence(recurrentPaymentId);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("getRecurrence is not available without a proxy server implementation");
+    return this.localRequest<SaleResponse>(`/api/cielo/recurrence/${recurrentPaymentId}`);
   }
 
-  /**
-   * Altera o valor da recorrência
-   */
   async updateRecurrenceAmount(
     recurrentPaymentId: string,
     amount: number
   ): Promise<void> {
-    if (this.useMock) {
-      return cieloMockClient.updateRecurrenceAmount(recurrentPaymentId, amount);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("updateRecurrenceAmount is not available without a proxy server implementation");
+    await this.localRequest<void>(`/api/cielo/recurrence/${recurrentPaymentId}/amount`, {
+      method: "PUT",
+      body: JSON.stringify({ amount }),
+    });
   }
 
-  /**
-   * Altera a data do próximo pagamento
-   */
   async updateRecurrenceNextDate(
     recurrentPaymentId: string,
-    nextPaymentDate: string // YYYY-MM-DD
+    nextPaymentDate: string
   ): Promise<void> {
-    if (this.useMock) {
-      return cieloMockClient.updateRecurrenceNextDate(recurrentPaymentId, nextPaymentDate);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("updateRecurrenceNextDate is not available without a proxy server implementation");
+    await this.localRequest<void>(`/api/cielo/recurrence/${recurrentPaymentId}/next-date`, {
+      method: "PUT",
+      body: JSON.stringify({ nextPaymentDate }),
+    });
   }
 
-  /**
-   * Altera o intervalo da recorrência
-   */
   async updateRecurrenceInterval(
     recurrentPaymentId: string,
     interval: RecurrenceInterval
   ): Promise<void> {
-    if (this.useMock) {
-      return cieloMockClient.updateRecurrenceInterval(recurrentPaymentId, interval);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("updateRecurrenceInterval is not available without a proxy server implementation");
+    await this.localRequest<void>(`/api/cielo/recurrence/${recurrentPaymentId}/interval`, {
+      method: "PUT",
+      body: JSON.stringify({ interval }),
+    });
   }
 
-  /**
-   * Altera a data final da recorrência
-   */
   async updateRecurrenceEndDate(
     recurrentPaymentId: string,
-    endDate: string // YYYY-MM-DD
+    endDate: string
   ): Promise<void> {
-    if (this.useMock) {
-      return cieloMockClient.updateRecurrenceEndDate(recurrentPaymentId, endDate);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("updateRecurrenceEndDate is not available without a proxy server implementation");
+    await this.localRequest<void>(`/api/cielo/recurrence/${recurrentPaymentId}/end-date`, {
+      method: "PUT",
+      body: JSON.stringify({ endDate }),
+    });
   }
 
-  /**
-   * Desativa uma recorrência (cancela assinatura)
-   */
   async deactivateRecurrence(
     recurrentPaymentId: string
   ): Promise<DeactivateRecurrenceResponse> {
-    if (this.useMock) {
-      return cieloMockClient.deactivateRecurrence(recurrentPaymentId);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("deactivateRecurrence is not available without a proxy server implementation");
+    return this.localRequest<DeactivateRecurrenceResponse>(`/api/cielo/recurrence/${recurrentPaymentId}/deactivate`, {
+      method: "PUT",
+    });
   }
 
-  /**
-   * Reativa uma recorrência
-   */
   async reactivateRecurrence(
     recurrentPaymentId: string
   ): Promise<DeactivateRecurrenceResponse> {
-    if (this.useMock) {
-      return cieloMockClient.reactivateRecurrence(recurrentPaymentId);
-    }
-    // Not used in the current UI. Implement on the proxy server if needed.
-    throw new Error("reactivateRecurrence is not available without a proxy server implementation");
+    return this.localRequest<DeactivateRecurrenceResponse>(`/api/cielo/recurrence/${recurrentPaymentId}/reactivate`, {
+      method: "PUT",
+    });
   }
 }
 
