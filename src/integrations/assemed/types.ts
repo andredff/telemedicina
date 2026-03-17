@@ -88,6 +88,9 @@ export interface Specialty {
 export interface GetSpecialtiesRequest {
   pageSize: number;
   pageIndex: number;
+  pacienteId: number;
+  apenasDisponiveis: boolean;
+  requerAgendamento: boolean;
 }
 
 export interface GetSpecialtiesResponse {
@@ -107,10 +110,12 @@ export interface AnamneseResposta {
 
 export interface CreateConsultationRequest {
   formatoAtendimento?: number;
-  tipoAtendimento: number; // Sempre 1 para primeira consulta
+  tipoAtendimento: number; // 1 = imediato, 3 = agendamento
   tipoProfissional: number;
   especialidadeId: number;
   pacienteId: number;
+  profissionalId?: number; // Obrigatório para tipoAtendimento = 3
+  dataAgendamento?: string; // ISO datetime, obrigatório para tipoAtendimento = 3
   respostasAnamnese?: AnamneseResposta[];
   exames?: { arquivoBase64: string }[];
 }
@@ -214,6 +219,54 @@ export function normalizeSimplifiedStatus(simplified: ConsultationSimplified): C
   if (situacaoStr.includes('em atendimento') || situacaoStr.includes('andamento')) return 'EM_ATENDIMENTO';
   
   return 'AGUARDANDO';
+}
+
+// ==========================================
+// AGENDAMENTO DE ESPECIALISTAS
+// ==========================================
+
+export interface AvailableProfessional {
+  profissionalId: number;
+  /** Nome do profissional — API pode retornar como profissionalNome */
+  nome: string;
+  especialidadeId?: number;
+  especialidadeNome?: string;
+  profissionalPrecoConsulta?: number | null;
+  profissionalTempoConsulta?: number;
+  disponibilidade?: unknown;
+  foto?: string | null;
+}
+
+export interface ScheduleSlot {
+  id: number;
+  profissionalId: number;
+  profissionalNome: string;
+  dataHora: string; // ISO datetime
+  precoConsulta: number;
+}
+
+export interface AvailableScheduleDay {
+  data: string; // ISO date (YYYY-MM-DD)
+  horarios: ScheduleSlot[];
+}
+
+export interface GetAvailableSchedulesRequest {
+  profissionalId: number | null;
+  pacienteId: number;
+  dataInicio: string | null;
+  dataFim: string | null;
+  horaInicio: string | null;
+  horaFim: string | null;
+  especialidadeId: number;
+  fuso: number;
+}
+
+export interface GetAvailableProfessionalsResponse {
+  items: AvailableProfessional[];
+}
+
+export interface GetAvailableSchedulesResponse {
+  items: AvailableScheduleDay[];
 }
 
 // ==========================================

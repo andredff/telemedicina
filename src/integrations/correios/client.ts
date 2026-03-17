@@ -4,6 +4,8 @@
  * Documentation: https://viacep.com.br/
  */
 
+import { supabase } from "@/integrations/supabase/client";
+
 export interface ViaCepResponse {
   cep: string;
   logradouro: string;
@@ -252,35 +254,84 @@ export async function getShippingQuote(
  * @returns Array of shipping options
  */
 
-// Custom shipping for medication: only "Entrega Própria" (1 a 2 dias úteis)
+// Shipping configuration from admin settings
+export interface ShippingConfig {
+  shippingCost: number;
+  minDeliveryDays: number;
+  maxDeliveryDays: number;
+  freeShippingThreshold: number;
+  enableFreeShipping: boolean;
+}
+
+const DEFAULT_SHIPPING_CONFIG: ShippingConfig = {
+  shippingCost: 5.90,
+  minDeliveryDays: 1,
+  maxDeliveryDays: 2,
+  freeShippingThreshold: 100,
+  enableFreeShipping: true,
+};
+
+/**
+ * Fetch shipping configuration from admin settings (site_settings table).
+ * Falls back to defaults if not configured.
+ */
+export async function getShippingConfig(): Promise<ShippingConfig> {
+  try {
+    const { data, error } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'shipping')
+      .maybeSingle();
+
+    if (error || !data?.value) {
+      return DEFAULT_SHIPPING_CONFIG;
+    }
+
+    const value = data.value as Record<string, unknown>;
+    return {
+      shippingCost: typeof value.shippingCost === 'number' ? value.shippingCost : DEFAULT_SHIPPING_CONFIG.shippingCost,
+      minDeliveryDays: typeof value.minDeliveryDays === 'number' ? value.minDeliveryDays : DEFAULT_SHIPPING_CONFIG.minDeliveryDays,
+      maxDeliveryDays: typeof value.maxDeliveryDays === 'number' ? value.maxDeliveryDays : DEFAULT_SHIPPING_CONFIG.maxDeliveryDays,
+      freeShippingThreshold: typeof value.freeShippingThreshold === 'number' ? value.freeShippingThreshold : DEFAULT_SHIPPING_CONFIG.freeShippingThreshold,
+      enableFreeShipping: typeof value.enableFreeShipping === 'boolean' ? value.enableFreeShipping : DEFAULT_SHIPPING_CONFIG.enableFreeShipping,
+    };
+  } catch {
+    return DEFAULT_SHIPPING_CONFIG;
+  }
+}
+
+// Custom shipping for medication: "Entrega Própria" with dynamic config from admin
 export async function calculateCartShipping(
   zipCode: string,
   itemCount: number,
   cartValue: number
-): Promise<ShippingOption[]> {
-  return [
-    {
-      id: 'entrega-propria',
-      name: 'Entrega Própria',
-      description: 'Entrega realizada pela equipe Novità',
-      price: 5.90, // valor fixo, ajuste se necessário
-      deadline: 2, // sempre mostrar "1 a 2 dias úteis" na UI
-      carrier: 'Novità',
-    },
-  ];
+): Promise<{ options: ShippingOption[]; config: ShippingConfig }> {
+  const config = await getShippingConfig();
+
+  return {
+    options: [
+      {
+        id: 'entrega-propria',
+        name: 'Entrega Própria',
+        description: 'Entrega realizada pela equipe Novità',
+        price: config.shippingCost,
+        deadline: config.maxDeliveryDays,
+        carrier: 'Novità',
+      },
+    ],
+    config,
+  };
 }
 
 /**
- * Check if shipping is free based on cart value
- * @param shippingPrice - Calculated shipping price
- * @param cartValue - Total cart value
- * @param freeShippingThreshold - Threshold for free shipping (default: R$100)
- * @returns Shipping price (0 if free)
+ * Check if shipping is free based on cart value and config
  */
 export function applyFreeShipping(
   shippingPrice: number,
   cartValue: number,
-  freeShippingThreshold: number = 100
+  config?: ShippingConfig
 ): number {
-  return cartValue >= freeShippingThreshold ? 0 : shippingPrice;
+  const cfg = config || DEFAULT_SHIPPING_CONFIG;
+  if (!cfg.enableFreeShipping) return shippingPrice;
+  return cartValue >= cfg.freeShippingThreshold ? 0 : shippingPrice;
 }

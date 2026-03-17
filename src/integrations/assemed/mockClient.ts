@@ -9,6 +9,8 @@ import type {
   GetConsultationsResponse,
   ConsultationSimplified,
   GetPrescriptionsResponse,
+  GetAvailableProfessionalsResponse,
+  GetAvailableSchedulesResponse,
   Consultation,
   ConsultationStatus,
 } from "./types";
@@ -190,7 +192,10 @@ export const assemedMockClient = {
   /**
    * Obtém especialidades disponíveis (mock)
    */
-  async getSpecialties(): Promise<GetSpecialtiesResponse> {
+  async getSpecialties(
+    _pacienteId: number,
+    _options?: { requerAgendamento?: boolean }
+  ): Promise<GetSpecialtiesResponse> {
     await simulateDelay();
     return { items: mockSpecialties };
   },
@@ -330,6 +335,91 @@ export const assemedMockClient = {
   ): Promise<void> {
     await simulateDelay();
     console.info("[Assemed Mock] Avaliação enviada:", { id, nota, comentario });
+  },
+
+  /**
+   * Obtém profissionais disponíveis para uma especialidade (mock)
+   */
+  async getAvailableProfessionals(pacienteId: number, especialidadeId: number): Promise<GetAvailableProfessionalsResponse> {
+    await simulateDelay();
+
+    const specialty = mockSpecialties.find((s) => s.id === especialidadeId);
+    const especialidadeNome = specialty?.nome || "Especialidade";
+
+    return {
+      items: [
+        {
+          profissionalId: 5001,
+          nome: "Dra. Ana Carolina Santos",
+          especialidadeId,
+          especialidadeNome,
+          foto: null,
+        },
+        {
+          profissionalId: 5002,
+          nome: "Dr. Ricardo Oliveira",
+          especialidadeId,
+          especialidadeNome,
+          foto: null,
+        },
+        {
+          profissionalId: 5003,
+          nome: "Dra. Beatriz Lima",
+          especialidadeId,
+          especialidadeNome,
+          foto: null,
+        },
+      ],
+    };
+  },
+
+  /**
+   * Obtém horários disponíveis para agendamento de um profissional (mock)
+   */
+  async getAvailableSchedules(profissionalId: number, pacienteId: number, especialidadeId: number): Promise<GetAvailableSchedulesResponse> {
+    await simulateDelay();
+
+    // Gera 3 dias a partir de amanhã com horários disponíveis
+    const days = [];
+    const now = new Date();
+    let slotId = 1;
+
+    for (let d = 1; d <= 3; d++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + d);
+      // Pula fins de semana
+      if (date.getDay() === 0 || date.getDay() === 6) continue;
+
+      const dateStr = date.toISOString().split("T")[0];
+      const horarios = [];
+
+      // Gera slots de 30 min entre 8h e 17h
+      for (let h = 8; h < 17; h++) {
+        for (const m of [0, 30]) {
+          // Simula alguns horários já ocupados
+          if (Math.random() > 0.5) continue;
+
+          const slotDate = new Date(date);
+          slotDate.setHours(h, m, 0, 0);
+
+          horarios.push({
+            id: slotId++,
+            profissionalId,
+            profissionalNome: "Profissional Mock",
+            dataHora: slotDate.toISOString(),
+            precoConsulta: 50,
+          });
+        }
+      }
+
+      if (horarios.length > 0) {
+        days.push({ data: dateStr, horarios });
+      }
+    }
+
+    console.info("[Assemed Mock] Horários disponíveis para profissional:", { profissionalId, pacienteId, especialidadeId, dias: days.length });
+
+    return { items: days };
   },
 
   /**

@@ -46,11 +46,11 @@ export async function loginPaciente(cpf: string) {
   return await res.json();
 }
 
-export async function obterEspecialidades(accessToken: string) {
-  const res = await fetch(`${API_BASE_URL}/api/Especialidades/obterTodas`, {
+export async function obterEspecialidades(accessToken: string, pacienteId: number) {
+  const res = await fetch(`${API_BASE_URL}/api/Especialidades/obterDisponiveis`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ pageSize: 0, pageIndex: 0 })
+    body: JSON.stringify({ pageSize: 0, pageIndex: 0, pacienteId, apenasDisponiveis: true, requerAgendamento: true })
   });
   if (!res.ok) throw new Error(await res.text());
   return await res.json();

@@ -27,7 +27,7 @@ import type { CartItem } from "@/types/prescription";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { sendOrderStatusNotification, sendLogisticsServiceOrder } from "@/services/notificationService";
-import { calculateCartShipping, applyFreeShipping, type ShippingOption } from "@/integrations/correios/client";
+import { calculateCartShipping, applyFreeShipping, type ShippingOption, type ShippingConfig } from "@/integrations/correios/client";
 
 type CheckoutStep = "address" | "payment";
 type PaymentMethod = "credit_card" | "pix";
@@ -60,14 +60,15 @@ export function MedicationCheckout({
   } | null>(null);
   const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
+  const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
 
   const subtotal = items.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
   
-  // Calculate shipping based on selected option or default
-  const shipping = selectedShipping ? applyFreeShipping(selectedShipping.price, subtotal) : 0;
+  // Calculate shipping based on selected option and admin config
+  const shipping = selectedShipping && shippingConfig ? applyFreeShipping(selectedShipping.price, subtotal, shippingConfig) : 0;
   const total = subtotal + shipping;
 
   // Calculate shipping when address is set
@@ -76,16 +77,17 @@ export function MedicationCheckout({
       if (deliveryAddress?.zipCode && items.length > 0) {
         setIsCalculatingShipping(true);
         try {
-          const options = await calculateCartShipping(
+          const { options, config } = await calculateCartShipping(
             deliveryAddress.zipCode,
             items.length,
             subtotal
           );
           setShippingOptions(options);
-          
+          setShippingConfig(config);
+
           // Auto-select first option or cheapest
           if (options.length > 0 && !selectedShipping) {
-            const cheapest = options.reduce((prev, curr) => 
+            const cheapest = options.reduce((prev, curr) =>
               curr.price < prev.price ? curr : prev
             );
             setSelectedShipping(cheapest);
@@ -338,7 +340,7 @@ export function MedicationCheckout({
                 <div className="bg-muted/50 p-4 rounded-lg w-full">
                   <div className="flex items-center gap-2 text-sm">
                     <Package className="h-4 w-4" />
-                    <span>Previsão de entrega: 2-3 dias úteis</span>
+                    <span>Previsão de entrega: {shippingConfig ? `${shippingConfig.minDeliveryDays} a ${shippingConfig.maxDeliveryDays}` : "1 a 2"} dias úteis</span>
                   </div>
                 </div>
                 <Button onClick={() => navigate("/dashboard")} className="w-full">
@@ -450,7 +452,7 @@ export function MedicationCheckout({
                         className="space-y-2"
                       >
                         {shippingOptions.map((option) => {
-                          const finalPrice = applyFreeShipping(option.price, subtotal);
+                          const finalPrice = applyFreeShipping(option.price, subtotal, shippingConfig || undefined);
                           return (
                             <div key={option.id} className="flex items-center space-x-2">
                               <RadioGroupItem value={option.id} id={`shipping-${option.id}`} />
@@ -462,7 +464,7 @@ export function MedicationCheckout({
                                   <span>
                                     <span className="font-medium">{option.name}</span>
                                     <span className="text-muted-foreground text-xs ml-1">
-                                      (1 a 2 dias úteis)
+                                      ({shippingConfig ? `${shippingConfig.minDeliveryDays} a ${shippingConfig.maxDeliveryDays}` : "1 a 2"} dias úteis)
                                     </span>
                                   </span>
                                   <span className={finalPrice === 0 ? "text-green-600 font-medium" : ""}>
@@ -482,9 +484,9 @@ export function MedicationCheckout({
                         Não foi possível calcular o frete para este endereço.
                       </p>
                     )}
-                    {subtotal >= 100 && (
+                    {shippingConfig?.enableFreeShipping && subtotal >= shippingConfig.freeShippingThreshold && (
                       <p className="text-xs text-green-600">
-                        Frete grátis para compras acima de R$ 100!
+                        Frete grátis para compras acima de R$ {shippingConfig.freeShippingThreshold.toFixed(2)}!
                       </p>
                     )}
                   </div>
@@ -569,7 +571,7 @@ export function MedicationCheckout({
                       <div>
                         <span className="font-medium">{selectedShipping.name}</span>
                         <span className="text-muted-foreground text-xs ml-1">
-                          (1 a 2 dias úteis)
+                          ({shippingConfig ? `${shippingConfig.minDeliveryDays} a ${shippingConfig.maxDeliveryDays}` : "1 a 2"} dias úteis)
                         </span>
                       </div>
                     </div>

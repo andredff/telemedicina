@@ -6,6 +6,7 @@ import type {
   LoginResponse,
   GetSpecialtiesRequest,
   GetSpecialtiesResponse,
+  Specialty,
   CreateConsultationRequest,
   CreateConsultationResponse,
   GetConsultationsRequest,
@@ -13,6 +14,12 @@ import type {
   ConsultationSimplified,
   Consultation,
   DecodedToken,
+  AvailableProfessional,
+  GetAvailableProfessionalsResponse,
+  GetAvailableSchedulesRequest,
+  GetAvailableSchedulesResponse,
+  ScheduleSlot,
+  AvailableScheduleDay,
 } from "./types";
 
 
@@ -322,19 +329,31 @@ class AssemedClient {
   // ==========================================
 
   async getSpecialties(
-    pageSize: number = 100,
-    pageIndex: number = 0
+    pacienteId: number,
+    options?: { requerAgendamento?: boolean }
   ): Promise<GetSpecialtiesResponse> {
-    const request: GetSpecialtiesRequest = { pageSize, pageIndex };
+    const request: GetSpecialtiesRequest = {
+      pageSize: 0,
+      pageIndex: 0,
+      pacienteId,
+      apenasDisponiveis: true,
+      requerAgendamento: options?.requerAgendamento ?? true,
+    };
 
-    return this.request<GetSpecialtiesResponse>(
-      "/api/Especialidades/obterTodas",
+    const raw = await this.request<GetSpecialtiesResponse | Specialty[]>(
+      "/api/Especialidades/obterDisponiveis",
       {
         method: "POST",
         body: JSON.stringify(request),
       },
       true
     );
+
+    // API pode retornar array direto ou { items: [...] }
+    if (Array.isArray(raw)) {
+      return { items: raw };
+    }
+    return raw;
   }
 
   // ==========================================
@@ -342,11 +361,11 @@ class AssemedClient {
   // ==========================================
 
   async createConsultation(
-    data: Omit<CreateConsultationRequest, "tipoAtendimento">
+    data: Omit<CreateConsultationRequest, "tipoAtendimento"> & { tipoAtendimento?: number }
   ): Promise<CreateConsultationResponse> {
     const request: CreateConsultationRequest = {
       ...data,
-      tipoAtendimento: 1,
+      tipoAtendimento: data.tipoAtendimento ?? 1,
     };
 
     return this.request<CreateConsultationResponse>("/api/Atendimentos", {
@@ -414,6 +433,105 @@ class AssemedClient {
       },
       true
     );
+  }
+
+  // ==========================================
+  // AGENDAMENTO DE ESPECIALISTAS
+  // ==========================================
+
+  /**
+   * Obtém profissionais disponíveis para uma especialidade
+   * POST /api/DisponibilidadeEspecialidade/obterProfissionaisDisponiveis
+   */
+  async getAvailableProfessionals(
+    pacienteId: number,
+    especialidadeId: number
+  ): Promise<GetAvailableProfessionalsResponse> {
+    const raw = await this.request<GetAvailableProfessionalsResponse | Record<string, unknown>[]>(
+      `/api/DisponibilidadeEspecialidade/obterProfissionaisDisponiveis`,
+      {
+        method: "POST",
+        body: JSON.stringify({ pacienteId, especialidadeId }),
+      },
+      true
+    );
+
+    // API pode retornar array direto ou { items: [...] }
+    const rawItems: Record<string, unknown>[] = Array.isArray(raw)
+      ? raw
+      : ((raw as GetAvailableProfessionalsResponse).items || []) as unknown as Record<string, unknown>[];
+
+    // Normaliza campo profissionalNome → nome
+    const items: AvailableProfessional[] = rawItems.map((p) => ({
+      profissionalId: p.profissionalId as number,
+      nome: (p.nome || p.profissionalNome || "") as string,
+      especialidadeId: (p.especialidadeId as number) ?? especialidadeId,
+      profissionalPrecoConsulta: p.profissionalPrecoConsulta as number | null,
+      profissionalTempoConsulta: p.profissionalTempoConsulta as number,
+      disponibilidade: p.disponibilidade,
+      foto: (p.foto as string) ?? null,
+    }));
+
+    return { items };
+  }
+
+  /**
+   * Obtém datas e horários disponíveis para agendamento com um profissional
+   * POST /api/DisponibilidadeEspecialidade/obterDisponiveisParaAgendamento
+   *
+   * A API retorna um array plano de slots: [{ id, profissionalId, profissionalNome, dataHora, precoConsulta }]
+   * Agrupamos por data para facilitar a exibição no modal.
+   */
+  async getAvailableSchedules(
+    profissionalId: number,
+    pacienteId: number,
+    especialidadeId: number
+  ): Promise<GetAvailableSchedulesResponse> {
+    const request: GetAvailableSchedulesRequest = {
+      profissionalId: null,
+      pacienteId,
+      dataInicio: null,
+      dataFim: null,
+      horaInicio: null,
+      horaFim: null,
+      especialidadeId,
+      fuso: 180,
+    };
+
+    const raw = await this.request<ScheduleSlot[] | GetAvailableSchedulesResponse>(
+      `/api/DisponibilidadeEspecialidade/obterDisponiveisParaAgendamento`,
+      {
+        method: "POST",
+        body: JSON.stringify(request),
+      },
+      true
+    );
+
+    // Se API retornar já agrupado, retorna direto
+    if (!Array.isArray(raw) && raw.items) {
+      return raw;
+    }
+
+    // API retorna array plano — agrupa por data
+    const flatSlots: ScheduleSlot[] = Array.isArray(raw) ? raw : [];
+    const dayMap = new Map<string, ScheduleSlot[]>();
+
+    for (const slot of flatSlots) {
+      const dateKey = slot.dataHora.substring(0, 10); // YYYY-MM-DD
+      const existing = dayMap.get(dateKey) || [];
+      existing.push(slot);
+      dayMap.set(dateKey, existing);
+    }
+
+    // Ordena por data e horário
+    const items: AvailableScheduleDay[] = Array.from(dayMap.entries())
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([data, horarios]) => ({
+        data,
+        horarios: horarios.sort((a, b) => a.dataHora.localeCompare(b.dataHora)),
+      }));
+
+    return { items };
   }
 
   // ==========================================

@@ -15,7 +15,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2 } from 'lucide-react';
+import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2, Truck } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { logger } from "@/lib/logger";
 
@@ -50,6 +50,13 @@ interface SettingsData {
     enableBoleto: boolean;
     maxInstallments: number;
   };
+  shipping: {
+    shippingCost: number;
+    minDeliveryDays: number;
+    maxDeliveryDays: number;
+    freeShippingThreshold: number;
+    enableFreeShipping: boolean;
+  };
 }
 
 const defaultSettings: SettingsData = {
@@ -82,6 +89,13 @@ const defaultSettings: SettingsData = {
     enablePix: true,
     enableBoleto: false,
     maxInstallments: 12,
+  },
+  shipping: {
+    shippingCost: 5.90,
+    minDeliveryDays: 1,
+    maxDeliveryDays: 2,
+    freeShippingThreshold: 100,
+    enableFreeShipping: true,
   },
 };
 
@@ -190,6 +204,10 @@ export default function AdminSettings() {
           <TabsTrigger value="payments">
             <CreditCard className="h-4 w-4 mr-2" />
             Pagamentos
+          </TabsTrigger>
+          <TabsTrigger value="shipping">
+            <Truck className="h-4 w-4 mr-2" />
+            Frete
           </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell className="h-4 w-4 mr-2" />
@@ -347,6 +365,93 @@ export default function AdminSettings() {
               <Button onClick={() => handleSaveSettings('payments')} disabled={saving}>
                 {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
                 Salvar Configurações de Pagamento
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Shipping Settings */}
+        <TabsContent value="shipping">
+          <Card>
+            <CardHeader>
+              <CardTitle>Configurações de Frete e Entrega</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="shippingCost">Valor do Frete (R$)</Label>
+                  <Input
+                    id="shippingCost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settings.shipping.shippingCost}
+                    onChange={(e) => updateSetting('shipping', 'shippingCost', parseFloat(e.target.value) || 0)}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Valor fixo cobrado por entrega</p>
+                </div>
+                <div>
+                  <Label htmlFor="freeShippingThreshold">Valor Mínimo para Frete Grátis (R$)</Label>
+                  <Input
+                    id="freeShippingThreshold"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={settings.shipping.freeShippingThreshold}
+                    onChange={(e) => updateSetting('shipping', 'freeShippingThreshold', parseFloat(e.target.value) || 0)}
+                    disabled={!settings.shipping.enableFreeShipping}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Pedidos acima deste valor têm frete grátis</p>
+                </div>
+                <div>
+                  <Label htmlFor="minDeliveryDays">Prazo Mínimo de Entrega (dias úteis)</Label>
+                  <Input
+                    id="minDeliveryDays"
+                    type="number"
+                    min="1"
+                    value={settings.shipping.minDeliveryDays}
+                    onChange={(e) => updateSetting('shipping', 'minDeliveryDays', parseInt(e.target.value) || 1)}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="maxDeliveryDays">Prazo Máximo de Entrega (dias úteis)</Label>
+                  <Input
+                    id="maxDeliveryDays"
+                    type="number"
+                    min="1"
+                    value={settings.shipping.maxDeliveryDays}
+                    onChange={(e) => updateSetting('shipping', 'maxDeliveryDays', parseInt(e.target.value) || 1)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between p-4 border rounded-lg">
+                <div>
+                  <h4 className="font-medium">Frete Grátis</h4>
+                  <p className="text-sm text-gray-500">
+                    Habilitar frete grátis para pedidos acima do valor mínimo configurado
+                  </p>
+                </div>
+                <Switch
+                  checked={settings.shipping.enableFreeShipping}
+                  onCheckedChange={(checked) => updateSetting('shipping', 'enableFreeShipping', checked)}
+                />
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h4 className="font-medium text-blue-800 mb-2">Resumo da Configuração</h4>
+                <ul className="text-sm text-blue-700 space-y-1">
+                  <li>Valor do frete: <strong>R$ {settings.shipping.shippingCost.toFixed(2)}</strong></li>
+                  <li>Prazo de entrega: <strong>{settings.shipping.minDeliveryDays} a {settings.shipping.maxDeliveryDays} dias úteis</strong></li>
+                  {settings.shipping.enableFreeShipping && (
+                    <li>Frete grátis para pedidos acima de: <strong>R$ {settings.shipping.freeShippingThreshold.toFixed(2)}</strong></li>
+                  )}
+                </ul>
+              </div>
+
+              <Button onClick={() => handleSaveSettings('shipping')} disabled={saving}>
+                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                Salvar Configurações de Frete
               </Button>
             </CardContent>
           </Card>

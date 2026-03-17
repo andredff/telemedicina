@@ -30,20 +30,14 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
-import type { Consultation, Specialty, ConsultationStatus } from "@/integrations/assemed/types";
+import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
+import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -407,7 +401,6 @@ const Especialistas = () => {
   const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("");
-  const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | null>(null);
   const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
   const [isUsingPlanConsultation, setIsUsingPlanConsultation] = useState(false);
   const [activeConsultationCreditId, setActiveConsultationCreditId] = useState<string | null>(null); // Crédito usado na consulta ativa atual
@@ -439,13 +432,17 @@ const Especialistas = () => {
     step,
     accessToken,
     specialties,
+    availableProfessionals,
+    availableSchedules,
     activeConsultation,
     consultations,
     isLoadingConsultations,
     error,
     silentAuthenticate,
     startConsultationFlow,
-    createConsultation,
+    createScheduledConsultation,
+    loadAvailableProfessionals,
+    loadAvailableSchedules,
     loadConsultations,
     cancelConsultation,
     closeConsultation,
@@ -462,14 +459,8 @@ const Especialistas = () => {
     [consultations]
   );
 
-  // Filter specialties dropdown: exclude Clínico Geral
-  const filteredSpecialties = useMemo(() =>
-    specialties.filter((s) => {
-      const nome = s.nome.toLowerCase();
-      return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
-    }),
-    [specialties]
-  );
+  // selectedScheduleSpecialty tracks the specialty chosen in the scheduling modal
+  const [selectedScheduleSpecialty, setSelectedScheduleSpecialty] = useState<Specialty | null>(null);
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -1010,7 +1001,7 @@ const Especialistas = () => {
         const firstCredit = effectiveAvailableCredits[0];
         toast({
           title: "Usando crédito disponível",
-          description: "Você tem uma consulta avulsa disponível. Iniciando...",
+          description: "Você tem uma consulta avulsa disponível. Selecione a especialidade para agendar.",
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
@@ -1030,7 +1021,7 @@ const Especialistas = () => {
         const firstCredit = effectiveAvailableCredits[0];
         toast({
           title: "Usando crédito disponível",
-          description: "Suas consultas do plano acabaram, mas você tem uma consulta avulsa disponível.",
+          description: "Suas consultas do plano acabaram, mas você tem uma consulta avulsa disponível. Selecione a especialidade para agendar.",
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
@@ -1091,9 +1082,9 @@ const Especialistas = () => {
     
     toast({
       title: "Usando crédito disponível",
-      description: "Iniciando sua consulta...",
+      description: "Selecione a especialidade para agendar.",
     });
-    
+
     // Marca o crédito como usado IMEDIATAMENTE (antes de criar consulta)
     setPendingCreditId(creditId);
     setActiveConsultationCreditId(creditId);
@@ -1134,10 +1125,10 @@ const Especialistas = () => {
       // Verifica se é um UUID válido (crédito do banco)
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(consultationCredit);
       
-      // Inicia a consulta automaticamente
+      // Inicia o fluxo de agendamento automaticamente
       toast({
         title: "Pagamento confirmado!",
-        description: "Iniciando sua consulta...",
+        description: "Selecione a especialidade para agendar sua consulta.",
       });
       
       setTimeout(() => {
@@ -1147,38 +1138,36 @@ const Especialistas = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, pageLoading]);
 
-  const handleSelectSpecialty = async (specialty: Specialty) => {
-    if (!specialty) return;
+  // Scheduling flow: specialty selected → load professionals
+  const handleScheduleSelectSpecialty = async (specialty: Specialty) => {
+    setSelectedScheduleSpecialty(specialty);
     setSelectedSpecialtyName(specialty.nome);
-    setSelectedSpecialty(specialty);
-    setShowSpecialtyModal(false);
-    
-    const success = await createConsultation(specialty);
-    
-    // Só incrementa o contador se a consulta foi criada com sucesso
-    if (success && isUsingPlanConsultation) {
-      await incrementSpecialistConsultations();
-      logger.info("Consulta do plano incrementada após criação bem-sucedida");
-    }
+    await loadAvailableProfessionals(specialty.id);
   };
 
-  const handleConfirmSpecialty = async () => {
-    if (!selectedSpecialty) {
-      toast({
-        title: "Selecione uma especialidade",
-        description: "Por favor, selecione uma especialidade para continuar.",
-        variant: "destructive",
-      });
-      return;
-    }
+  // Scheduling flow: professional selected → load schedules
+  const handleScheduleSelectProfessional = async (professional: AvailableProfessional) => {
+    const especialidadeId = selectedScheduleSpecialty?.id ?? 0;
+    await loadAvailableSchedules(professional.profissionalId, especialidadeId);
+  };
+
+  // Scheduling flow: confirm → create scheduled consultation
+  const handleScheduleConfirm = async (
+    specialty: Specialty,
+    professional: AvailableProfessional,
+    slot: ScheduleSlot
+  ) => {
     setShowSpecialtyModal(false);
-    
-    const success = await createConsultation(selectedSpecialty);
-    
-    // Só incrementa o contador se a consulta foi criada com sucesso
+
+    const success = await createScheduledConsultation(
+      specialty,
+      professional.profissionalId,
+      slot.dataHora
+    );
+
     if (success && isUsingPlanConsultation) {
       await incrementSpecialistConsultations();
-      logger.info("Consulta do plano incrementada após criação bem-sucedida");
+      logger.info("Consulta do plano incrementada após agendamento bem-sucedido");
     }
   };
 
@@ -1318,12 +1307,6 @@ const Especialistas = () => {
   }
 
   // ── Render: specialty selection modal ─────────────────────────────────────
-
-  const isFlowLoading =
-    step === "registering" ||
-    step === "authenticating" ||
-    step === "loading_specialties" ||
-    step === "creating_consultation";
 
   return (
     <div className="min-h-screen bg-background">
@@ -1467,115 +1450,22 @@ const Especialistas = () => {
           </Alert>
         )}
 
-        {/* Specialty selection modal */}
-        <Dialog
+        {/* Schedule specialist modal (replaces old immediate-creation modal) */}
+        <ScheduleSpecialistModal
           open={showSpecialtyModal}
           onOpenChange={(open) => {
             if (!open) handleCloseSpecialtyModal();
           }}
-        >
-          <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Stethoscope className="h-5 w-5 text-primary" />
-                Nova Consulta
-              </DialogTitle>
-              <DialogDescription>
-                Selecione a especialidade para iniciar seu atendimento
-              </DialogDescription>
-            </DialogHeader>
-
-            {/* Loading state inside modal */}
-            {(step === "authenticating" ||
-              step === "registering" ||
-              step === "loading_specialties") && (
-              <div className="flex flex-col items-center justify-center py-10 gap-4">
-                <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                <p className="text-sm text-muted-foreground">
-                  {step === "registering" && "Cadastrando paciente..."}
-                  {step === "authenticating" && "Autenticando..."}
-                  {step === "loading_specialties" && "Carregando especialidades..."}
-                </p>
-              </div>
-            )}
-
-            {/* Error inside modal */}
-            {step === "error" && error && (
-              <div className="space-y-4 py-2">
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Não foi possível continuar</AlertTitle>
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              </div>
-            )}
-
-            {/* Specialties dropdown */}
-            {step === "selecting_specialty" && filteredSpecialties.length > 0 && (
-              <div className="space-y-4 py-2">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-foreground">
-                    Selecione a especialidade
-                  </label>
-                  <Select
-                    value={selectedSpecialty?.id.toString() || ""}
-                    onValueChange={(value) => {
-                      const specialty = filteredSpecialties.find((s) => s.id.toString() === value);
-                      if (specialty) {
-                        setSelectedSpecialty(specialty);
-                        setSelectedSpecialtyName(specialty.nome);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Escolha uma especialidade" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {filteredSpecialties.map((specialty) => (
-                        <SelectItem key={specialty.id} value={specialty.id.toString()}>
-                          <div className="flex items-center justify-between w-full">
-                            <span>{specialty.nome}</span>
-                            {specialty.triagem && (
-                              <Badge variant="outline" className="ml-2 text-xs">
-                                Triagem
-                              </Badge>
-                            )}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={handleConfirmSpecialty}
-                  disabled={!selectedSpecialty || isFlowLoading}
-                >
-                  {isFlowLoading ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                      Criando consulta...
-                    </>
-                  ) : (
-                    "Confirmar"
-                  )}
-                </Button>
-              </div>
-            )}
-
-            {/* No specialties */}
-            {step === "selecting_specialty" && filteredSpecialties.length === 0 && (
-              <Alert className="my-2">
-                <AlertCircle className="h-4 w-4" />
-                <AlertTitle>Nenhuma especialidade disponível</AlertTitle>
-                <AlertDescription>
-                  Não há especialidades disponíveis para criação de atendimento
-                  no momento. Tente novamente mais tarde.
-                </AlertDescription>
-              </Alert>
-            )}
-          </DialogContent>
-        </Dialog>
+          specialties={specialties}
+          availableProfessionals={availableProfessionals}
+          availableSchedules={availableSchedules}
+          flowStep={step}
+          error={error}
+          onSelectSpecialty={handleScheduleSelectSpecialty}
+          onSelectProfessional={handleScheduleSelectProfessional}
+          onConfirmSchedule={handleScheduleConfirm}
+          onClose={handleCloseSpecialtyModal}
+        />
 
         {/* Modal de consulta avulsa (usuários sem plano ou sem consultas disponíveis) */}
         <Dialog

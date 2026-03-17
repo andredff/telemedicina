@@ -8,9 +8,10 @@ import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner"
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag, Plus, Minus } from "lucide-react";
+import { Trash2, ShoppingBag, Plus, Minus, Truck } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
 
 const Cart = () => {
   const navigate = useNavigate();
@@ -19,6 +20,7 @@ const Cart = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
   const { accessToken: assemedAccessToken } = useAssemedToken();
 
   useEffect(() => {
@@ -44,6 +46,7 @@ const Cart = () => {
     });
 
     loadCart();
+    getShippingConfig().then(setShippingConfig);
 
     return () => subscription.unsubscribe();
   }, [navigate]);
@@ -73,9 +76,11 @@ const Cart = () => {
     });
   };
 
-  const calculateTotal = () => {
-    return cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-  };
+  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const isFreeShipping = shippingConfig?.enableFreeShipping && subtotal >= shippingConfig.freeShippingThreshold;
+  const estimatedShipping = isFreeShipping ? 0 : (shippingConfig?.shippingCost ?? 0);
+  const estimatedTotal = subtotal + estimatedShipping;
 
   const handleCheckout = () => {
     navigate("/checkout/medication");
@@ -207,19 +212,30 @@ const Cart = () => {
                   <div className="space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Subtotal:</span>
-                      <span className="font-semibold">R$ {calculateTotal().toFixed(2)}</span>
+                      <span className="font-semibold">R$ {subtotal.toFixed(2)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-muted-foreground">Frete:</span>
-                      <span className="font-semibold text-accent">Grátis</span>
+                      {isFreeShipping ? (
+                        <span className="font-semibold text-green-600">Grátis</span>
+                      ) : shippingConfig ? (
+                        <span className="font-semibold">R$ {shippingConfig.shippingCost.toFixed(2)}</span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">Calculado no checkout</span>
+                      )}
                     </div>
+                    {shippingConfig?.enableFreeShipping && !isFreeShipping && (
+                      <p className="text-xs text-green-600">
+                        Frete grátis para compras acima de R$ {shippingConfig.freeShippingThreshold.toFixed(2)}!
+                      </p>
+                    )}
                   </div>
 
                   <div className="border-t border-border/50 pt-4">
                     <div className="flex justify-between items-center mb-4">
                       <span className="text-lg font-semibold">Total:</span>
                       <span className="text-2xl font-heading font-bold text-primary">
-                        R$ {calculateTotal().toFixed(2)}
+                        R$ {estimatedTotal.toFixed(2)}
                       </span>
                     </div>
 
@@ -230,9 +246,14 @@ const Cart = () => {
                     >
                       Finalizar Pedido
                     </Button>
-                    <p className="text-xs text-muted-foreground text-center mt-3">
-                      Entrega em até 24 horas úteis
-                    </p>
+                    {shippingConfig && (
+                      <div className="flex items-center justify-center gap-1 mt-3">
+                        <Truck className="h-3 w-3 text-muted-foreground" />
+                        <p className="text-xs text-muted-foreground">
+                          Entrega em {shippingConfig.minDeliveryDays} a {shippingConfig.maxDeliveryDays} dias úteis
+                        </p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>

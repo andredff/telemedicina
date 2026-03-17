@@ -58,6 +58,8 @@ import type {
   Specialty,
   CreateConsultationResponse,
   AnamneseResposta,
+  AvailableProfessional,
+  AvailableScheduleDay,
 } from "@/integrations/assemed/types";
 
 interface ProfileData {
@@ -75,6 +77,10 @@ export type ConsultationFlowStep =
   | "authenticating"
   | "loading_specialties"
   | "selecting_specialty"
+  | "loading_professionals"
+  | "selecting_professional"
+  | "loading_schedules"
+  | "selecting_schedule"
   | "creating_consultation"
   | "in_consultation"
   | "error";
@@ -83,6 +89,8 @@ interface ConsultationFlowState {
   step: ConsultationFlowStep;
   accessToken: string | null;
   specialties: Specialty[];
+  availableProfessionals: AvailableProfessional[];
+  availableSchedules: AvailableScheduleDay[];
   activeConsultation: CreateConsultationResponse | null;
   consultations: Consultation[];
   isLoadingConsultations: boolean;
@@ -102,6 +110,8 @@ export function useAssemedConsultation() {
     step: "idle",
     accessToken: null,
     specialties: [],
+    availableProfessionals: [],
+    availableSchedules: [],
     activeConsultation: null,
     consultations: [],
     isLoadingConsultations: false,
@@ -274,14 +284,18 @@ export function useAssemedConsultation() {
           assemedClient.setCpfPaciente(cleanCpf);
         }
 
-        // Carrega especialidades
+        // Carrega especialidades disponíveis
         setState((prev) => ({
           ...prev,
           step: "loading_specialties",
           accessToken,
         }));
 
-        const specialtiesResponse = await assemedClient.getSpecialties(100, 0);
+        // Decodifica token para obter pacienteId
+        const decoded = assemedClient.decodeToken(accessToken);
+        const pacienteId = decoded?.pacienteId ? parseInt(decoded.pacienteId, 10) : 0;
+
+        const specialtiesResponse = await assemedClient.getSpecialties(pacienteId, { requerAgendamento: true });
         const availableSpecialties = specialtiesResponse.items || [];
 
         setState((prev) => ({
@@ -354,6 +368,133 @@ export function useAssemedConsultation() {
   );
 
   /**
+   * Carrega profissionais disponíveis para uma especialidade (fluxo de agendamento)
+   */
+  const loadAvailableProfessionals = useCallback(
+    async (especialidadeId: number): Promise<void> => {
+      setState((prev) => ({
+        ...prev,
+        step: "loading_professionals",
+        availableProfessionals: [],
+        availableSchedules: [],
+        error: null,
+      }));
+
+      try {
+        // Decodifica token para obter pacienteId (necessário no POST)
+        const token = assemedClient.getAccessToken();
+        const decoded = token ? assemedClient.decodeToken(token) : null;
+        const pacienteId = decoded?.pacienteId ? parseInt(decoded.pacienteId, 10) : 0;
+
+        const response = await assemedClient.getAvailableProfessionals(pacienteId, especialidadeId);
+        const professionals = response.items || [];
+
+        setState((prev) => ({
+          ...prev,
+          step: "selecting_professional",
+          availableProfessionals: professionals,
+        }));
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao carregar profissionais disponíveis";
+        setError(message);
+      }
+    },
+    []
+  );
+
+  /**
+   * Carrega horários disponíveis para um profissional (fluxo de agendamento)
+   */
+  const loadAvailableSchedules = useCallback(
+    async (profissionalId: number, especialidadeId: number): Promise<void> => {
+      setState((prev) => ({
+        ...prev,
+        step: "loading_schedules",
+        availableSchedules: [],
+        error: null,
+      }));
+
+      try {
+        // Decodifica token para obter pacienteId
+        const token = assemedClient.getAccessToken();
+        const decoded = token ? assemedClient.decodeToken(token) : null;
+        const pacienteId = decoded?.pacienteId ? parseInt(decoded.pacienteId, 10) : 0;
+
+        const response = await assemedClient.getAvailableSchedules(profissionalId, pacienteId, especialidadeId);
+        const schedules = response.items || [];
+
+        setState((prev) => ({
+          ...prev,
+          step: "selecting_schedule",
+          availableSchedules: schedules,
+        }));
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao carregar horários disponíveis";
+        setError(message);
+      }
+    },
+    []
+  );
+
+  /**
+   * Cria um atendimento agendado com especialista (tipoAtendimento = 3)
+   */
+  const createScheduledConsultation = useCallback(
+    async (
+      specialty: Specialty,
+      profissionalId: number,
+      dataAgendamento: string
+    ): Promise<boolean> => {
+      if (!state.accessToken) {
+        setError("Token de acesso não disponível. Tente novamente.");
+        return false;
+      }
+
+      setState((prev) => ({ ...prev, step: "creating_consultation" }));
+
+      try {
+        const decoded = assemedClient.decodeToken(state.accessToken);
+        if (!decoded?.pacienteId) {
+          throw new Error("Não foi possível obter o ID do paciente do token.");
+        }
+
+        const pacienteId = parseInt(decoded.pacienteId, 10);
+
+        const consultation = await assemedClient.createConsultation({
+          formatoAtendimento: 0,
+          tipoAtendimento: 3,
+          tipoProfissional: specialty.tipoProfissionalId,
+          especialidadeId: specialty.id,
+          pacienteId,
+          profissionalId,
+          dataAgendamento,
+        });
+
+        setState((prev) => ({
+          ...prev,
+          step: "in_consultation",
+          activeConsultation: consultation,
+        }));
+        return true;
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao criar agendamento";
+        setError(message);
+        return false;
+      }
+    },
+    [state.accessToken]
+  );
+
+  /**
    * Carrega o histórico de consultas do paciente
    */
   const loadConsultations = useCallback(async (): Promise<void> => {
@@ -410,6 +551,8 @@ export function useAssemedConsultation() {
       step: "idle",
       accessToken: null,
       specialties: [],
+      availableProfessionals: [],
+      availableSchedules: [],
       activeConsultation: null,
       consultations: [],
       isLoadingConsultations: false,
@@ -434,6 +577,9 @@ export function useAssemedConsultation() {
     silentAuthenticate,
     startConsultationFlow,
     createConsultation,
+    createScheduledConsultation,
+    loadAvailableProfessionals,
+    loadAvailableSchedules,
     loadConsultations,
     cancelConsultation,
     closeConsultation,
