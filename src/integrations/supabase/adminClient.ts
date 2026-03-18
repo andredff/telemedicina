@@ -582,15 +582,14 @@ export const AdminQueries = {
     if (!supabaseAdmin) {
       return { data: null, error: new Error("Supabase admin client not configured") };
     }
-    
+
     try {
       const result = await supabaseAdmin
         .from('site_settings')
-        .update({ value, updated_by: updatedBy })
-        .eq('key', key)
+        .upsert({ key, value, updated_by: updatedBy }, { onConflict: 'key' })
         .select()
         .single();
-      
+
       return { data: result.data, error: result.error };
     } catch (error) {
       logger.error("[AdminQueries] Error updating setting", error);
