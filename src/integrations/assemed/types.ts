@@ -109,15 +109,20 @@ export interface AnamneseResposta {
 }
 
 export interface CreateConsultationRequest {
-  formatoAtendimento?: number;
-  tipoAtendimento: number; // 1 = imediato, 3 = agendamento
-  tipoProfissional: number;
+  dataAgendamento?: string; // ISO datetime, obrigatório para tipoAtendimento = 3
   especialidadeId: number;
   pacienteId: number;
-  profissionalId?: number; // Obrigatório para tipoAtendimento = 3
-  dataAgendamento?: string; // ISO datetime, obrigatório para tipoAtendimento = 3
+  profissionalId?: number;
+  profissionalAgendamentoId?: number; // ID do slot de agendamento selecionado
+  tipoAtendimento: number; // 1 = imediato, 3 = agendamento
+  formatoAtendimento?: number;
+  atendimentoVinculadoId?: number;
   respostasAnamnese?: AnamneseResposta[];
   exames?: { arquivoBase64: string }[];
+  cupomCodigo?: string;
+  textoPerguntaPaciente?: string;
+  fusoUsuario?: number;
+  tipoProfissional?: number;
 }
 
 export interface CreateConsultationResponse {

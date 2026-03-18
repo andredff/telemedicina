@@ -8,7 +8,7 @@ import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner"
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { CartItem } from "@/types/prescription";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag, Plus, Minus, Truck } from "lucide-react";
+import { Trash2, ShoppingBag, Plus, Minus, Truck, Store } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
@@ -141,9 +141,17 @@ const Cart = () => {
                   <CardContent className="flex items-center gap-4 p-6">
                     <div className="flex-1">
                       <h3 className="font-heading font-semibold text-lg mb-1">{item.name}</h3>
-                      <p className="text-sm text-muted-foreground mb-2">
-                        Receituário: {item.prescriptionId}
-                      </p>
+                      <div className="flex items-center gap-2 mb-2 flex-wrap">
+                        <p className="text-sm text-muted-foreground">
+                          Receituário: {item.prescriptionId}
+                        </p>
+                        {item.pharmacyName && (
+                          <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
+                            <Store className="h-3 w-3" />
+                            {item.pharmacyName}
+                          </span>
+                        )}
+                      </div>
                       <div className="text-sm space-y-1">
                         <p><span className="font-medium">Posologia:</span> {item.frequency}</p>
                         <p><span className="font-medium">Duração:</span> {item.duration}</p>

@@ -37,7 +37,7 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
-import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot } from "@/integrations/assemed/types";
+import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -1155,14 +1155,17 @@ const Especialistas = () => {
   const handleScheduleConfirm = async (
     specialty: Specialty,
     professional: AvailableProfessional,
-    slot: ScheduleSlot
+    slot: ScheduleSlot,
+    respostasAnamnese: AnamneseResposta[],
+    exames: { arquivoBase64: string }[]
   ) => {
     setShowSpecialtyModal(false);
 
     const success = await createScheduledConsultation(
       specialty,
-      professional.profissionalId,
-      slot.dataHora
+      slot,
+      respostasAnamnese,
+      exames
     );
 
     if (success && isUsingPlanConsultation) {

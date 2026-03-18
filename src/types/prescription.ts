@@ -23,4 +23,6 @@ export interface CartItem extends Medication {
   cartItemId: string;
   prescriptionId: string;
   quantity: number;
+  pharmacyId?: string;
+  pharmacyName?: string;
 }

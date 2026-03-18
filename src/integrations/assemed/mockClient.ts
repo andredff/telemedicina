@@ -221,7 +221,7 @@ export const assemedMockClient = {
       pacienteNome: "Paciente Mock",
       especialidadeId: request.especialidadeId,
       especialidadeNome: specialty?.nome || "Clínico Geral",
-      tipoProfissionalId: request.tipoProfissional,
+      tipoProfissionalId: request.tipoProfissional ?? 0,
       profissionalNome: null,
       status: "AGUARDANDO",
       dataHoraCriacao: new Date().toISOString(),

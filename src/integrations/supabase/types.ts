@@ -101,6 +101,89 @@ export type Database = {
           },
         ]
       }
+      pharmacies: {
+        Row: {
+          id: string
+          name: string
+          logo_url: string | null
+          is_premium: boolean
+          commission_rate: number
+          monthly_fee: number
+          phone: string | null
+          email: string | null
+          active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          name: string
+          logo_url?: string | null
+          is_premium?: boolean
+          commission_rate?: number
+          monthly_fee?: number
+          phone?: string | null
+          email?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          name?: string
+          logo_url?: string | null
+          is_premium?: boolean
+          commission_rate?: number
+          monthly_fee?: number
+          phone?: string | null
+          email?: string | null
+          active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pharmacy_prices: {
+        Row: {
+          id: string
+          pharmacy_id: string
+          medication_name: string
+          price: number
+          delivery_days: number
+          in_stock: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          pharmacy_id: string
+          medication_name: string
+          price: number
+          delivery_days?: number
+          in_stock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          pharmacy_id?: string
+          medication_name?: string
+          price?: number
+          delivery_days?: number
+          in_stock?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pharmacy_prices_pharmacy_id_fkey"
+            columns: ["pharmacy_id"]
+            isOneToOne: false
+            referencedRelation: "pharmacies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       logistics_service_orders: {
         Row: {
           created_at: string

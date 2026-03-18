@@ -456,6 +456,8 @@ class AssemedClient {
       true
     );
 
+    console.log("[Profissionais] Resposta bruta da API:", JSON.stringify(raw));
+
     // API pode retornar array direto ou { items: [...] }
     const rawItems: Record<string, unknown>[] = Array.isArray(raw)
       ? raw
@@ -487,16 +489,22 @@ class AssemedClient {
     pacienteId: number,
     especialidadeId: number
   ): Promise<GetAvailableSchedulesResponse> {
+    const today = new Date();
+    const thirtyDaysLater = new Date(today);
+    thirtyDaysLater.setDate(today.getDate() + 30);
+
     const request: GetAvailableSchedulesRequest = {
-      profissionalId: null,
+      profissionalId: profissionalId || null,
       pacienteId,
-      dataInicio: null,
-      dataFim: null,
+      dataInicio: today.toISOString().substring(0, 10),
+      dataFim: thirtyDaysLater.toISOString().substring(0, 10),
       horaInicio: null,
       horaFim: null,
       especialidadeId,
       fuso: 180,
     };
+
+    console.log("[Listagem] Request enviado:", JSON.stringify(request));
 
     const raw = await this.request<ScheduleSlot[] | GetAvailableSchedulesResponse>(
       `/api/DisponibilidadeEspecialidade/obterDisponiveisParaAgendamento`,
@@ -506,6 +514,8 @@ class AssemedClient {
       },
       true
     );
+
+    console.log("[Listagem] Resposta bruta da API:", JSON.stringify(raw));
 
     // Se API retornar já agrupado, retorna direto
     if (!Array.isArray(raw) && raw.items) {

@@ -3,16 +3,17 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RBAC } from '@/integrations/supabase/adminClient';
 import { Button } from '@/components/ui/button';
-import { 
-  LayoutDashboard, 
-  Users, 
-  ShoppingCart, 
-  FileText, 
-  BookOpen, 
-  BarChart2, 
-  Settings, 
-  LifeBuoy, 
-  LogOut 
+import {
+  LayoutDashboard,
+  Users,
+  ShoppingCart,
+  FileText,
+  BookOpen,
+  BarChart2,
+  Settings,
+  LifeBuoy,
+  LogOut,
+  Store
 } from 'lucide-react';
 
 export default function AdminLayout() {
@@ -57,6 +58,7 @@ export default function AdminLayout() {
     { id: 'dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', path: '/admin' },
     { id: 'users', icon: <Users className="h-5 w-5" />, label: 'Usuários', path: '/admin/usuarios' },
     { id: 'orders', icon: <ShoppingCart className="h-5 w-5" />, label: 'Pedidos', path: '/admin/pedidos' },
+    { id: 'pharmacies', icon: <Store className="h-5 w-5" />, label: 'Farmácias', path: '/admin/farmacias' },
     { id: 'prescriptions', icon: <FileText className="h-5 w-5" />, label: 'Receitas', path: '/admin/receitas' },
     { id: 'content', icon: <BookOpen className="h-5 w-5" />, label: 'Conteúdo', path: '/admin/conteudo' },
     { id: 'reports', icon: <BarChart2 className="h-5 w-5" />, label: 'Relatórios', path: '/admin/relatorios' },

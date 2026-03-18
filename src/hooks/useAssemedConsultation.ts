@@ -60,6 +60,7 @@ import type {
   AnamneseResposta,
   AvailableProfessional,
   AvailableScheduleDay,
+  ScheduleSlot,
 } from "@/integrations/assemed/types";
 
 interface ProfileData {
@@ -448,8 +449,9 @@ export function useAssemedConsultation() {
   const createScheduledConsultation = useCallback(
     async (
       specialty: Specialty,
-      profissionalId: number,
-      dataAgendamento: string
+      slot: ScheduleSlot,
+      respostasAnamnese: AnamneseResposta[] = [],
+      exames: { arquivoBase64: string }[] = []
     ): Promise<boolean> => {
       if (!state.accessToken) {
         setError("Token de acesso não disponível. Tente novamente.");
@@ -466,15 +468,26 @@ export function useAssemedConsultation() {
 
         const pacienteId = parseInt(decoded.pacienteId, 10);
 
-        const consultation = await assemedClient.createConsultation({
-          formatoAtendimento: 0,
-          tipoAtendimento: 3,
-          tipoProfissional: specialty.tipoProfissionalId,
+        const payload = {
+          dataAgendamento: slot.dataHora,
           especialidadeId: specialty.id,
           pacienteId,
-          profissionalId,
-          dataAgendamento,
-        });
+          profissionalId: slot.profissionalId,
+          profissionalAgendamentoId: slot.id,
+          tipoAtendimento: 3,
+          formatoAtendimento: 0,
+          atendimentoVinculadoId: 0,
+          respostasAnamnese,
+          exames,
+          cupomCodigo: "",
+          textoPerguntaPaciente: "",
+          fusoUsuario: 180,
+        };
+
+        console.log("[Agendamento] Slot original da API:", JSON.stringify(slot));
+        console.log("[Agendamento] Payload enviado:", JSON.stringify(payload));
+
+        const consultation = await assemedClient.createConsultation(payload);
 
         setState((prev) => ({
           ...prev,
