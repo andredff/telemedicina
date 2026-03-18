@@ -9,36 +9,30 @@ import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText,
   Calendar,
-  User,
   ChevronRight,
   Video,
   Pill,
   Package,
-  Crown
+  Crown,
+  Download,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { getPlanColor } from "@/data/plansData";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 
 import { useToast } from "@/hooks/use-toast";
 
-interface Medication {
-  id: string;
-  name: string;
-  dosage: string;
-  frequency: string;
-  duration: string;
-  price: number;
-}
-
-interface Prescription {
-  id: string;
-  patient_name: string;
-  doctor_name: string;
-  date: string;
-  status: string;
-  medications?: Medication[];
+interface AssemedReceituario {
+  consultationId: number;
+  especialidade: string;
+  profissional: string | null;
+  data: string;
+  urlPdf: string;
 }
 
 interface ProfileData {
@@ -68,8 +62,9 @@ const Dashboard = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [prescriptions, setPrescriptions] = useState<Prescription[]>([]);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [receituarios, setReceituarios] = useState<AssemedReceituario[]>([]);
+  const [loadingReceituarios, setLoadingReceituarios] = useState(true);
 
   const { accessToken: assemedAccessToken } = useAssemedToken();
 
@@ -130,24 +125,48 @@ const Dashboard = () => {
     setProfile(profileData);
   };
 
-  const fetchPrescriptions = async (userId: string) => {
+  const fetchReceituarios = async (token: string) => {
+    setLoadingReceituarios(true);
     try {
-      const { data, error } = await supabase
-        .from("prescriptions")
-        .select("*")
-        .eq("user_id", userId)
-        .order("date", { ascending: false });
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      assemedClient.setAccessToken(token);
 
-      if (error) {
-        logger.error("Error fetching prescriptions:", error);
-        return;
+      const response = await assemedClient.getConsultations(20, 0);
+      const consultations = (response.items || []).filter(
+        c => normalizeConsultationStatus(c) !== "CANCELADO"
+      );
+
+      const results = await Promise.allSettled(
+        consultations.map(async (c) => {
+          const items = await assemedClient.getReceituarios(c.id);
+          return { consultation: c, items };
+        })
+      );
+
+      const found: AssemedReceituario[] = [];
+      for (const result of results) {
+        if (result.status !== "fulfilled") continue;
+        const { consultation, items } = result.value;
+        for (const item of items) {
+          if (item.urlPdf) {
+            found.push({
+              consultationId: consultation.id,
+              especialidade: consultation.especialidadeNome || "Consulta",
+              profissional: consultation.profissionalNome || null,
+              data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+              urlPdf: item.urlPdf,
+            });
+            break; // um por consulta no dashboard
+          }
+        }
+        if (found.length >= 3) break;
       }
 
-      if (data) {
-        setPrescriptions(data);
-      }
-    } catch (error) {
-      logger.error("Error fetching prescriptions:", error);
+      setReceituarios(found);
+    } catch (err) {
+      logger.error("Error fetching receituarios:", err);
+    } finally {
+      setLoadingReceituarios(false);
     }
   };
 
@@ -200,7 +219,6 @@ const Dashboard = () => {
           navigate("/auth");
         } else if (session.user) {
           fetchProfile(session.user.id);
-          fetchPrescriptions(session.user.id);
           fetchSubscription(session.user.id);
         }
       }
@@ -214,7 +232,6 @@ const Dashboard = () => {
         navigate("/auth");
       } else if (session.user) {
         fetchProfile(session.user.id);
-        fetchPrescriptions(session.user.id);
         fetchSubscription(session.user.id);
       }
       setLoading(false);
@@ -223,29 +240,17 @@ const Dashboard = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
+  useEffect(() => {
+    if (assemedAccessToken) {
+      fetchReceituarios(assemedAccessToken);
+    } else {
+      setLoadingReceituarios(false);
+    }
+  }, [assemedAccessToken]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
-  };
-
-  const getStatusBadge = (status: string) => {
-    const variants = {
-      pending: "default",
-      partial: "secondary",
-      completed: "outline",
-    } as const;
-
-    const labels = {
-      pending: "Pendente",
-      partial: "Parcial",
-      completed: "Concluído",
-    };
-
-    return (
-      <Badge variant={variants[status as keyof typeof variants]}>
-        {labels[status as keyof typeof labels]}
-      </Badge>
-    );
   };
 
   if (loading) {
@@ -404,43 +409,57 @@ const Dashboard = () => {
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {prescriptions.length > 0 ? (
-              prescriptions.map((prescription) => (
+            {loadingReceituarios ? (
+              <Card className="col-span-full bg-card border-border/50">
+                <CardContent className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
+                  <p className="text-muted-foreground text-sm">Buscando receituários...</p>
+                </CardContent>
+              </Card>
+            ) : receituarios.length > 0 ? (
+              receituarios.map((rec) => (
                 <Card
-                  key={prescription.id}
-                  className="bg-card border-border/50 cursor-pointer transition-all hover:shadow-card hover:border-primary/20"
-                  onClick={() => navigate(`/prescription/${prescription.id}`)}
+                  key={rec.consultationId}
+                  className="bg-card border-border/50 transition-all hover:shadow-card hover:border-primary/20"
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
                         <FileText className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-base">{prescription.id}</CardTitle>
+                        <CardTitle className="text-base">Consulta #{rec.consultationId}</CardTitle>
                       </div>
-                      {getStatusBadge(prescription.status)}
+                      <Badge className="bg-green-100 text-green-700 border-green-200">Concluída</Badge>
                     </div>
-                    <CardDescription className="flex items-center gap-4 mt-2">
-                      <span className="flex items-center gap-1">
-                        <User className="h-3.5 w-3.5" />
-                        {prescription.patient_name}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3.5 w-3.5" />
-                        {new Date(prescription.date).toLocaleDateString("pt-BR")}
-                      </span>
+                    <CardDescription className="flex items-center gap-1 mt-2">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {(() => {
+                        try { return format(new Date(rec.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }); }
+                        catch { return rec.data; }
+                      })()}
                     </CardDescription>
                   </CardHeader>
                   <CardContent>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between mb-3">
                       <div>
-                        <p className="text-xs text-muted-foreground">Médico</p>
-                        <p className="text-sm font-medium">{prescription.doctor_name}</p>
+                        <p className="text-xs text-muted-foreground">Especialidade</p>
+                        <p className="text-sm font-medium">{rec.especialidade}</p>
                       </div>
-                      <div className="text-right">
-                        <p className="text-xs text-muted-foreground">Medicamentos</p>
-                        <p className="text-sm font-medium">{prescription.medications?.length || 0} itens</p>
-                      </div>
+                      {rec.profissional && (
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Profissional</p>
+                          <p className="text-sm font-medium">{rec.profissional}</p>
+                        </div>
+                      )}
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2"
+                      onClick={() => window.open(rec.urlPdf, "_blank")}
+                    >
+                      <Download className="h-4 w-4" />
+                      Baixar Receituário
+                    </Button>
                   </CardContent>
                 </Card>
               ))
@@ -449,10 +468,10 @@ const Dashboard = () => {
                 <CardContent className="flex flex-col items-center justify-center py-12">
                   <FileText className="h-12 w-12 text-muted-foreground mb-4" />
                   <p className="text-muted-foreground text-center mb-4">
-                    Você ainda não possui receitas cadastradas
+                    Nenhum receituário disponível
                   </p>
-                  <Button onClick={() => navigate("/prescriptions")}>
-                    Buscar Receita
+                  <Button variant="outline" onClick={() => navigate("/prescriptions")}>
+                    Ver receituários
                   </Button>
                 </CardContent>
               </Card>

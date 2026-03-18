@@ -49,6 +49,7 @@ export function MedicationCheckout({
   const [isLoading, setIsLoading] = useState(false);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("address");
+  const [editingAddress, setEditingAddress] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
   const [installments, setInstallments] = useState("1");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("credit_card");
@@ -512,8 +513,10 @@ export function MedicationCheckout({
           {/* Formulário de Endereço */}
           <div className="space-y-4">
             <DeliveryAddressForm
+              autoConfirm={!editingAddress}
               onAddressConfirm={(address) => {
                 setDeliveryAddress(address);
+                setEditingAddress(false);
                 setCurrentStep("payment");
               }}
               onCancel={onCancel}
@@ -616,7 +619,7 @@ export function MedicationCheckout({
                 <Button
                   variant="link"
                   size="sm"
-                  onClick={() => setCurrentStep("address")}
+                  onClick={() => { setEditingAddress(true); setCurrentStep("address"); }}
                   className="h-auto p-0 text-primary"
                 >
                   Alterar endereço
@@ -698,7 +701,7 @@ export function MedicationCheckout({
 
             <Button
               variant="outline"
-              onClick={() => setCurrentStep("address")}
+              onClick={() => { setEditingAddress(true); setCurrentStep("address"); }}
               className="w-full"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />

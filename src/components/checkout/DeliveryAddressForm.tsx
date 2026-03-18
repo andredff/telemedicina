@@ -57,6 +57,7 @@ function isServicedArea(state: string, city: string): boolean {
 interface DeliveryAddressFormProps {
   onAddressConfirm: (address: DeliveryAddress) => void;
   onCancel?: () => void;
+  autoConfirm?: boolean;
 }
 
 export interface DeliveryAddress {
@@ -72,6 +73,7 @@ export interface DeliveryAddress {
 export function DeliveryAddressForm({
   onAddressConfirm,
   onCancel,
+  autoConfirm = true,
 }: DeliveryAddressFormProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -131,7 +133,7 @@ export function DeliveryAddressForm({
           setRegionError(!isServiced);
           
           // Auto-confirm address if it has all required fields AND is in serviced area
-          if (isServiced && loadedAddress.street && loadedAddress.zipCode) {
+          if (autoConfirm && isServiced && loadedAddress.street && loadedAddress.zipCode) {
             onAddressConfirm(loadedAddress);
           }
         }

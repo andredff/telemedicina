@@ -17,6 +17,7 @@ const CheckoutMedication = () => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [paymentDone, setPaymentDone] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
 
   useEffect(() => {
@@ -75,7 +76,7 @@ const CheckoutMedication = () => {
   };
 
   const handleSuccess = (paymentId: string) => {
-    // Limpa o carrinho após pagamento bem-sucedido
+    setPaymentDone(true);
     localStorage.removeItem("cart");
     setCartItems([]);
   };
@@ -88,7 +89,7 @@ const CheckoutMedication = () => {
     );
   }
 
-  if (cartItems.length === 0) {
+  if (cartItems.length === 0 && !paymentDone) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
