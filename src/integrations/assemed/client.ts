@@ -517,13 +517,43 @@ class AssemedClient {
 
     console.log("[Listagem] Resposta bruta da API:", JSON.stringify(raw));
 
-    // Se API retornar já agrupado, retorna direto
+    // Helper: normaliza um slot bruto da API para ScheduleSlot
+    // A API pode retornar o ID do agendamento em id, agendamentoId ou profissionalAgendamentoId
+    const normalizeSlot = (s: Record<string, unknown>): ScheduleSlot => {
+      const slotId =
+        (s.id as number) ||
+        (s.agendamentoId as number) ||
+        (s.profissionalAgendamentoId as number) ||
+        0;
+
+      if (!slotId) {
+        console.warn("[Listagem] Slot sem profissionalAgendamentoId válido:", JSON.stringify(s));
+      }
+
+      return {
+        id: slotId,
+        profissionalId: (s.profissionalId as number) ?? 0,
+        profissionalNome: (s.profissionalNome as string) ?? "",
+        dataHora: (s.dataHora as string) ?? "",
+        precoConsulta: (s.precoConsulta as number) ?? 0,
+      };
+    };
+
+    // Se API retornar já agrupado, normaliza os slots de cada dia antes de retornar
     if (!Array.isArray(raw) && raw.items) {
-      return raw;
+      return {
+        items: raw.items.map((day) => ({
+          data: day.data,
+          horarios: (day.horarios as Record<string, unknown>[]).map(normalizeSlot).filter((s) => !!s.dataHora),
+        })),
+      };
     }
 
-    // API retorna array plano — agrupa por data
-    const flatSlots: ScheduleSlot[] = Array.isArray(raw) ? raw : [];
+    // API retorna array plano — normaliza campos e agrupa por data
+    const rawSlots: Record<string, unknown>[] = Array.isArray(raw) ? raw : [];
+
+    const flatSlots: ScheduleSlot[] = rawSlots.map(normalizeSlot).filter((s) => !!s.dataHora);
+
     const dayMap = new Map<string, ScheduleSlot[]>();
 
     for (const slot of flatSlots) {

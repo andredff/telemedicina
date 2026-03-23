@@ -468,12 +468,14 @@ export function useAssemedConsultation() {
 
         const pacienteId = parseInt(decoded.pacienteId, 10);
 
+        const profissionalAgendamentoId = slot.profissionalId;
+
         const payload = {
           dataAgendamento: slot.dataHora,
           especialidadeId: specialty.id,
           pacienteId,
-          profissionalId: slot.profissionalId,
-          profissionalAgendamentoId: slot.id,
+          profissionalId: 0,
+          profissionalAgendamentoId,
           tipoAtendimento: 3,
           formatoAtendimento: 0,
           atendimentoVinculadoId: 0,
