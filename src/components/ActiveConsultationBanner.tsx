@@ -363,15 +363,7 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
                     </>
                   )}
                 </Button>
-                <Button
-                  onClick={handleOpenNewTab}
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  title="Abrir em nova aba"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
+
                 <Button
                   onClick={handleCancel}
                   size="sm"

@@ -13,7 +13,7 @@ import {
   Settings,
   LifeBuoy,
   LogOut,
-  Store
+  Pill,
 } from 'lucide-react';
 
 export default function AdminLayout() {
@@ -58,7 +58,7 @@ export default function AdminLayout() {
     { id: 'dashboard', icon: <LayoutDashboard className="h-5 w-5" />, label: 'Dashboard', path: '/admin' },
     { id: 'users', icon: <Users className="h-5 w-5" />, label: 'Usuários', path: '/admin/usuarios' },
     { id: 'orders', icon: <ShoppingCart className="h-5 w-5" />, label: 'Pedidos', path: '/admin/pedidos' },
-    { id: 'pharmacies', icon: <Store className="h-5 w-5" />, label: 'Farmácias', path: '/admin/farmacias' },
+    { id: 'medications', icon: <Pill className="h-5 w-5" />, label: 'Medicamentos', path: '/admin/medicamentos' },
     { id: 'prescriptions', icon: <FileText className="h-5 w-5" />, label: 'Receitas', path: '/admin/receitas' },
     { id: 'content', icon: <BookOpen className="h-5 w-5" />, label: 'Conteúdo', path: '/admin/conteudo' },
     { id: 'reports', icon: <BarChart2 className="h-5 w-5" />, label: 'Relatórios', path: '/admin/relatorios' },

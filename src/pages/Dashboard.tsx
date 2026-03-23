@@ -1,21 +1,19 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import Header from "@/components/Header";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
-  FileText,
-  Calendar,
-  ChevronRight,
-  Video,
-  Pill,
-  Package,
-  Crown,
-  Download,
-  Loader2,
+  FileText, Calendar, ChevronRight, Video, Pill, Package, Crown,
+  Download, Loader2, ShoppingCart, Star, AlertTriangle, CheckCircle2,
+  Search, Upload, Stethoscope, ArrowRight, Sparkles,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -24,8 +22,14 @@ import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
-
 import { useToast } from "@/hooks/use-toast";
+import {
+  extractTextFromUrl,
+  extractTextFromFile,
+  matchMedicationsInText,
+  type MatchedMedication,
+} from "@/services/prescriptionParserService";
+import type { MedicationCatalog } from "@/types/inventory";
 
 interface AssemedReceituario {
   consultationId: number;
@@ -55,6 +59,19 @@ interface UserSubscription {
   } | null;
 }
 
+// ─── Cart helpers ────────────────────────────────────────────────────────────
+interface CartEntry { cartItemId: string; name: string; dosage: string; price: number; quantity: number; }
+function loadCart(): CartEntry[] { try { return JSON.parse(localStorage.getItem("cart") || "[]"); } catch { return []; } }
+function saveCart(c: CartEntry[]) { localStorage.setItem("cart", JSON.stringify(c)); }
+
+// ─── Time-based greeting ─────────────────────────────────────────────────────
+function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Bom dia";
+  if (hour < 18) return "Boa tarde";
+  return "Boa noite";
+}
+
 const Dashboard = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -66,7 +83,70 @@ const Dashboard = () => {
   const [receituarios, setReceituarios] = useState<AssemedReceituario[]>([]);
   const [loadingReceituarios, setLoadingReceituarios] = useState(true);
 
+  // ── Parser state ──────────────────────────────────────────────────────────
+  const [parserOpen, setParserOpen]       = useState(false);
+  const [parserRec, setParserRec]         = useState<AssemedReceituario | null>(null);
+  const [parserLoading, setParserLoading] = useState(false);
+  const [parserStep, setParserStep]       = useState<"loading" | "results" | "manual">("loading");
+  const [matchedMeds, setMatchedMeds]     = useState<MatchedMedication[]>([]);
+  const [manualText, setManualText]       = useState("");
+  const [addedIds, setAddedIds]           = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount]         = useState(() => loadCart().length);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const { accessToken: assemedAccessToken } = useAssemedToken();
+
+  const handleAnalyze = async (rec: AssemedReceituario) => {
+    setParserRec(rec);
+    setParserStep("loading");
+    setParserOpen(true);
+    setMatchedMeds([]);
+    setManualText("");
+    setParserLoading(true);
+    const text = await extractTextFromUrl(rec.urlPdf);
+    if (text && text.trim().length > 20) {
+      setMatchedMeds(await matchMedicationsInText(text));
+      setParserStep("results");
+    } else {
+      setParserStep("manual");
+    }
+    setParserLoading(false);
+  };
+
+  const handleManualAnalyze = async () => {
+    if (!manualText.trim()) return;
+    setParserLoading(true);
+    setMatchedMeds(await matchMedicationsInText(manualText));
+    setParserStep("results");
+    setParserLoading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParserLoading(true);
+    const text = await extractTextFromFile(file);
+    if (text && text.trim().length > 20) {
+      setMatchedMeds(await matchMedicationsInText(text));
+      setParserStep("results");
+    } else {
+      toast({ title: "Não foi possível extrair texto do PDF", description: "Cole o texto manualmente abaixo.", variant: "destructive" });
+    }
+    setParserLoading(false);
+  };
+
+  const addToCart = (med: MedicationCatalog) => {
+    const cart = loadCart();
+    const existing = cart.find(i => i.cartItemId === med.id);
+    if (existing) { existing.quantity += 1; } else {
+      cart.push({ cartItemId: med.id, name: med.name, dosage: med.dosage || "", price: med.price, quantity: 1 });
+    }
+    saveCart(cart);
+    setAddedIds(prev => new Set([...prev, med.id]));
+    setCartCount(cart.length);
+    toast({ title: `${med.name} adicionado ao carrinho` });
+    setTimeout(() => setAddedIds(prev => { const s = new Set(prev); s.delete(med.id); return s; }), 1500);
+  };
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -207,8 +287,6 @@ const Dashboard = () => {
     }
   };
 
-
-
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
@@ -256,12 +334,13 @@ const Dashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
     );
   }
 
-  const userName = profile?.full_name || user?.user_metadata?.full_name || "Paciente";
+  const firstName = (profile?.full_name || user?.user_metadata?.full_name || "Paciente").split(" ")[0];
+  const greeting = getGreeting();
 
   const formatExpirationDate = (dateStr: string | null) => {
     if (!dateStr) return "Sem data definida";
@@ -273,208 +352,276 @@ const Dashboard = () => {
     return subscription.plan.description || "Consultas ilimitadas com clínico geral";
   };
 
+  const quickActions = [
+    {
+      label: "Consulta Imediata",
+      sublabel: "Clínico geral 24h",
+      icon: Video,
+      color: "text-primary",
+      bg: "bg-primary/10 group-hover:bg-primary/20",
+      route: "/teleconsultas",
+    },
+    {
+      label: "Especialista",
+      sublabel: "Agendar consulta",
+      icon: Stethoscope,
+      color: "text-accent",
+      bg: "bg-accent/10 group-hover:bg-accent/20",
+      route: "/especialistas",
+    },
+    {
+      label: "Farmácia",
+      sublabel: "Entrega em casa",
+      icon: Pill,
+      color: "text-emerald-600",
+      bg: "bg-emerald-500/10 group-hover:bg-emerald-500/20",
+      route: "/farmacia",
+    },
+    {
+      label: "Meus Pedidos",
+      sublabel: "Acompanhar entregas",
+      icon: Package,
+      color: "text-orange-500",
+      bg: "bg-orange-500/10 group-hover:bg-orange-500/20",
+      route: "/orders",
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
-            Olá, {userName.split(" ")[0]}!
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie suas consultas e receitas médicas
-          </p>
+      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+
+        {/* ── Greeting ─────────────────────────────────────────────────── */}
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-sm text-muted-foreground font-medium mb-0.5">
+              {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
+            </p>
+            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
+              {greeting}, {firstName}!
+            </h1>
+            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
+              Como podemos te ajudar hoje?
+            </p>
+          </div>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <Card
-            className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
-            onClick={() => navigate("/teleconsultas")}
-          >
-            <CardContent className="p-4 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                <Video className="h-6 w-6 text-primary" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Consulta Imediata</p>
-                <p className="text-xs text-muted-foreground">Clínico geral 24h</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card
-            className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group"
-            onClick={() => navigate("/especialistas")}
-          >
-            <CardContent className="p-4 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-accent/10 flex items-center justify-center group-hover:bg-accent/20 transition-colors">
-                <Calendar className="h-6 w-6 text-accent" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Consulta com</p>
-                <p className="text-xs text-muted-foreground">Especialista</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/farmacia")}>
-            <CardContent className="p-4 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-medical-green/10 flex items-center justify-center group-hover:bg-medical-green/20 transition-colors">
-                <Pill className="h-6 w-6 text-medical-green" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Farmácia</p>
-                <p className="text-xs text-muted-foreground">Entrega em casa</p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all cursor-pointer group" onClick={() => navigate("/orders")}>
-            <CardContent className="p-4 flex flex-col items-center text-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-medical-orange/10 flex items-center justify-center group-hover:bg-medical-orange/20 transition-colors">
-                <Package className="h-6 w-6 text-medical-orange" />
-              </div>
-              <div>
-                <p className="font-medium text-foreground">Meus Pedidos</p>
-                <p className="text-xs text-muted-foreground">Acompanhe entregas</p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
+        {/* ── Plan Hero ────────────────────────────────────────────────── */}
         {subscription?.plan ? (
-          <Card className={`mb-8 border-0 text-primary-foreground bg-gradient-to-br ${getPlanColor(subscription.plan.type)}`}>
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className={`rounded-2xl p-6 sm:p-8 text-primary-foreground bg-gradient-to-br ${getPlanColor(subscription.plan.type)} shadow-lg`}>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                  <Crown className="h-6 w-6 text-white" />
+                </div>
                 <div>
-                  <p className="text-sm text-primary-foreground/80">Seu plano atual</p>
-                  <h3 className="text-2xl font-heading font-bold">Plano {subscription.plan.name}</h3>
-                  <p className="text-sm text-primary-foreground/80 mt-1">
-                    {getPlanDescription()} • Válido até {formatExpirationDate(subscription.expires_at)}
+                  <p className="text-xs font-medium text-white/70 uppercase tracking-wider mb-1">Seu plano ativo</p>
+                  <h2 className="text-xl sm:text-2xl font-heading font-bold text-white">
+                    Plano {subscription.plan.name}
+                  </h2>
+                  <p className="text-sm text-white/80 mt-1">{getPlanDescription()}</p>
+                  <p className="text-xs text-white/60 mt-1">
+                    Válido até {formatExpirationDate(subscription.expires_at)}
                   </p>
                 </div>
-                <div className="flex gap-3">
-                  <Button
-                    variant="secondary"
-                    className="bg-card text-foreground hover:bg-card/90"
-                    onClick={() => navigate("/meu-plano")}
-                  >
-                    Fazer upgrade
-                  </Button>
-                </div>
               </div>
-            </CardContent>
-          </Card>
+              <Button
+                variant="secondary"
+                className="bg-white/20 hover:bg-white/30 text-white border-0 shrink-0 gap-2 backdrop-blur-sm"
+                onClick={() => navigate("/meu-plano")}
+              >
+                <Sparkles className="h-4 w-4" />
+                Fazer upgrade
+              </Button>
+            </div>
+          </div>
         ) : (
-          <Card className="mb-8 border-dashed border-2 border-primary/30 bg-primary/5">
-            <CardContent className="p-6">
-              <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center">
-                    <Crown className="h-6 w-6 text-primary" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-heading font-bold text-foreground">Você ainda não tem um plano</h3>
-                    <p className="text-sm text-muted-foreground">
-                      Assine agora e tenha acesso à telemedicina e muito mais!
-                    </p>
-                  </div>
+          <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                  <Crown className="h-6 w-6 text-primary" />
                 </div>
-                <Button
-                  className="gradient-hero"
-                  onClick={() => navigate("/planos")}
-                >
-                  Ver planos
-                </Button>
+                <div>
+                  <h2 className="text-base sm:text-lg font-heading font-bold text-foreground">
+                    Você ainda não tem um plano
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Assine agora e tenha acesso à telemedicina e muito mais.
+                  </p>
+                </div>
               </div>
-            </CardContent>
-          </Card>
+              <Button
+                className="gradient-hero gap-2 shrink-0"
+                onClick={() => navigate("/planos")}
+              >
+                Ver planos
+                <ArrowRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
         )}
 
-        <div className="mb-8">
+        {/* ── Quick Actions ─────────────────────────────────────────────── */}
+        <div>
+          <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wider mb-4">
+            Acesso rápido
+          </h2>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {quickActions.map(({ label, sublabel, icon: Icon, color, bg, route }) => (
+              <Card
+                key={route}
+                className="bg-card border-border/50 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer group"
+                onClick={() => navigate(route)}
+              >
+                <CardContent className="p-4 sm:p-5 flex flex-col items-center text-center gap-3">
+                  <div className={`w-12 h-12 rounded-2xl ${bg} flex items-center justify-center transition-colors`}>
+                    <Icon className={`h-6 w-6 ${color}`} />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground leading-tight">{label}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+
+        {/* ── Receituários ─────────────────────────────────────────────── */}
+        <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-heading font-semibold text-foreground">
-              Meus Receituários
-            </h2>
+            <div>
+              <h2 className="text-lg font-heading font-semibold text-foreground">
+                Meus Receituários
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5">Últimas prescrições das suas consultas</p>
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              className="text-primary"
+              className="text-primary hover:text-primary gap-1"
               onClick={() => navigate("/prescriptions")}
             >
               Ver todos
-              <ChevronRight className="ml-1 h-4 w-4" />
+              <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {loadingReceituarios ? (
-              <Card className="col-span-full bg-card border-border/50">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <Loader2 className="h-8 w-8 text-primary animate-spin mb-3" />
-                  <p className="text-muted-foreground text-sm">Buscando receituários...</p>
-                </CardContent>
-              </Card>
+              <>
+                {[0, 1, 2].map((i) => (
+                  <Card key={i} className="bg-card border-border/50">
+                    <CardHeader className="pb-3">
+                      <div className="flex items-start justify-between">
+                        <div className="flex items-center gap-2">
+                          <Skeleton className="h-5 w-5 rounded" />
+                          <Skeleton className="h-4 w-28" />
+                        </div>
+                        <Skeleton className="h-5 w-16 rounded-full" />
+                      </div>
+                      <Skeleton className="h-3 w-36 mt-2" />
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex justify-between">
+                        <div className="space-y-1">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-24" />
+                        </div>
+                        <div className="space-y-1">
+                          <Skeleton className="h-3 w-16" />
+                          <Skeleton className="h-4 w-20" />
+                        </div>
+                      </div>
+                      <Skeleton className="h-8 w-full rounded-md" />
+                      <Skeleton className="h-8 w-full rounded-md" />
+                    </CardContent>
+                  </Card>
+                ))}
+              </>
             ) : receituarios.length > 0 ? (
               receituarios.map((rec) => (
                 <Card
                   key={rec.consultationId}
-                  className="bg-card border-border/50 transition-all hover:shadow-card hover:border-primary/20"
+                  className="bg-card border-border/50 transition-all hover:shadow-md hover:border-primary/20 flex flex-col"
                 >
                   <CardHeader className="pb-2">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2">
-                        <FileText className="h-5 w-5 text-primary" />
-                        <CardTitle className="text-base">Consulta #{rec.consultationId}</CardTitle>
+                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                          <FileText className="h-4 w-4 text-primary" />
+                        </div>
+                        <CardTitle className="text-sm font-semibold">
+                          Consulta #{rec.consultationId}
+                        </CardTitle>
                       </div>
-                      <Badge className="bg-green-100 text-green-700 border-green-200">Concluída</Badge>
+                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] shrink-0">
+                        Concluída
+                      </Badge>
                     </div>
-                    <CardDescription className="flex items-center gap-1 mt-2">
-                      <Calendar className="h-3.5 w-3.5" />
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
+                      <Calendar className="h-3 w-3 shrink-0" />
                       {(() => {
                         try { return format(new Date(rec.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }); }
                         catch { return rec.data; }
                       })()}
-                    </CardDescription>
+                    </p>
                   </CardHeader>
-                  <CardContent>
-                    <div className="flex items-center justify-between mb-3">
+                  <CardContent className="flex flex-col flex-1 justify-between gap-3">
+                    <div className="flex items-start justify-between">
                       <div>
-                        <p className="text-xs text-muted-foreground">Especialidade</p>
-                        <p className="text-sm font-medium">{rec.especialidade}</p>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Especialidade</p>
+                        <p className="text-sm font-medium mt-0.5">{rec.especialidade}</p>
                       </div>
                       {rec.profissional && (
                         <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Profissional</p>
-                          <p className="text-sm font-medium">{rec.profissional}</p>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Profissional</p>
+                          <p className="text-sm font-medium mt-0.5 max-w-[120px] truncate" title={rec.profissional}>
+                            {rec.profissional}
+                          </p>
                         </div>
                       )}
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2"
-                      onClick={() => window.open(rec.urlPdf, "_blank")}
-                    >
-                      <Download className="h-4 w-4" />
-                      Baixar Receituário
-                    </Button>
+                    <div className="space-y-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-2 text-xs"
+                        onClick={() => window.open(rec.urlPdf, "_blank")}
+                      >
+                        <Download className="h-3.5 w-3.5" />
+                        Baixar Receituário
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="w-full gap-2 text-xs bg-emerald-600 hover:bg-emerald-700 text-white"
+                        onClick={() => handleAnalyze(rec)}
+                      >
+                        <Pill className="h-3.5 w-3.5" />
+                        Analisar Medicamentos
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               ))
             ) : (
-              <Card className="col-span-full bg-card border-border/50">
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground text-center mb-4">
-                    Nenhum receituário disponível
+              <div className="col-span-full">
+                <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border bg-muted/30">
+                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+                    <FileText className="h-7 w-7 text-muted-foreground" />
+                  </div>
+                  <p className="font-medium text-foreground mb-1">Nenhum receituário ainda</p>
+                  <p className="text-sm text-muted-foreground mb-4 text-center max-w-xs">
+                    Seus receituários aparecerão aqui após consultas realizadas.
                   </p>
-                  <Button variant="outline" onClick={() => navigate("/prescriptions")}>
+                  <Button variant="outline" size="sm" onClick={() => navigate("/prescriptions")}>
                     Ver receituários
                   </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             )}
           </div>
         </div>
@@ -483,6 +630,130 @@ const Dashboard = () => {
 
       {/* Floating consultation banner */}
       <ActiveConsultationBanner accessToken={assemedAccessToken} />
+
+
+      {/* Modal de Análise de Medicamentos */}
+      <Dialog open={parserOpen} onOpenChange={setParserOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pill className="h-5 w-5 text-emerald-600" />
+              Medicamentos Encontrados
+              {parserRec && (
+                <span className="text-sm font-normal text-muted-foreground ml-1">
+                  — Consulta #{parserRec.consultationId}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {parserLoading && (
+            <div className="flex flex-col items-center py-12 gap-3">
+              <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+              <p className="text-sm text-muted-foreground">Analisando receituário...</p>
+            </div>
+          )}
+
+          {!parserLoading && parserStep === "manual" && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Não foi possível ler o PDF automaticamente.</p>
+                  <p className="text-xs mt-1">Faça upload do arquivo ou cole o texto do receituário abaixo.</p>
+                </div>
+              </div>
+              <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileUpload} />
+              <Button variant="outline" size="sm" className="gap-2 w-full" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4" />Fazer upload do PDF
+              </Button>
+              <Separator />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ou cole o texto do receituário:</label>
+                <Textarea
+                  placeholder={"Ex: Dipirona 500mg — tomar 1x ao dia\nAmoxicilina 500mg — 1 cápsula a cada 8h..."}
+                  rows={5}
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                />
+                <Button
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+                  disabled={!manualText.trim() || parserLoading}
+                  onClick={handleManualAnalyze}
+                >
+                  <Search className="h-4 w-4" />Identificar Medicamentos
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!parserLoading && parserStep === "results" && (
+            <div className="space-y-4">
+              {matchedMeds.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <p className="text-muted-foreground">Nenhum medicamento do catálogo encontrado nesta receita.</p>
+                  <Button variant="outline" size="sm" onClick={() => setParserStep("manual")}>Tentar manualmente</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span><strong>{matchedMeds.length}</strong> medicamento{matchedMeds.length > 1 ? "s" : ""} disponíve{matchedMeds.length > 1 ? "is" : "l"} na farmácia.</span>
+                  </div>
+                  <div className="space-y-2">
+                    {matchedMeds.map(({ medication: med, confidence }) => (
+                      <div key={med.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm">{med.name}</p>
+                            {confidence === "high" && (
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                                <Star className="h-2.5 w-2.5" />Prescrito
+                              </Badge>
+                            )}
+                          </div>
+                          {med.active_ingredient && <p className="text-xs text-muted-foreground">{med.active_ingredient}</p>}
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {med.dosage && <span className="text-xs text-muted-foreground">{med.dosage}</span>}
+                            {med.pharmacy_name && <span className="text-xs text-primary/70">· {med.pharmacy_name}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="font-bold text-sm">R$ {med.price.toFixed(2)}</p>
+                            <p className={`text-[10px] ${med.stock > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                              {med.stock > 0 ? "Em estoque" : "Sem estoque"}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={med.stock === 0}
+                            className={`gap-1.5 text-xs transition-all ${addedIds.has(med.id) ? "bg-emerald-600 text-white" : ""}`}
+                            onClick={() => addToCart(med)}
+                          >
+                            {addedIds.has(med.id)
+                              ? <><CheckCircle2 className="h-3.5 w-3.5" />Adicionado</>
+                              : <><ShoppingCart className="h-3.5 w-3.5" />Adicionar</>}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {cartCount > 0 && (
+                    <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/cart")}>
+                      <ShoppingCart className="h-4 w-4" />Ver carrinho ({cartCount} {cartCount === 1 ? "item" : "itens"})
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setParserStep("manual")}>
+                    Não encontrou? Buscar manualmente
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
