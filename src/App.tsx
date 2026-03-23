@@ -40,7 +40,7 @@ import AdminContent from "./pages/admin/Content";
 import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminSupport from "./pages/admin/Support";
-import AdminPharmacies from "./pages/admin/Pharmacies";
+import AdminMedications from "./pages/admin/Medications";
 import TestSupabase from "./pages/TestSupabase";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
@@ -104,7 +104,7 @@ const App = () => (
             <Route path="usuarios" element={<AdminUsers />} />
             <Route path="usuarios/:userId" element={<AdminUserDetail />} />
             <Route path="pedidos" element={<AdminOrders />} />
-            <Route path="farmacias" element={<AdminPharmacies />} />
+            <Route path="medicamentos" element={<AdminMedications />} />
             <Route path="receitas" element={<AdminPrescriptions />} />
             <Route path="conteudo" element={<AdminContent />} />
             <Route path="relatorios" element={<AdminReports />} />
