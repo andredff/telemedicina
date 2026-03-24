@@ -422,6 +422,22 @@ const BODY_RENDERERS: Record<OrderStatus, (data: OrderNotification) => string> =
   cancelled: cancelledBody,
 };
 
+// Frases UX amigáveis por status (exibidas no corpo do email e nos logs)
+const MENSAGENS_POR_STATUS: Record<OrderStatus, string> = {
+  pending:    "Recebemos seu pedido e já estamos verificando os detalhes.",
+  processing: "Estamos preparando seu pedido com cuidado.",
+  shipped:    "Seu pedido já está a caminho 🚚",
+  delivered:  "Seu pedido foi entregue com sucesso 🎉",
+  cancelled:  "Seu pedido foi cancelado. Se precisar, estamos aqui.",
+};
+
+/**
+ * Retorna mensagem UX amigável para o status do pedido
+ */
+export function getMensagemOpcional(status: OrderStatus): string {
+  return MENSAGENS_POR_STATUS[status] || "";
+}
+
 /**
  * Gera o subject do email baseado no status
  */

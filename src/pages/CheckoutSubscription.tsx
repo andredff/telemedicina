@@ -282,7 +282,7 @@ const CheckoutSubscription = () => {
       />
 
       <main className="container mx-auto px-4 py-8">
-        <BackLink />
+        <BackLink to="/meu-plano" label="Voltar ao Meu Plano" />
         <div className="max-w-4xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">

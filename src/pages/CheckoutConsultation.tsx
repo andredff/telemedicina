@@ -256,7 +256,7 @@ const CheckoutConsultation = () => {
       <Header isAuthenticated onLogout={handleLogout} />
 
       <main className="container mx-auto px-4 py-8">
-        <BackLink to="/teleconsultas" />
+        <BackLink to="/teleconsultas" label="Voltar às Teleconsultas" />
         <div className="max-w-2xl mx-auto">
           <div className="mb-8 text-center">
             <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">

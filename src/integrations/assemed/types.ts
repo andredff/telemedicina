@@ -159,6 +159,8 @@ export interface Consultation {
   dataHoraInicio: string | null;
   dataHoraFim: string | null;
   pacienteToken: string | null;
+  dataAgendamento?: string;  // Preenchido para consultas agendadas (tipoAtendimento = 3)
+  tipoAtendimento?: number;  // 1 = imediato, 3 = agendado com especialista
 }
 
 /**

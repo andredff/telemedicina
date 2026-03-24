@@ -210,7 +210,7 @@ const OrderDetail = () => {
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
         <main className="container mx-auto px-4 py-8">
-          <BackLink />
+          <BackLink to="/orders" label="Voltar aos Pedidos" />
           <Card className="max-w-2xl mx-auto">
             <CardContent className="py-12 text-center">
               <Package className="mx-auto h-12 w-12 text-muted-foreground mb-4" />

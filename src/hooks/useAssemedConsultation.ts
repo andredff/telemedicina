@@ -341,10 +341,17 @@ export function useAssemedConsultation() {
 
         const pacienteId = parseInt(decoded.pacienteId, 10);
 
+        // Força especialidadeId = 1 e nome 'Clínico Geral' para consulta imediata
+        const clinicoGeralSpecialty = {
+          ...specialty,
+          id: 1,
+          nome: "Clínico Geral",
+        };
+
         const consultation = await assemedClient.createConsultation({
           formatoAtendimento: 0,
-          tipoProfissional: specialty.tipoProfissionalId,
-          especialidadeId: specialty.id,
+          tipoProfissional: clinicoGeralSpecialty.tipoProfissionalId,
+          especialidadeId: 1,
           pacienteId,
           respostasAnamnese: respostasAnamnese || [],
           exames: exames || [],
@@ -353,7 +360,10 @@ export function useAssemedConsultation() {
         setState((prev) => ({
           ...prev,
           step: "in_consultation",
-          activeConsultation: consultation,
+          activeConsultation: {
+            ...consultation,
+            especialidadeNome: "Clínico Geral",
+          },
         }));
         return true;
       } catch (err: unknown) {
@@ -474,11 +484,9 @@ export function useAssemedConsultation() {
           dataAgendamento: slot.dataHora,
           especialidadeId: specialty.id,
           pacienteId,
-          profissionalId: 0,
           profissionalAgendamentoId,
           tipoAtendimento: 3,
           formatoAtendimento: 0,
-          atendimentoVinculadoId: 0,
           respostasAnamnese,
           exames,
           cupomCodigo: "",
@@ -489,13 +497,57 @@ export function useAssemedConsultation() {
         console.log("[Agendamento] Slot original da API:", JSON.stringify(slot));
         console.log("[Agendamento] Payload enviado:", JSON.stringify(payload));
 
+        // Cria o agendamento
         const consultation = await assemedClient.createConsultation(payload);
+        logger.info("[Agendamento] Consulta criada com sucesso:", consultation);
 
-        setState((prev) => ({
-          ...prev,
-          step: "in_consultation",
-          activeConsultation: consultation,
-        }));
+        // Pós-agendamento: busca lista de consultas para garantir dados completos
+        setState((prev) => ({ ...prev, isLoadingConsultations: true }));
+        let foundConsultation = null;
+        let attempts = 0;
+        while (!foundConsultation && attempts < 3) {
+          try {
+            const response = await assemedClient.getConsultations(50, 0);
+            // Filtra apenas consultas agendadas (com dataAgendamento)
+            const agendadas = (response.items || []).filter(c => c.dataAgendamento);
+            // Tenta encontrar a consulta recém-criada
+            foundConsultation = agendadas.find(c =>
+              c.pacienteId === pacienteId &&
+              c.especialidadeId === specialty.id &&
+              c.profissionalNome === slot.profissionalNome &&
+              c.dataAgendamento === slot.dataHora
+            );
+            // Fallback: pega a mais recente
+            if (!foundConsultation && agendadas.length > 0) {
+              foundConsultation = agendadas.sort((a, b) => new Date(b.dataAgendamento).getTime() - new Date(a.dataAgendamento).getTime())[0];
+            }
+            if (!foundConsultation) {
+              logger.warn("[Agendamento] Consulta recém-criada não encontrada, tentativa:", attempts + 1);
+              await new Promise(res => setTimeout(res, 1000));
+            }
+          } catch (err) {
+            logger.error("[Agendamento] Erro ao buscar consultas pós-agendamento:", err);
+            break;
+          }
+          attempts++;
+        }
+        setState((prev) => ({ ...prev, isLoadingConsultations: false }));
+
+        if (foundConsultation) {
+          logger.info("[Agendamento] Consulta agendada encontrada:", foundConsultation);
+          setState((prev) => ({
+            ...prev,
+            step: "in_consultation",
+            activeConsultation: foundConsultation,
+          }));
+        } else {
+          logger.warn("[Agendamento] Não foi possível identificar a consulta recém-agendada.");
+          setState((prev) => ({
+            ...prev,
+            step: "in_consultation",
+            activeConsultation: consultation, // fallback
+          }));
+        }
         return true;
       } catch (err: unknown) {
         const message =

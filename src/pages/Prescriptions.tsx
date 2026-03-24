@@ -12,8 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import {
   Search, FileText, Loader2, Download, ExternalLink,
-  Pill, ShoppingCart, Star, Package, AlertTriangle, CheckCircle2, Upload,
+  Pill, ShoppingCart, Star, Package, AlertTriangle, CheckCircle2, Upload, Wand2,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -49,6 +50,7 @@ function saveCart(cart: CartEntry[]) {
 
 const Prescriptions = () => {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { accessToken: assemedAccessToken, isLoading: assemedLoading } = useAssemedToken();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -127,9 +129,6 @@ const Prescriptions = () => {
     setAddedIds(prev => new Set([...prev, med.id]));
     setCartCount(cart.length);
     toast({ title: `${med.name} adicionado ao carrinho` });
-    setTimeout(() => {
-      setAddedIds(prev => { const s = new Set(prev); s.delete(med.id); return s; });
-    }, 1500);
   };
 
   // Carrega receituários de todas as consultas Assemed (em paralelo)
@@ -287,7 +286,7 @@ const Prescriptions = () => {
       <Header isAuthenticated title="Receituários" />
 
       <main className="container mx-auto px-4 py-8">
-        <BackLink />
+        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
@@ -429,6 +428,31 @@ const Prescriptions = () => {
                       <Download className="h-4 w-4" />
                       Baixar Receituário
                       <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full gap-2 border-primary/40 text-primary hover:bg-primary/5"
+                      onClick={() =>
+                        navigate("/receita/reformatar", {
+                          state: {
+                            pdfUrl: rec.urlPdf,
+                            doctorName: rec.profissional || undefined,
+                            specialty: rec.especialidade,
+                            date: (() => {
+                              try {
+                                return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR });
+                              } catch {
+                                return undefined;
+                              }
+                            })(),
+                            consultationId: rec.consultationId,
+                          },
+                        })
+                      }
+                    >
+                      <Wand2 className="h-4 w-4" />
+                      Reformatar Receita
                     </Button>
                     <Button
                       size="sm"

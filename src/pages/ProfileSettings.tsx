@@ -270,7 +270,7 @@ const ProfileSettings = () => {
       />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <BackLink />
+        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">

@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Video, X, Clock, Loader2, Ban, ExternalLink } from "lucide-react";
+import { Video, X, Clock, Loader2, Ban, ExternalLink, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
@@ -15,6 +15,9 @@ interface CachedConsultation {
   especialidadeNome: string;
   profissionalNome: string | null;
   situacao: string;
+  dataAgendamento?: string;
+  tipoAtendimento?: number; // 1 = imediato, 3 = agendado
+  _v?: number; // versão do cache para migração
 }
 
 function getCachedConsultation(): CachedConsultation | null {
@@ -86,33 +89,39 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
       // Primeiro tenta usar cache e verificar com endpoint simplificado
       const cached = getCachedConsultation();
       if (cached) {
-        console.log("[ActiveConsultationBanner] Verificando consulta em cache:", cached.id);
-        const status = await checkConsultationStatus(cached.id);
-        
-        if (status && (status.situacao === "AGUARDANDO" || status.situacao === "EM_ATENDIMENTO")) {
-          // Atualiza consulta em cache com status atualizado
-          const updatedCached = { ...cached, situacao: status.situacao, profissionalNome: status.profissionalNome };
-          setCachedConsultation(updatedCached);
-          setActiveConsultation({
-            id: cached.id,
-            pacienteId: 0,
-            pacienteNome: "",
-            especialidadeId: 0,
-            especialidadeNome: cached.especialidadeNome,
-            tipoProfissionalId: 0,
-            profissionalNome: status.profissionalNome,
-            status: status.situacao,
-            dataHoraCriacao: "",
-            dataHoraInicio: null,
-            dataHoraFim: null,
-            pacienteToken: null,
-          });
-          hasLoaded.current = true;
-          return;
-        } else {
-          // Consulta em cache não está mais ativa
-          console.log("[ActiveConsultationBanner] Consulta em cache não está mais ativa");
+        // Cache sem versão = formato antigo sem tipoAtendimento/dataAgendamento → força reload completo
+        if (!cached._v) {
+          console.log("[ActiveConsultationBanner] Cache antigo detectado, forçando reload completo");
           setCachedConsultation(null);
+        } else {
+          console.log("[ActiveConsultationBanner] Verificando consulta em cache:", cached.id);
+          const status = await checkConsultationStatus(cached.id);
+
+          if (status && (status.situacao === "AGUARDANDO" || status.situacao === "EM_ATENDIMENTO")) {
+            const updatedCached = { ...cached, situacao: status.situacao, profissionalNome: status.profissionalNome };
+            setCachedConsultation(updatedCached);
+            setActiveConsultation({
+              id: cached.id,
+              pacienteId: 0,
+              pacienteNome: "",
+              especialidadeId: 0,
+              especialidadeNome: cached.especialidadeNome,
+              tipoProfissionalId: 0,
+              profissionalNome: status.profissionalNome,
+              status: status.situacao,
+              dataHoraCriacao: "",
+              dataHoraInicio: null,
+              dataHoraFim: null,
+              pacienteToken: null,
+              dataAgendamento: cached.dataAgendamento,
+              tipoAtendimento: cached.tipoAtendimento,
+            });
+            hasLoaded.current = true;
+            return;
+          } else {
+            console.log("[ActiveConsultationBanner] Consulta em cache não está mais ativa");
+            setCachedConsultation(null);
+          }
         }
       }
 
@@ -138,6 +147,9 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
           especialidadeNome: active.especialidadeNome,
           profissionalNome: active.profissionalNome,
           situacao: normalizeConsultationStatus(active),
+          dataAgendamento: active.dataAgendamento,
+          tipoAtendimento: active.tipoAtendimento,
+          _v: 2,
         });
       } else {
         setCachedConsultation(null);
@@ -305,6 +317,23 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
 
   const normalizedStatus = normalizeConsultationStatus(activeConsultation);
   const isWaiting = normalizedStatus === "AGUARDANDO";
+  const isAgendada = !!activeConsultation.dataAgendamento || activeConsultation.tipoAtendimento === 3;
+
+  // Libera entrada 10 minutos antes do horário agendado, no mesmo dia
+  const agendamentoDate = activeConsultation.dataAgendamento ? new Date(activeConsultation.dataAgendamento) : null;
+  const now = new Date();
+  const canEnterAgendada = !isAgendada || (
+    agendamentoDate !== null &&
+    now.toDateString() === agendamentoDate.toDateString() &&
+    now >= new Date(agendamentoDate.getTime() - 10 * 60000)
+  );
+  const bannerTitle = isAgendada && isWaiting
+    ? "Consulta Agendada"
+    : isWaiting
+    ? "Aguardando Atendimento"
+    : "Consulta em Andamento";
+
+  const BannerIcon = isAgendada && isWaiting ? Calendar : isWaiting ? Clock : Video;
 
   return (
     <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5">
@@ -312,22 +341,23 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
         <CardContent className="p-4">
           <div className="flex items-start gap-3">
             <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
-              {isWaiting ? (
-                <Clock className="h-5 w-5 text-primary animate-pulse" />
-              ) : (
-                <Video className="h-5 w-5 text-primary" />
-              )}
+              <BannerIcon className={`h-5 w-5 text-primary${isWaiting && !isAgendada ? " animate-pulse" : ""}`} />
             </div>
-            
+
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2 mb-2">
                 <div>
                   <p className="font-semibold text-sm text-foreground">
-                    {isWaiting ? "Aguardando Atendimento" : "Consulta em Andamento"}
+                    {bannerTitle}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {activeConsultation.especialidadeNome}
+                    {activeConsultation.especialidadeId === 1 ? "Clínico Geral" : activeConsultation.especialidadeNome}
                   </p>
+                  {isAgendada && agendamentoDate && (
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {agendamentoDate.toLocaleDateString("pt-BR")} às {agendamentoDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                  )}
                 </div>
                 <Button
                   variant="ghost"
@@ -346,38 +376,61 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
               )}
 
               <div className="flex gap-2">
-                <Button
-                  onClick={handleEnter}
-                  size="sm"
-                  className="flex-1 gap-2"
-                >
-                  {isWaiting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Entrar
-                    </>
-                  ) : (
-                    <>
-                      <Video className="h-4 w-4" />
-                      Entrar
-                    </>
-                  )}
-                </Button>
-
-                <Button
-                  onClick={handleCancel}
-                  size="sm"
-                  variant="outline"
-                  className="gap-1"
-                  disabled={isCancelling}
-                >
-                  {isCancelling ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Ban className="h-4 w-4" />
-                  )}
-                  Cancelar
-                </Button>
+                {isAgendada && isWaiting && !canEnterAgendada ? (
+                  // Consulta agendada aguardando horário: mostra quando estará disponível
+                  <>
+                    <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0" />
+                      <span>
+                        Disponível{" "}
+                        {agendamentoDate
+                          ? `às ${new Date(agendamentoDate.getTime() - 10 * 60000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+                          : "no horário agendado"}
+                      </span>
+                    </div>
+                    <Button
+                      onClick={handleCancel}
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      disabled={isCancelling}
+                    >
+                      {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                      Cancelar
+                    </Button>
+                  </>
+                ) : (
+                  // Consulta imediata ou agendada no horário: botão de entrar normal
+                  <>
+                    <Button
+                      onClick={handleEnter}
+                      size="sm"
+                      className="flex-1 gap-2"
+                    >
+                      {isWaiting && !isAgendada ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Entrar na Fila
+                        </>
+                      ) : (
+                        <>
+                          <Video className="h-4 w-4" />
+                          Entrar na Consulta
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      onClick={handleCancel}
+                      size="sm"
+                      variant="outline"
+                      className="gap-1"
+                      disabled={isCancelling}
+                    >
+                      {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
+                      Cancelar
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           </div>

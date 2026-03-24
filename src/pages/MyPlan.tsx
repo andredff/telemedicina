@@ -522,7 +522,7 @@ const MyPlan = () => {
       />
 
       <main className="container mx-auto px-4 py-8">
-        <BackLink />
+        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
         {/* Current Plan Summary */}
         {subscription?.plan ? (
           <Card className={`mb-8 border-0 text-white bg-gradient-to-br ${getPlanColor(subscription.plan.type)}`}>

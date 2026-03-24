@@ -449,6 +449,203 @@ app.post("/api/cielo/webhook", async (req, res) => {
   }
 });
 
+// ─── Resend Email Proxy ───────────────────────────────────────────────────────
+// Proxy para Resend API. Mantém a chave no servidor (nunca exposta ao frontend).
+const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
+const RESEND_FROM    = process.env.RESEND_FROM || "Novità Telemedicina <onboarding@resend.dev>";
+
+app.post("/api/resend/emails", async (req, res) => {
+  const { to, subject, html, from } = req.body;
+
+  if (!to || !subject || !html) {
+    return res.status(400).json({ error: "Campos obrigatórios: to, subject, html" });
+  }
+
+  if (!RESEND_API_KEY) {
+    // Modo simulado: registra no log mas não envia
+    console.log("[Resend] ⚠️  RESEND_API_KEY não configurada — simulando envio");
+    console.log(`[Resend] → Para: ${Array.isArray(to) ? to.join(", ") : to}`);
+    console.log(`[Resend] → Assunto: ${subject}`);
+    return res.json({ id: `sim_${Date.now()}`, simulated: true });
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${RESEND_API_KEY}`,
+      },
+      body: JSON.stringify({
+        from: from || RESEND_FROM,
+        to:   Array.isArray(to) ? to : [to],
+        subject,
+        html,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      console.error("[Resend] Erro:", data);
+      return res.status(response.status).json({ error: data });
+    }
+
+    console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
+    return res.json(data);
+  } catch (err) {
+    console.error("[Resend] Falha na requisição:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Orders — atualização de status com evento de notificação ─────────────────
+// Endpoint desacoplado: atualiza o DB e dispara notificação de forma assíncrona.
+// O request retorna imediatamente; o email é enviado em background.
+
+const STATUS_VALIDOS = ["pending", "processing", "shipped", "delivered", "cancelled"];
+
+const MENSAGENS_STATUS = {
+  pending:    "Recebemos seu pedido e já estamos verificando os detalhes.",
+  processing: "Estamos preparando seu pedido com cuidado.",
+  shipped:    "Seu pedido já está a caminho 🚚",
+  delivered:  "Seu pedido foi entregue com sucesso 🎉",
+  cancelled:  "Seu pedido foi cancelado. Se precisar, estamos aqui.",
+};
+
+async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusAnterior, novoStatus, trackingCode, items }) {
+  // Idempotência: verifica se já foi notificado para este status recentemente (5 min)
+  if (supabase) {
+    const cincoMinAtras = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: existente } = await supabase
+      .from("order_notifications")
+      .select("id")
+      .eq("order_id", pedidoId)
+      .eq("status", novoStatus)
+      .gte("sent_at", cincoMinAtras)
+      .limit(1);
+
+    if (existente && existente.length > 0) {
+      console.log(`[Notificação] ⚠️  Duplicada ignorada — pedido ${pedidoId} status ${novoStatus}`);
+      return;
+    }
+  }
+
+  const mensagemOpcional = MENSAGENS_STATUS[novoStatus] || "";
+
+  console.log(`[Notificação] 🔔 Evento: PedidoStatusAtualizado`, {
+    pedidoId,
+    statusAnterior,
+    novoStatus,
+    dataHora: new Date().toISOString(),
+  });
+
+  // Registra notificação no banco
+  const sentAt = new Date().toISOString();
+  if (supabase) {
+    await supabase.from("order_notifications").insert({
+      order_id:       pedidoId,
+      customer_email: email,
+      customer_name:  nomeUsuario,
+      status:         novoStatus,
+      subject:        `Atualização do pedido #${pedidoId.substring(0, 8)} — ${novoStatus}`,
+      body:           mensagemOpcional,
+      tracking_code:  trackingCode || null,
+      sent_at:        sentAt,
+    }).catch(err => console.error("[Notificação] Erro ao registrar log:", err.message));
+  }
+
+  // Envia email com retry (até 3 tentativas)
+  for (let tentativa = 1; tentativa <= 3; tentativa++) {
+    try {
+      // Chama o próprio endpoint Resend (reutiliza a lógica já centralizada)
+      const baseUrl = `http://localhost:${process.env.PORT || 5174}`;
+      const resp = await fetch(`${baseUrl}/api/resend/emails`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to:      [email],
+          subject: `Atualização do pedido #${pedidoId.substring(0, 8).toUpperCase()} — Novità`,
+          html:    `<p>Olá, ${nomeUsuario}!</p><p>${mensagemOpcional}</p>`,
+        }),
+      });
+
+      if (resp.ok) {
+        console.log(`[Notificação] 📧 Email enviado (tentativa ${tentativa}) → ${email}`);
+        console.log({ pedidoId, status: "EMAIL_ENVIADO", timestamp: new Date() });
+        return;
+      }
+
+      console.warn(`[Notificação] Tentativa ${tentativa} falhou — status ${resp.status}`);
+    } catch (err) {
+      console.warn(`[Notificação] Tentativa ${tentativa} — erro: ${err.message}`);
+    }
+
+    if (tentativa < 3) await new Promise(r => setTimeout(r, 1000 * tentativa));
+  }
+
+  console.error(`[Notificação] ❌ Email não enviado após 3 tentativas — pedido ${pedidoId}`);
+}
+
+app.put("/api/orders/:id/status", async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const { id } = req.params;
+  const { novoStatus } = req.body;
+
+  if (!STATUS_VALIDOS.includes(novoStatus)) {
+    return res.status(400).json({ error: `Status inválido: ${novoStatus}` });
+  }
+
+  try {
+    // Busca pedido atual
+    const { data: pedido, error: fetchErr } = await supabase
+      .from("orders")
+      .select("id, status, customer_email, customer_name, tracking_code, items")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !pedido) {
+      return res.status(404).json({ error: "Pedido não encontrado" });
+    }
+
+    // Valida se houve mudança real de status
+    if (pedido.status === novoStatus) {
+      return res.json({ changed: false, message: "Status não alterado (já era este valor)" });
+    }
+
+    const statusAnterior = pedido.status;
+
+    // Persiste alteração
+    await supabase
+      .from("orders")
+      .update({ status: novoStatus, updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    // Retorna imediatamente — não bloqueia o request
+    res.json({ changed: true, statusAnterior, novoStatus });
+
+    // Dispara evento de domínio de forma assíncrona (fire-and-forget com retry)
+    setImmediate(() => {
+      dispararNotificacaoPedido({
+        pedidoId:      pedido.id,
+        email:         pedido.customer_email || "",
+        nomeUsuario:   pedido.customer_name  || "Cliente",
+        statusAnterior,
+        novoStatus,
+        trackingCode:  pedido.tracking_code,
+        items:         pedido.items || [],
+      }).catch(err => console.error("[Notificação] Erro no worker:", err.message));
+    });
+
+  } catch (err) {
+    console.error("[Orders] Erro ao atualizar status:", err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({

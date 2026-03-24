@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import Header from "@/components/Header";
+import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { CartItem } from "@/types/prescription";
@@ -108,6 +109,7 @@ const Cart = () => {
       />
       
       <main className="container mx-auto px-4 py-8">
+        <BackLink to={-1} label="Voltar" />
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
             Carrinho de Compras

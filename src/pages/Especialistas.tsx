@@ -15,6 +15,8 @@ import {
   Plus,
   RefreshCw,
   User as UserIcon,
+  CalendarCheck,
+  Calendar,
 } from "lucide-react";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
@@ -37,6 +39,7 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
+import BackLink from "@/components/BackLink";
 import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
@@ -64,7 +67,7 @@ const statusConfig: Record<
   }
 > = {
   AGUARDANDO: {
-    label: "Aguardando",
+    label: "Aguardando Atendimento",
     variant: "default",
     icon: Clock,
     bgColor: "bg-amber-50 text-amber-700 border-amber-200",
@@ -135,11 +138,32 @@ function ConsultationHistoryCard({
   onJoin: (c: Consultation) => void;
   onCancel: (id: number) => void;
 }) {
+  // --- Lógica de status e agendamento ---
+  const dataAgendamento = consultation.dataAgendamento;
+  const isAgendada = !!dataAgendamento;
+  const isImediata = !dataAgendamento;
+  const agendamentoDate = dataAgendamento ? new Date(dataAgendamento) : null;
+  const now = new Date();
+  let canEnterAgendada = false;
+  let showJoinButton = false;
+  let dataLiberacao = null;
   const normalizedStatus = normalizeConsultationStatus(consultation);
   const status = statusConfig[normalizedStatus];
-  const StatusIcon = status.icon;
-  const isActive =
-    normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO";
+
+  // Badge: consulta agendada aguardando → "Consulta Agendada"
+  const badgeConfig = isAgendada && normalizedStatus === "AGUARDANDO"
+    ? { label: "Consulta Agendada", bgColor: "bg-blue-50 text-blue-700 border-blue-200", icon: Calendar }
+    : status;
+  const BadgeIcon = badgeConfig.icon;
+  if (isAgendada && agendamentoDate) {
+    const isToday = now.toDateString() === agendamentoDate.toDateString();
+    dataLiberacao = new Date(agendamentoDate.getTime() - 10 * 60000);
+    canEnterAgendada = isToday && now >= dataLiberacao;
+    showJoinButton = (normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO");
+  } else if (isImediata) {
+    showJoinButton = normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO";
+    canEnterAgendada = true;
+  }
 
   return (
     <Card className="bg-card border-border/50 hover:shadow-card transition-all">
@@ -147,15 +171,29 @@ function ConsultationHistoryCard({
         <div className="flex items-start justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <Video className="h-5 w-5 text-primary shrink-0" />
-            <CardTitle className="text-base truncate">
-              Consulta #{consultation.id}
-            </CardTitle>
+            <div>
+              <CardTitle className="text-base truncate">
+                Consulta #{consultation.id}
+              </CardTitle>
+              {/* Mostra status textual e se está agendada */}
+              {consultation.situacaoAtendimentoDescricao && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {consultation.situacaoAtendimentoDescricao.toLowerCase().includes("agend") ? "AGENDADA" : consultation.situacaoAtendimentoDescricao}
+                </p>
+              )}
+              {/* Mostra data/hora do agendamento se existir */}
+              {dataAgendamento && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Agendada para: {format(new Date(dataAgendamento), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                </p>
+              )}
+            </div>
           </div>
           <span
-            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border shrink-0 ${status.bgColor}`}
+            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border shrink-0 ${badgeConfig.bgColor}`}
           >
-            <StatusIcon className="h-3 w-3" />
-            {status.label}
+            <BadgeIcon className="h-3 w-3" />
+            {badgeConfig.label}
           </span>
         </div>
       </CardHeader>
@@ -174,10 +212,30 @@ function ConsultationHistoryCard({
                 : consultation.profissionalNome || "Aguardando..."}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Data</p>
-            <p className="font-medium">{formatDate(consultation.dataCriacao || consultation.dataHoraCriacao)}</p>
-          </div>
+          {/* Data/hora para consulta agendada */}
+          {isAgendada && agendamentoDate && (
+            <>
+              <div>
+                <p className="text-muted-foreground text-xs mb-0.5">Data do Agendamento</p>
+                <p className="font-medium">{format(agendamentoDate, "dd/MM/yyyy", { locale: ptBR })}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-0.5">Horário da Consulta</p>
+                <p className="font-medium">{format(agendamentoDate, "HH:mm", { locale: ptBR })}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-xs mb-0.5">Data de Liberação</p>
+                <p className="font-medium">{dataLiberacao ? format(dataLiberacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "-"}</p>
+              </div>
+            </>
+          )}
+          {/* Data de criação para consulta imediata */}
+          {isImediata && (
+            <div>
+              <p className="text-muted-foreground text-xs mb-0.5">Data</p>
+              <p className="font-medium">{formatDate(consultation.dataCriacao || consultation.dataHoraCriacao)}</p>
+            </div>
+          )}
           {consultation.dataHoraFim && consultation.dataHoraInicio && (
             <div>
               <p className="text-muted-foreground text-xs mb-0.5">Duração</p>
@@ -189,12 +247,30 @@ function ConsultationHistoryCard({
         </div>
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50">
-          {isActive && (
-            <Button size="sm" onClick={() => onJoin(consultation)} className="gap-2">
-              {normalizedStatus === "AGUARDANDO" ? (
+          {onJoin && showJoinButton && (
+            <Button
+              size="sm"
+              onClick={() => onJoin(consultation)}
+              className="gap-2"
+              disabled={isAgendada && !canEnterAgendada}
+              title={isAgendada && !canEnterAgendada ? `Acesso liberado apenas no dia do agendamento, 10 minutos antes do horário marcado (${dataLiberacao ? format(dataLiberacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "-"})` : undefined}
+            >
+              {isAgendada ? (
+                canEnterAgendada ? (
+                  <>
+                    <Video className="h-4 w-4" />
+                    Entrar na Consulta
+                  </>
+                ) : (
+                  <>
+                    <Clock className="h-4 w-4" />
+                    Aguardar horário
+                  </>
+                )
+              ) : normalizedStatus === "AGUARDANDO" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Entrar na sala
+                  Entrar na Fila
                 </>
               ) : (
                 <>
@@ -461,6 +537,16 @@ const Especialistas = () => {
 
   // selectedScheduleSpecialty tracks the specialty chosen in the scheduling modal
   const [selectedScheduleSpecialty, setSelectedScheduleSpecialty] = useState<Specialty | null>(null);
+
+  // Controla se o fluxo atual é um agendamento (não abre iframe imediatamente)
+  const [isScheduledFlow, setIsScheduledFlow] = useState(false);
+
+  // Dados de confirmação após criar agendamento com especialista
+  const [scheduledConfirmation, setScheduledConfirmation] = useState<{
+    slotDate: string;
+    specialty: string;
+    professional: string;
+  } | null>(null);
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -1160,6 +1246,8 @@ const Especialistas = () => {
     exames: { arquivoBase64: string }[]
   ) => {
     setShowSpecialtyModal(false);
+    // Sinaliza que é agendamento para não abrir iframe automaticamente
+    setIsScheduledFlow(true);
 
     const success = await createScheduledConsultation(
       specialty,
@@ -1168,9 +1256,27 @@ const Especialistas = () => {
       exames
     );
 
-    if (success && isUsingPlanConsultation) {
-      await incrementSpecialistConsultations();
-      logger.info("Consulta do plano incrementada após agendamento bem-sucedido");
+    if (success) {
+      if (isUsingPlanConsultation) {
+        await incrementSpecialistConsultations();
+        logger.info("[Especialistas] Consulta do plano incrementada após agendamento");
+      }
+
+      // Chama /obter para obter a lista atualizada com dataAgendamento preenchido
+      logger.info("[Especialistas] Agendamento criado — recarregando consultas via /obter");
+      if (accessToken) {
+        await loadConsultations();
+      }
+
+      // Exibe tela de confirmação com os dados do slot (já disponíveis localmente)
+      setScheduledConfirmation({
+        slotDate: slot.dataHora,
+        specialty: specialty.nome,
+        professional: slot.profissionalNome,
+      });
+    } else {
+      // Falhou: desfaz o flag de agendamento
+      setIsScheduledFlow(false);
     }
   };
 
@@ -1274,8 +1380,10 @@ const Especialistas = () => {
   }, [closeConsultation, loadConsultations, accessToken]);
 
   // ── Render: new consultation - show iframe inline ────────────────────────────
+  // Para agendamentos (isScheduledFlow), não abre o iframe imediatamente:
+  // o usuário só entra no dia e horário corretos.
 
-  if (activeConsultation && activeConsultation.pacienteToken) {
+  if (activeConsultation && activeConsultation.pacienteToken && !isScheduledFlow) {
     return (
       <ConsultationIframe
         atendimentoId={activeConsultation.id}
@@ -1319,25 +1427,7 @@ const Especialistas = () => {
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Page title */}
         <div className="mb-8">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            Voltar ao Dashboard
-          </button>
+          <BackLink to="/dashboard" label="Voltar ao Dashboard" />
           <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
@@ -1657,6 +1747,105 @@ const Especialistas = () => {
             )}
         </div>
       </main>
+
+      {/* ── Dialog de confirmação de agendamento ─────────────────────────── */}
+      <Dialog
+        open={!!scheduledConfirmation}
+        onOpenChange={(open) => {
+          if (!open) {
+            setScheduledConfirmation(null);
+            setIsScheduledFlow(false);
+            closeConsultation();
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <CalendarCheck className="h-5 w-5 text-primary" />
+              Consulta Agendada!
+            </DialogTitle>
+            <DialogDescription>
+              Seu agendamento foi confirmado com sucesso.
+            </DialogDescription>
+          </DialogHeader>
+
+          {scheduledConfirmation && (() => {
+            const apptDate = new Date(scheduledConfirmation.slotDate);
+            const releaseDate = new Date(apptDate.getTime() - 10 * 60_000);
+            const isToday = new Date().toDateString() === apptDate.toDateString();
+            const now = new Date();
+            const canEnterNow = isToday && now >= releaseDate;
+
+            return (
+              <div className="space-y-4 py-2">
+                {/* Bloco principal: data e hora */}
+                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Calendar className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Data da Consulta</p>
+                      <p className="font-semibold text-foreground text-base">
+                        {format(apptDate, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Clock className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Horário</p>
+                      <p className="font-semibold text-foreground text-base">
+                        {format(apptDate, "HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                      <Stethoscope className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Especialidade / Profissional</p>
+                      <p className="font-semibold text-foreground">{scheduledConfirmation.specialty}</p>
+                      <p className="text-sm text-muted-foreground">{scheduledConfirmation.professional}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Regra de acesso */}
+                <div className={`rounded-lg border p-3 text-sm flex items-start gap-2 ${canEnterNow ? "border-green-200 bg-green-50 text-green-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                  <div>
+                    {canEnterNow ? (
+                      <p>Você já pode entrar na consulta. O botão <strong>"Entrar na Consulta"</strong> estará disponível na lista abaixo.</p>
+                    ) : (
+                      <>
+                        <p className="font-medium">Acesso liberado {isToday ? "hoje" : "no dia da consulta"} às {format(releaseDate, "HH:mm", { locale: ptBR })}</p>
+                        <p className="mt-0.5 text-xs opacity-80">O botão de entrada será liberado 10 minutos antes do horário agendado.</p>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => {
+                    setScheduledConfirmation(null);
+                    setIsScheduledFlow(false);
+                    closeConsultation();
+                  }}
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  Entendido
+                </Button>
+              </div>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

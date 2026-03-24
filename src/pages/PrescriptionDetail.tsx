@@ -75,7 +75,7 @@ const PrescriptionDetail = () => {
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
         <div className="container mx-auto px-4 py-8">
-          <BackLink />
+          <BackLink to="/prescriptions" label="Voltar aos Receituários" />
           <div className="text-center">
             <p className="text-muted-foreground">
               {prescriptionError ? `Erro: ${prescriptionError}` :

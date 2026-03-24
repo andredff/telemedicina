@@ -206,7 +206,7 @@ const Telemedicine = () => {
       />
 
       <main className="container mx-auto px-4 py-8">
-        <BackLink />
+        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
         {/* Status da assinatura */}
         {isCheckingAccess ? (
           <Skeleton className="h-20 w-full mb-6" />

@@ -36,6 +36,21 @@ export async function sendOrderStatusNotification(
   notification: OrderNotification
 ): Promise<NotificationResult> {
   try {
+    // ── Idempotência: ignora se o mesmo status já foi notificado nos últimos 5 min ──
+    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
+    const { data: existing } = await supabase
+      .from("order_notifications")
+      .select("id")
+      .eq("order_id", notification.orderId)
+      .eq("status", notification.status)
+      .gte("sent_at", fiveMinAgo)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      logger.warn(`[NOTIFICATION] Ignorada — já notificado: pedido ${notification.orderId} status ${notification.status}`);
+      return { success: true, message: "Notificação já enviada recentemente (idempotência)" };
+    }
+
     const subject = getEmailSubject(notification.status);
     const htmlBody = renderEmailTemplate(notification);
 
@@ -113,11 +128,11 @@ async function sendEmailViaResend(emailContent: {
     import.meta.env.VITE_RESEND_FROM ||
     "Novità Telemedicina <onboarding@resend.dev>";
 
-  const useLocalServer = import.meta.env.VITE_USE_LOCAL_SERVER === "true";
-  const localServerUrl =
-    import.meta.env.VITE_LOCAL_SERVER_URL ||
-    (import.meta.env.DEV ? "http://localhost:5174" : "");
-  const baseUrl = useLocalServer ? localServerUrl : "";
+  // Em dev: usa URL relativa → proxy Vite (/api/resend → api.resend.com) sem precisar do Express
+  // Em prod: usa VITE_LOCAL_SERVER_URL → backend Express que expõe /api/resend/emails
+  const baseUrl = import.meta.env.DEV
+    ? ""
+    : (import.meta.env.VITE_LOCAL_SERVER_URL || "");
 
   try {
     const response = await fetch(`${baseUrl}/api/resend/emails`, {

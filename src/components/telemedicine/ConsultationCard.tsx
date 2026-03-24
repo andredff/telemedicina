@@ -8,6 +8,7 @@ import {
   Loader2,
   FileText,
   Star,
+  Calendar,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +32,7 @@ const statusConfig: Record<
   }
 > = {
   AGUARDANDO: {
-    label: "Aguardando",
+    label: "Aguardando Atendimento",
     variant: "default",
     icon: Clock,
   },
@@ -60,7 +61,6 @@ export function ConsultationCard({
   onJoin,
 }: ConsultationCardProps) {
   const status = statusConfig[consultation.status];
-  const StatusIcon = status.icon;
 
   const formatDate = (dateString: string) => {
     try {
@@ -72,9 +72,34 @@ export function ConsultationCard({
     }
   };
 
-  const isActive =
-    consultation.status === "AGUARDANDO" ||
-    consultation.status === "EM_ATENDIMENTO";
+
+  // Consulta agendada: tem dataAgendamento preenchido
+  const isAgendada = !!consultation.dataAgendamento;
+
+  // Badge: consulta agendada aguardando → "Consulta Agendada"; imediata → usa statusConfig
+  const badgeConfig =
+    isAgendada && consultation.status === "AGUARDANDO"
+      ? { label: "Consulta Agendada", variant: "secondary" as const, icon: Calendar }
+      : status;
+  const BadgeIcon = badgeConfig.icon;
+  const isImediata = !consultation.dataAgendamento;
+
+  // Data/hora de exibição
+  const agendamentoDate = consultation.dataAgendamento ? new Date(consultation.dataAgendamento) : null;
+  const now = new Date();
+  let canEnterAgendada = false;
+  let showJoinButton = false;
+  let dataLiberacao = null;
+  if (isAgendada && agendamentoDate) {
+    // Só libera se for o mesmo dia do agendamento
+    const isToday = now.toDateString() === agendamentoDate.toDateString();
+    dataLiberacao = new Date(agendamentoDate.getTime() - 10 * 60000);
+    canEnterAgendada = isToday && now >= dataLiberacao;
+    showJoinButton = (consultation.status === "AGUARDANDO" || consultation.status === "EM_ATENDIMENTO");
+  } else if (isImediata) {
+    showJoinButton = consultation.status === "AGUARDANDO" || consultation.status === "EM_ATENDIMENTO";
+    canEnterAgendada = true;
+  }
 
   return (
     <Card className="overflow-hidden">
@@ -82,13 +107,27 @@ export function ConsultationCard({
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2">
             <Video className="h-5 w-5 text-primary" />
-            <CardTitle className="text-base">
-              Consulta #{consultation.id}
-            </CardTitle>
+            <div>
+              <CardTitle className="text-base">
+                Consulta #{consultation.id}
+              </CardTitle>
+              {/* Mostra status textual e se está agendada */}
+              {consultation.situacaoAtendimentoDescricao && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {consultation.situacaoAtendimentoDescricao.toLowerCase().includes("agend") ? "AGENDADA" : consultation.situacaoAtendimentoDescricao}
+                </p>
+              )}
+              {/* Mostra data/hora do agendamento se existir */}
+              {consultation.dataAgendamento && (
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Agendada para: {format(new Date(consultation.dataAgendamento), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                </p>
+              )}
+            </div>
           </div>
-          <Badge variant={status.variant} className="gap-1">
-            <StatusIcon className="h-3 w-3" />
-            {status.label}
+          <Badge variant={badgeConfig.variant} className="gap-1">
+            <BadgeIcon className="h-3 w-3" />
+            {badgeConfig.label}
           </Badge>
         </div>
       </CardHeader>
@@ -98,7 +137,7 @@ export function ConsultationCard({
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
             <p className="text-muted-foreground">Especialidade</p>
-            <p className="font-medium">{consultation.especialidadeNome}</p>
+            <p className="font-medium">{consultation.especialidadeId === 1 ? "Clínico Geral" : consultation.especialidadeNome}</p>
           </div>
           <div>
             <p className="text-muted-foreground">Profissional</p>
@@ -106,12 +145,30 @@ export function ConsultationCard({
               {consultation.profissionalNome || "Aguardando..."}
             </p>
           </div>
-          <div>
-            <p className="text-muted-foreground">Data</p>
-            <p className="font-medium">
-              {formatDate(consultation.dataHoraCriacao)}
-            </p>
-          </div>
+          {/* Data/hora para consulta agendada */}
+          {isAgendada && agendamentoDate && (
+            <>
+              <div>
+                <p className="text-muted-foreground">Data do Agendamento</p>
+                <p className="font-medium">{format(agendamentoDate, "dd/MM/yyyy", { locale: ptBR })}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Horário da Consulta</p>
+                <p className="font-medium">{format(agendamentoDate, "HH:mm", { locale: ptBR })}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground">Data de Liberação</p>
+                <p className="font-medium">{dataLiberacao ? format(dataLiberacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "-"}</p>
+              </div>
+            </>
+          )}
+          {/* Data de criação para consulta imediata */}
+          {isImediata && (
+            <div>
+              <p className="text-muted-foreground">Data</p>
+              <p className="font-medium">{formatDate(consultation.dataHoraCriacao)}</p>
+            </div>
+          )}
           {consultation.dataHoraFim && (
             <div>
               <p className="text-muted-foreground">Duração</p>
@@ -127,14 +184,28 @@ export function ConsultationCard({
 
         {/* Ações */}
         <div className="flex flex-wrap gap-2 pt-2 border-t">
-          {/* Entrar na consulta */}
-          {isActive && onJoin && (
+          {/* Entrar na consulta (respeita regras de horário para agendada) */}
+          {onJoin && showJoinButton && (
             <Button
               size="sm"
               onClick={() => onJoin(consultation)}
               className="gap-2"
+              disabled={isAgendada && !canEnterAgendada}
+              title={isAgendada && !canEnterAgendada ? `Acesso liberado apenas no dia do agendamento, 10 minutos antes do horário marcado (${dataLiberacao ? format(dataLiberacao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : "-"})` : undefined}
             >
-              {consultation.status === "AGUARDANDO" ? (
+              {isAgendada ? (
+                canEnterAgendada ? (
+                  <>
+                    <Video className="h-4 w-4" />
+                    Entrar na Consulta
+                  </>
+                ) : (
+                  <>
+                    <Clock className="h-4 w-4" />
+                    Aguardar horário
+                  </>
+                )
+              ) : consultation.status === "AGUARDANDO" ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Entrar na Fila

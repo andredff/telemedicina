@@ -211,7 +211,6 @@ const Farmacia = () => {
     saveCart(next);
     setCart(next);
     setAddedIds((s) => new Set(s).add(med.id));
-    setTimeout(() => setAddedIds((s) => { const n = new Set(s); n.delete(med.id); return n; }), 1500);
     toast({ title: "Adicionado ao carrinho!", description: med.name });
   }, [toast]);
 
@@ -269,7 +268,7 @@ const Farmacia = () => {
       <main className="container mx-auto px-4 py-8 pb-28">
         {/* Back + cart counter row */}
         <div className="flex items-center justify-between mb-2">
-          <BackLink />
+          <BackLink to="/dashboard" label="Voltar ao Dashboard" />
           {cartCount > 0 && (
             <button
               onClick={() => navigate("/cart")}

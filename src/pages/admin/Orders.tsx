@@ -178,6 +178,9 @@ export default function AdminOrders() {
       const order = orders.find(o => o.id === orderId);
       if (!order) return;
 
+      // Valida se houve mudança real de status — evita spam de notificação
+      if (order.status === newStatus) return;
+
       // Atualiza no banco de dados
       const { error: updateError } = await AdminQueries.updateOrderStatus(orderId, newStatus);
       if (updateError) {

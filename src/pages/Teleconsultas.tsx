@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
+import BackLink from "@/components/BackLink";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
@@ -171,7 +172,7 @@ function ConsultationHistoryCard({
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div>
             <p className="text-muted-foreground text-xs mb-0.5">Especialidade</p>
-            <p className="font-medium">{consultation.especialidadeNome || "—"}</p>
+            <p className="font-medium">{consultation.especialidadeId === 1 ? "Clínico Geral" : consultation.especialidadeNome || "—"}</p>
           </div>
           <div>
             <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
@@ -211,7 +212,7 @@ function ConsultationHistoryCard({
               )}
             </Button>
           )}
-          {normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO" && (
+          {(normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO") && (
             <Button
               size="sm"
               variant="outline"
@@ -1416,15 +1417,19 @@ const Teleconsultas = () => {
               // Busca dados completos (incluindo pacienteToken) antes de navegar
               try {
                 const fullConsultation = await assemedClient.getConsultation(consultationId);
+                console.log(fullConsultation, "full consultation data for navigation");
                 const token = fullConsultation?.pacienteToken;
-                const especialidade = encodeURIComponent(currentConsultation.especialidadeNome || "Consulta");
+                // Corrige especialidade para "Clínico Geral" se especialidadeId === 1
+                const especialidadeNomeFinal = currentConsultation.especialidadeId === 1 ? "Clínico Geral" : currentConsultation.especialidadeNome || "Consulta";
+                const especialidade = encodeURIComponent(especialidadeNomeFinal);
                 if (token) {
                   navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}&token=${encodeURIComponent(token)}`);
                 } else {
                   navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}`);
                 }
               } catch {
-                navigate(`/sala-espera/${consultationId}?especialidade=${encodeURIComponent(currentConsultation.especialidadeNome || "Consulta")}`);
+                const especialidadeNomeFinal = currentConsultation.especialidadeId === 1 ? "Clínico Geral" : currentConsultation.especialidadeNome || "Consulta";
+                navigate(`/sala-espera/${consultationId}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`);
               }
             }
 
@@ -1569,12 +1574,12 @@ const Teleconsultas = () => {
 
       const pending = pendingAnamneseRef.current;
       if (clinicoGeral) {
-        setSelectedSpecialtyName(clinicoGeral.nome);
-        createConsultation(clinicoGeral, pending?.respostasAnamnese, pending?.exames);
+        setSelectedSpecialtyName("Clínico Geral");
+        createConsultation({ ...clinicoGeral, id: 1, nome: "Clínico Geral" }, pending?.respostasAnamnese, pending?.exames);
       } else if (specialties.length > 0) {
-        // Fallback: use first available specialty
-        setSelectedSpecialtyName(specialties[0].nome);
-        createConsultation(specialties[0], pending?.respostasAnamnese, pending?.exames);
+        // Fallback: força id 1 e nome 'Clínico Geral' mesmo se não encontrar
+        setSelectedSpecialtyName("Clínico Geral");
+        createConsultation({ ...specialties[0], id: 1, nome: "Clínico Geral" }, pending?.respostasAnamnese, pending?.exames);
       }
       
       setIsAutoSelecting(false);
@@ -1723,10 +1728,9 @@ const Teleconsultas = () => {
       }
       
       // Agora que o crédito foi associado, navega para sala de espera
+      const especialidadeNomeFinal = activeConsultation.especialidadeId === 1 ? "Clínico Geral" : selectedSpecialtyName || activeConsultation.especialidadeNome || "Consulta";
       navigate(
-        `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(
-          selectedSpecialtyName
-        )}`
+        `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`
       );
     };
     handleConsultationCreated();
@@ -1778,10 +1782,9 @@ const Teleconsultas = () => {
   // ── Join existing consultation ────────────────────────────────────────────
 
   const handleJoinConsultation = async (consultation: Consultation) => {
-    // Navigate to in-app waiting room; actual token fetch and iframe load happen there
-    navigate(`/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(
-      consultation.especialidadeNome || "Consulta"
-    )}`);
+    // Sempre força "Clínico Geral" se especialidadeId === 1
+    const especialidadeNomeFinal = consultation.especialidadeId === 1 ? "Clínico Geral" : consultation.especialidadeNome || "Consulta";
+    navigate(`/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`);
   };
 
   // ── Cancel consultation ───────────────────────────────────────────────────
@@ -1875,7 +1878,7 @@ const Teleconsultas = () => {
       <ConsultationIframe
         atendimentoId={joiningConsultation.id}
         pacienteToken={joiningConsultation.pacienteToken}
-        especialidade={joiningConsultation.especialidadeNome || "Consulta"}
+        especialidade={joiningConsultation.especialidadeId === 1 ? "Clínico Geral" : joiningConsultation.especialidadeNome || "Consulta"}
         onClose={() => setJoiningConsultation(null)}
       />
     );
@@ -1906,25 +1909,7 @@ const Teleconsultas = () => {
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Page title */}
         <div className="mb-8">
-          <button
-            onClick={() => navigate("/dashboard")}
-            className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground mb-4 transition-colors"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="m15 18-6-6 6-6" />
-            </svg>
-            Voltar ao Dashboard
-          </button>
+          <BackLink to="/dashboard" label="Voltar ao Dashboard" />
           <div className="flex items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
@@ -2239,10 +2224,10 @@ const Teleconsultas = () => {
             </div>
           )}
 
-          {/* Consultations list */}
+          {/* Consultations list — apenas Clínico Geral (especialidadeId === 1) */}
           {!isLoadingConsultations && accessToken && consultations.length > 0 && (
             <div className="grid gap-4 md:grid-cols-2">
-              {consultations.map((consultation) => (
+              {consultations.filter((c) => c.especialidadeId === 1).map((consultation) => (
                 <ConsultationHistoryCard
                   key={consultation.id}
                   consultation={consultation}
@@ -2259,7 +2244,7 @@ const Teleconsultas = () => {
           {/* Empty state after loading */}
           {!isLoadingConsultations &&
             accessToken &&
-            consultations.length === 0 && (
+            consultations.filter((c) => c.especialidadeId === 1).length === 0 && (
               <Card className="bg-card border-border/50">
                 <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
                   <Video className="h-10 w-10 text-muted-foreground" />

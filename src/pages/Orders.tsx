@@ -173,7 +173,7 @@ const Orders = () => {
       <Header isAuthenticated onLogout={handleLogout} title="Meus Pedidos" />
       
       <main className="container mx-auto px-4 py-8">
-        <BackLink />
+        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
         {/* Header Section */}
         <div className="mb-8">
           <h1 className="text-3xl font-heading font-bold text-foreground mb-2">

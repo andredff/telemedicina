@@ -145,7 +145,6 @@ const Dashboard = () => {
     setAddedIds(prev => new Set([...prev, med.id]));
     setCartCount(cart.length);
     toast({ title: `${med.name} adicionado ao carrinho` });
-    setTimeout(() => setAddedIds(prev => { const s = new Set(prev); s.delete(med.id); return s; }), 1500);
   };
 
   const fetchProfile = async (userId: string) => {
