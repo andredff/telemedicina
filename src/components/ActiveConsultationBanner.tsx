@@ -1,8 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Video, X, Clock, Loader2, Ban, ExternalLink, Calendar } from "lucide-react";
+import { Video, X, Clock, Loader2, Ban, Calendar, ChevronRight, ChevronDown, ChevronUp, Stethoscope } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import type { Consultation, ConsultationSimplified } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
@@ -52,6 +51,7 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
   const { toast } = useToast();
   const [activeConsultation, setActiveConsultation] = useState<Consultation | null>(null);
   const [isDismissed, setIsDismissed] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
   const hasLoaded = useRef(false);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -306,136 +306,301 @@ export function ActiveConsultationBanner({ accessToken }: ActiveConsultationBann
   };
 
   // Não mostra na própria sala de espera
-  if (location.pathname.startsWith("/sala-espera")) {
-    return null;
-  }
-
-  // Não mostra se não há consulta ativa ou foi fechado
-  if (!activeConsultation || isDismissed) {
-    return null;
-  }
+  if (location.pathname.startsWith("/sala-espera")) return null;
+  if (!activeConsultation || isDismissed) return null;
 
   const normalizedStatus = normalizeConsultationStatus(activeConsultation);
   const isWaiting = normalizedStatus === "AGUARDANDO";
+  const isInProgress = normalizedStatus === "EM_ATENDIMENTO";
   const isAgendada = !!activeConsultation.dataAgendamento || activeConsultation.tipoAtendimento === 3;
 
-  // Libera entrada 10 minutos antes do horário agendado, no mesmo dia
-  const agendamentoDate = activeConsultation.dataAgendamento ? new Date(activeConsultation.dataAgendamento) : null;
+  const agendamentoDate = activeConsultation.dataAgendamento
+    ? new Date(activeConsultation.dataAgendamento)
+    : null;
   const now = new Date();
-  const canEnterAgendada = !isAgendada || (
-    agendamentoDate !== null &&
-    now.toDateString() === agendamentoDate.toDateString() &&
-    now >= new Date(agendamentoDate.getTime() - 10 * 60000)
+  const releaseDate = agendamentoDate
+    ? new Date(agendamentoDate.getTime() - 10 * 60000)
+    : null;
+  const canEnterAgendada =
+    !isAgendada ||
+    (agendamentoDate !== null &&
+      now.toDateString() === agendamentoDate.toDateString() &&
+      now >= releaseDate!);
+
+  const especialidade = activeConsultation.especialidadeNome || "Consulta";
+
+  // ── Config da barra de status (usada tanto no chip minimizado quanto no card) ─
+  let barBg: string;
+  let chipLabel: string;
+  let ChipIcon: React.ComponentType<{ className?: string }>;
+  let hasPingDot = false;
+  let hasPulseDot = false;
+
+  if (isInProgress) {
+    barBg = "bg-green-500";
+    chipLabel = "Em andamento";
+    ChipIcon = Video;
+    hasPulseDot = true;
+  } else if (isAgendada && isWaiting && !canEnterAgendada) {
+    barBg = "bg-blue-600";
+    chipLabel = "Consulta agendada";
+    ChipIcon = Calendar;
+  } else {
+    barBg = "bg-gradient-to-r from-amber-500 to-orange-500";
+    chipLabel = isAgendada ? "Horário liberado" : "Aguardando";
+    ChipIcon = Stethoscope;
+    hasPingDot = true;
+  }
+
+  // ── Estado minimizado: pílula compacta ───────────────────────────────────
+  if (isMinimized) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-300">
+        <div className={`flex items-center gap-2.5 px-4 py-2.5 rounded-full shadow-2xl ${barBg} cursor-pointer hover:opacity-90 transition-opacity`}
+          onClick={() => setIsMinimized(false)}
+          role="button"
+          aria-label="Expandir informações da consulta"
+        >
+          {hasPingDot && (
+            <span className="relative flex h-2 w-2 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+            </span>
+          )}
+          {hasPulseDot && <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />}
+          <ChipIcon className="h-3.5 w-3.5 text-white shrink-0" />
+          <span className="text-xs font-semibold text-white uppercase tracking-wide">{chipLabel}</span>
+          <ChevronUp className="h-3.5 w-3.5 text-white/80 ml-1" />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Botões de controle do header (minimizar + fechar) ───────────────────
+  const HeaderControls = () => (
+    <div className="flex items-center gap-1">
+      <button
+        onClick={() => setIsMinimized(true)}
+        className="text-white/70 hover:text-white transition-colors p-0.5"
+        title="Minimizar"
+      >
+        <ChevronDown className="h-3.5 w-3.5" />
+      </button>
+      <button
+        onClick={handleDismiss}
+        className="text-white/70 hover:text-white transition-colors p-0.5"
+        title="Fechar"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
   );
-  const bannerTitle = isAgendada && isWaiting
-    ? "Consulta Agendada"
-    : isWaiting
-    ? "Aguardando Atendimento"
-    : "Consulta em Andamento";
 
-  const BannerIcon = isAgendada && isWaiting ? Calendar : isWaiting ? Clock : Video;
-
-  return (
-    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-5">
-      <Card className="w-80 border-2 border-primary/50 shadow-2xl bg-card">
-        <CardContent className="p-4">
-          <div className="flex items-start gap-3">
-            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0 mt-1">
-              <BannerIcon className={`h-5 w-5 text-primary${isWaiting && !isAgendada ? " animate-pulse" : ""}`} />
+  // ── Estado: em andamento ─────────────────────────────────────────────────
+  if (isInProgress) {
+    return (
+      <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="w-80 rounded-2xl overflow-hidden shadow-2xl border border-green-200 bg-white">
+          <div className="bg-green-500 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span className="text-xs font-semibold text-white uppercase tracking-wide">
+                Consulta em andamento
+              </span>
             </div>
+            <HeaderControls />
+          </div>
 
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <div>
-                  <p className="font-semibold text-sm text-foreground">
-                    {bannerTitle}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {activeConsultation.especialidadeId === 1 ? "Clínico Geral" : activeConsultation.especialidadeNome}
-                  </p>
-                  {isAgendada && agendamentoDate && (
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {agendamentoDate.toLocaleDateString("pt-BR")} às {agendamentoDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-                    </p>
-                  )}
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 -mt-1 -mr-2"
-                  onClick={handleDismiss}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
+          <div className="p-4">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-green-50 border border-green-200 flex items-center justify-center shrink-0">
+                <Video className="h-5 w-5 text-green-600" />
               </div>
-
-              {activeConsultation.profissionalNome && (
-                <p className="text-xs text-muted-foreground mb-2">
-                  {activeConsultation.profissionalNome}
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                {isAgendada && isWaiting && !canEnterAgendada ? (
-                  // Consulta agendada aguardando horário: mostra quando estará disponível
-                  <>
-                    <div className="flex-1 flex items-center gap-1.5 text-xs text-muted-foreground bg-muted/50 rounded-md px-2 py-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0" />
-                      <span>
-                        Disponível{" "}
-                        {agendamentoDate
-                          ? `às ${new Date(agendamentoDate.getTime() - 10 * 60000).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
-                          : "no horário agendado"}
-                      </span>
-                    </div>
-                    <Button
-                      onClick={handleCancel}
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      disabled={isCancelling}
-                    >
-                      {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                      Cancelar
-                    </Button>
-                  </>
-                ) : (
-                  // Consulta imediata ou agendada no horário: botão de entrar normal
-                  <>
-                    <Button
-                      onClick={handleEnter}
-                      size="sm"
-                      className="flex-1 gap-2"
-                    >
-                      {isWaiting && !isAgendada ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Entrar na Fila
-                        </>
-                      ) : (
-                        <>
-                          <Video className="h-4 w-4" />
-                          Entrar na Consulta
-                        </>
-                      )}
-                    </Button>
-                    <Button
-                      onClick={handleCancel}
-                      size="sm"
-                      variant="outline"
-                      className="gap-1"
-                      disabled={isCancelling}
-                    >
-                      {isCancelling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Ban className="h-4 w-4" />}
-                      Cancelar
-                    </Button>
-                  </>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-gray-900 truncate">{especialidade}</p>
+                {activeConsultation.profissionalNome && (
+                  <p className="text-xs text-gray-500 truncate">{activeConsultation.profissionalNome}</p>
                 )}
               </div>
             </div>
+
+            <Button
+              onClick={handleEnter}
+              className="w-full bg-green-500 hover:bg-green-600 text-white gap-2"
+              size="sm"
+            >
+              <Video className="h-4 w-4" />
+              Entrar na Consulta
+              <ChevronRight className="h-4 w-4 ml-auto" />
+            </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: agendada aguardando horário ──────────────────────────────────
+  if (isAgendada && isWaiting && !canEnterAgendada) {
+    const releaseTimeStr = releaseDate
+      ? releaseDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      : null;
+    const scheduledDateStr = agendamentoDate
+      ? agendamentoDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+      : null;
+    const scheduledTimeStr = agendamentoDate
+      ? agendamentoDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      : null;
+
+    return (
+      <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-300">
+        <div className="w-80 rounded-2xl overflow-hidden shadow-2xl border border-blue-200 bg-white">
+          <div className="bg-blue-600 px-4 py-2 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Calendar className="h-3.5 w-3.5 text-white" />
+              <span className="text-xs font-semibold text-white uppercase tracking-wide">
+                Consulta agendada
+              </span>
+            </div>
+            <HeaderControls />
+          </div>
+
+          <div className="p-4">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center shrink-0">
+                <Stethoscope className="h-5 w-5 text-blue-600" />
+              </div>
+              <div className="min-w-0">
+                <p className="font-semibold text-sm text-gray-900 truncate">{especialidade}</p>
+                {activeConsultation.profissionalNome && (
+                  <p className="text-xs text-gray-500 truncate">{activeConsultation.profissionalNome}</p>
+                )}
+              </div>
+            </div>
+
+            {scheduledDateStr && scheduledTimeStr && (
+              <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 mb-3 flex items-center gap-3">
+                <div className="text-center shrink-0">
+                  <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Data</p>
+                  <p className="text-sm font-bold text-blue-800">{scheduledDateStr}</p>
+                </div>
+                <div className="w-px h-8 bg-blue-200" />
+                <div className="text-center shrink-0">
+                  <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Horário</p>
+                  <p className="text-xl font-black text-blue-800">{scheduledTimeStr}</p>
+                </div>
+                {releaseTimeStr && (
+                  <>
+                    <div className="w-px h-8 bg-blue-200" />
+                    <div className="flex-1">
+                      <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Acesso</p>
+                      <p className="text-xs font-semibold text-blue-700">a partir das {releaseTimeStr}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <Button
+              onClick={handleCancel}
+              size="sm"
+              variant="outline"
+              className="w-full gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+              disabled={isCancelling}
+            >
+              {isCancelling
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Ban className="h-4 w-4" />}
+              Cancelar agendamento
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Estado: aguardando atendimento (imediata ou agendada no horário) ─────
+  return (
+    <div className="fixed bottom-6 right-6 z-50 animate-in slide-in-from-bottom-4 duration-300">
+      <div className="w-80 rounded-2xl overflow-hidden shadow-2xl border border-amber-200 bg-white">
+        <div className="bg-gradient-to-r from-amber-500 to-orange-500 px-4 py-2 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
+            </span>
+            <span className="text-xs font-semibold text-white uppercase tracking-wide">
+              {isAgendada ? "Horário liberado" : "Aguardando atendimento"}
+            </span>
+          </div>
+          <HeaderControls />
+        </div>
+
+        <div className="p-4">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative w-10 h-10 shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 flex items-center justify-center">
+                <Stethoscope className="h-5 w-5 text-amber-600" />
+              </div>
+              <span className="absolute -inset-1 rounded-xl border-2 border-amber-300 animate-ping opacity-40" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-sm text-gray-900 truncate">{especialidade}</p>
+              <p className="text-xs text-gray-500">
+                {activeConsultation.profissionalNome
+                  ? activeConsultation.profissionalNome
+                  : isAgendada
+                  ? "Médico confirmado"
+                  : "Buscando médico disponível..."}
+              </p>
+            </div>
+          </div>
+
+          {isAgendada && agendamentoDate && (
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+              <Calendar className="h-3.5 w-3.5 shrink-0" />
+              <span>
+                Agendada para{" "}
+                <strong>
+                  {agendamentoDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                </strong>
+              </span>
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <Button
+              onClick={handleEnter}
+              size="sm"
+              className="flex-1 bg-amber-500 hover:bg-amber-600 text-white gap-2"
+            >
+              {isWaiting && !isAgendada ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Entrar na Fila
+                </>
+              ) : (
+                <>
+                  <Video className="h-4 w-4" />
+                  Entrar na Consulta
+                </>
+              )}
+              <ChevronRight className="h-4 w-4 ml-auto" />
+            </Button>
+            <Button
+              onClick={handleCancel}
+              size="sm"
+              variant="outline"
+              className="border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 px-3"
+              disabled={isCancelling}
+              title="Cancelar consulta"
+            >
+              {isCancelling
+                ? <Loader2 className="h-4 w-4 animate-spin" />
+                : <Ban className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

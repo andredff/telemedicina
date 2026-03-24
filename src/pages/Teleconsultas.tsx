@@ -17,6 +17,13 @@ import {
   Upload,
   Trash2,
   ChevronRight,
+  Heart,
+  Pill,
+  Paperclip,
+  ArrowLeft,
+  CalendarCheck,
+  Calendar,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -144,85 +151,184 @@ function ConsultationHistoryCard({
   receituarioUrl?: string;
 }) {
   const normalizedStatus = normalizeConsultationStatus(consultation);
-  const status = statusConfig[normalizedStatus];
-  const StatusIcon = status.icon;
-  const isActive =
-    normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO";
+  const isAgendada = !!consultation.dataAgendamento;
+  const agendamentoDate = consultation.dataAgendamento ? new Date(consultation.dataAgendamento) : null;
+  const now = new Date();
+  const dataLiberacao = agendamentoDate ? new Date(agendamentoDate.getTime() - 10 * 60000) : null;
+  const isToday = agendamentoDate ? now.toDateString() === agendamentoDate.toDateString() : false;
+  const canEnterAgendada = isAgendada ? (isToday && !!dataLiberacao && now >= dataLiberacao) : true;
+
+  const scheduledDateStr = agendamentoDate
+    ? agendamentoDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+    : null;
+  const scheduledTimeStr = agendamentoDate
+    ? agendamentoDate.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+  const releaseTimeStr = dataLiberacao
+    ? dataLiberacao.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    : null;
+
+  const especialidade = consultation.especialidadeId === 1 ? "Clínico Geral" : consultation.especialidadeNome || "—";
+  const doctorLabel = normalizedStatus === "CANCELADO"
+    ? "Consulta cancelada"
+    : consultation.profissionalNome || (normalizedStatus === "AGUARDANDO" ? "Buscando médico..." : "—");
+
+  // ── Top bar config per state ────────────────────────────────────────────────
+  let barBg: string;
+  let borderColor: string;
+  let iconBg: string;
+  let iconColor: string;
+  let barLabel: string;
+  let BarIcon: React.ComponentType<{ className?: string }>;
+  let hasPingDot = false;
+  let hasPulseDot = false;
+
+  if (normalizedStatus === "EM_ATENDIMENTO") {
+    barBg = "bg-green-500"; borderColor = "border-green-200";
+    iconBg = "bg-green-50 border border-green-200"; iconColor = "text-green-600";
+    barLabel = "Em Atendimento"; BarIcon = Video; hasPulseDot = true;
+  } else if (normalizedStatus === "AGUARDANDO" && isAgendada && !canEnterAgendada) {
+    barBg = "bg-blue-600"; borderColor = "border-blue-200";
+    iconBg = "bg-blue-50 border border-blue-200"; iconColor = "text-blue-600";
+    barLabel = "Consulta Agendada"; BarIcon = Calendar;
+  } else if (normalizedStatus === "AGUARDANDO") {
+    barBg = "bg-gradient-to-r from-amber-500 to-orange-500"; borderColor = "border-amber-200";
+    iconBg = "bg-amber-50 border border-amber-200"; iconColor = "text-amber-600";
+    barLabel = isAgendada ? "Horário Liberado" : "Aguardando Atendimento"; BarIcon = Stethoscope; hasPingDot = true;
+  } else if (normalizedStatus === "CONCLUIDO") {
+    barBg = "bg-emerald-600"; borderColor = "border-emerald-200";
+    iconBg = "bg-emerald-50 border border-emerald-200"; iconColor = "text-emerald-600";
+    barLabel = "Concluída"; BarIcon = CheckCircle;
+  } else {
+    barBg = "bg-slate-400"; borderColor = "border-slate-200";
+    iconBg = "bg-slate-50 border border-slate-200"; iconColor = "text-slate-500";
+    barLabel = "Cancelada"; BarIcon = XCircle;
+  }
+
+  const showJoinButton = (normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO")
+    && (!isAgendada || canEnterAgendada);
 
   return (
-    <Card className="bg-card border-border/50 hover:shadow-card transition-all">
-      <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <Video className="h-5 w-5 text-primary shrink-0" />
-            <CardTitle className="text-base truncate">
-              Consulta #{consultation.id}
-            </CardTitle>
-          </div>
-          <span
-            className={`inline-flex items-center gap-1 text-xs font-medium px-2 py-1 rounded-full border shrink-0 ${status.bgColor}`}
-          >
-            <StatusIcon className="h-3 w-3" />
-            {status.label}
+    <div className={`rounded-2xl overflow-hidden shadow-md border ${borderColor} bg-white hover:shadow-lg transition-shadow`}>
+      {/* ── Top status bar ── */}
+      <div className={`${barBg} px-4 py-2.5 flex items-center gap-2`}>
+        {hasPingDot && (
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-white" />
           </span>
-        </div>
-      </CardHeader>
+        )}
+        {hasPulseDot && <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />}
+        <BarIcon className="h-3.5 w-3.5 text-white shrink-0" />
+        <span className="text-xs font-semibold text-white uppercase tracking-wide flex-1">{barLabel}</span>
+        <span className="text-xs text-white/60 font-mono">#{consultation.id}</span>
+      </div>
 
-      <CardContent className="space-y-3">
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Especialidade</p>
-            <p className="font-medium">{consultation.especialidadeId === 1 ? "Clínico Geral" : consultation.especialidadeNome || "—"}</p>
+      {/* ── Body ── */}
+      <div className="p-4 space-y-3">
+        {/* Specialty + doctor row */}
+        <div className="flex items-center gap-3">
+          <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
+            <Stethoscope className={`h-5 w-5 ${iconColor}`} />
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Profissional</p>
-            <p className="font-medium">
-              {normalizedStatus === "CANCELADO"
-                ? "Consulta cancelada"
-                : consultation.profissionalNome || "Aguardando..."}
-            </p>
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm text-gray-900 truncate">{especialidade}</p>
+            <p className="text-xs text-gray-500 truncate">{doctorLabel}</p>
           </div>
-          <div>
-            <p className="text-muted-foreground text-xs mb-0.5">Data</p>
-            <p className="font-medium">{formatDate(consultation.dataCriacao || consultation.dataHoraCriacao)}</p>
-          </div>
-          {consultation.dataHoraFim && consultation.dataHoraInicio && (
-            <div>
-              <p className="text-muted-foreground text-xs mb-0.5">Duração</p>
-              <p className="font-medium">
-                {calculateDuration(consultation.dataHoraInicio, consultation.dataHoraFim)}
-              </p>
+        </div>
+
+        {/* Scheduled info card — blue (waiting for time) */}
+        {isAgendada && agendamentoDate && normalizedStatus === "AGUARDANDO" && !canEnterAgendada && scheduledDateStr && scheduledTimeStr && (
+          <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 flex items-center gap-3">
+            <div className="text-center shrink-0">
+              <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Data</p>
+              <p className="text-sm font-bold text-blue-800">{scheduledDateStr}</p>
             </div>
-          )}
-        </div>
+            <div className="w-px h-8 bg-blue-200" />
+            <div className="text-center shrink-0">
+              <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Horário</p>
+              <p className="text-xl font-black text-blue-800">{scheduledTimeStr}</p>
+            </div>
+            {releaseTimeStr && (
+              <>
+                <div className="w-px h-8 bg-blue-200" />
+                <div className="flex-1">
+                  <p className="text-[10px] text-blue-500 uppercase font-medium leading-none mb-0.5">Acesso</p>
+                  <p className="text-xs font-semibold text-blue-700">a partir das {releaseTimeStr}</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
 
-        <div className="flex flex-wrap gap-2 pt-2 border-t border-border/50">
-          {isActive && (
-            <Button size="sm" onClick={() => onJoin(consultation)} className="gap-2">
-              {normalizedStatus === "AGUARDANDO" ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Entrar na sala
-                </>
-              ) : (
-                <>
-                  <Video className="h-4 w-4" />
-                  Entrar na Consulta
-                </>
-              )}
-            </Button>
-          )}
-          {(normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO") && (
+        {/* Scheduled released — amber info pill */}
+        {isAgendada && agendamentoDate && normalizedStatus === "AGUARDANDO" && canEnterAgendada && scheduledTimeStr && (
+          <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
+            <Calendar className="h-3.5 w-3.5 shrink-0" />
+            <span>Agendada para <strong>{scheduledTimeStr}</strong></span>
+          </div>
+        )}
+
+        {/* Date / duration row for non-scheduled or concluded */}
+        {(!isAgendada || normalizedStatus !== "AGUARDANDO") && (
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <Clock className="h-3.5 w-3.5 shrink-0" />
+            <span>{isAgendada && agendamentoDate
+              ? format(agendamentoDate, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+              : formatDate(consultation.dataCriacao || consultation.dataHoraCriacao)
+            }</span>
+            {consultation.dataHoraFim && consultation.dataHoraInicio && (
+              <span className="ml-auto font-medium text-gray-600">
+                {calculateDuration(consultation.dataHoraInicio, consultation.dataHoraFim)}
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── Actions ── */}
+        <div className="flex gap-2 pt-1">
+          {/* Enter / join */}
+          {showJoinButton && (
             <Button
               size="sm"
-              variant="outline"
-              className="gap-2 text-destructive hover:text-destructive"
-              onClick={() => onCancel(consultation.id)}
+              onClick={() => onJoin(consultation)}
+              className={`flex-1 gap-2 ${normalizedStatus === "EM_ATENDIMENTO" ? "bg-green-500 hover:bg-green-600 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"}`}
             >
-              <XCircle className="h-4 w-4" />
-              Cancelar consulta
+              {normalizedStatus === "AGUARDANDO" && !isAgendada ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />Entrar na Fila</>
+              ) : (
+                <><Video className="h-4 w-4" />Entrar na Consulta</>
+              )}
+              <ChevronRight className="h-4 w-4 ml-auto" />
             </Button>
           )}
+
+          {/* Cancel (ghost icon for active, full for scheduled waiting) */}
+          {(normalizedStatus === "AGUARDANDO" || normalizedStatus === "EM_ATENDIMENTO") && (
+            isAgendada && !canEnterAgendada ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full gap-2 border-red-200 text-red-600 hover:bg-red-50 hover:border-red-300"
+                onClick={() => onCancel(consultation.id)}
+              >
+                <Ban className="h-4 w-4" />
+                Cancelar agendamento
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-gray-200 text-gray-500 hover:text-red-600 hover:border-red-200 hover:bg-red-50 px-3"
+                onClick={() => onCancel(consultation.id)}
+                title="Cancelar consulta"
+              >
+                <Ban className="h-4 w-4" />
+              </Button>
+            )
+          )}
+
+          {/* View prescription */}
           {normalizedStatus === "CONCLUIDO" && receituarioUrl && (
             <Button
               size="sm"
@@ -234,6 +340,8 @@ function ConsultationHistoryCard({
               Ver Receita
             </Button>
           )}
+
+          {/* Evaluate */}
           {normalizedStatus === "CONCLUIDO" && (
             <Button
               size="sm"
@@ -247,19 +355,21 @@ function ConsultationHistoryCard({
             </Button>
           )}
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }
 
 // ─── Consulta Wizard Modal ────────────────────────────────────────────────────
 
+// ─── Immediate Consultation Wizard ───────────────────────────────────────────
+
 const SINTOMAS_OPTIONS = [
-  { id: 1, label: "Dor no corpo" },
-  { id: 2, label: "Dores articulares" },
-  { id: 3, label: "Dor lombar" },
-  { id: 4, label: "Náuseas" },
-  { id: 5, label: "Dor de garganta" },
+  { id: 1, label: "Dor no corpo",      icon: "🤕" },
+  { id: 2, label: "Dores articulares", icon: "🦴" },
+  { id: 3, label: "Dor lombar",        icon: "🔙" },
+  { id: 4, label: "Náuseas",           icon: "🤢" },
+  { id: 5, label: "Dor de garganta",   icon: "😮" },
 ];
 
 async function fileToBase64(file: File): Promise<string> {
@@ -271,13 +381,53 @@ async function fileToBase64(file: File): Promise<string> {
   });
 }
 
-type WizardStep = "sintomas" | "sintomaForte" | "exames";
+type WizardStep = "saude" | "exames" | "confirmar";
 
 interface WizardData {
   sintomasSelecionados: number[];
   sintomaForteId: number | null;
   medicamentos: string;
   exames: { name: string; base64: string }[];
+}
+
+const WIZARD_STEPS_CONFIG: { key: WizardStep; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "saude",    label: "Saúde",   icon: Heart },
+  { key: "exames",   label: "Exames",  icon: FileText },
+  { key: "confirmar",label: "Iniciar", icon: CalendarCheck },
+];
+
+function WizardStepperImediata({ currentStep }: { currentStep: WizardStep }) {
+  const idx = WIZARD_STEPS_CONFIG.findIndex((s) => s.key === currentStep);
+  return (
+    <div className="flex items-center gap-0 px-6 pt-5 pb-4 border-b border-border/50">
+      {WIZARD_STEPS_CONFIG.map((s, i) => {
+        const Icon = s.icon;
+        const done = i < idx;
+        const active = i === idx;
+        return (
+          <div key={s.key} className="flex items-center flex-1 min-w-0">
+            <div className="flex flex-col items-center flex-1 gap-1">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center transition-all duration-200 border-2 ${
+                done   ? "bg-primary border-primary text-primary-foreground shadow-sm"
+                : active ? "border-primary bg-primary/10 text-primary shadow-sm"
+                : "border-border text-muted-foreground/50"
+              }`}>
+                {done ? <CheckCircle className="h-4 w-4" /> : <Icon className="h-3.5 w-3.5" />}
+              </div>
+              <span className={`text-[9px] font-medium leading-tight text-center truncate w-full ${
+                active ? "text-primary" : done ? "text-primary/70" : "text-muted-foreground/50"
+              }`}>{s.label}</span>
+            </div>
+            {i < WIZARD_STEPS_CONFIG.length - 1 && (
+              <div className={`h-0.5 w-full mx-1 mb-4 transition-all duration-300 rounded-full ${
+                i < idx ? "bg-primary" : "bg-border"
+              }`} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function ConsultaWizardModal({
@@ -287,7 +437,7 @@ function ConsultaWizardModal({
   onClose: () => void;
   onSubmit: (respostasAnamnese: AnamneseResposta[], exames: { arquivoBase64: string }[]) => void;
 }) {
-  const [step, setStep] = useState<WizardStep>("sintomas");
+  const [step, setStep] = useState<WizardStep>("saude");
   const [data, setData] = useState<WizardData>({
     sintomasSelecionados: [],
     sintomaForteId: null,
@@ -297,14 +447,6 @@ function ConsultaWizardModal({
   const [isAddingFile, setIsAddingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const stepIndex = step === "sintomas" ? 0 : step === "sintomaForte" ? 1 : 2;
-  const steps = [
-    { label: "Anamnese 1/2", key: "sintomas" },
-    { label: "Anamnese 2/2", key: "sintomaForte" },
-    { label: "Anexar Exame", key: "exames" },
-  ];
-
-  // Sintomas marcados no passo 1 (para exibir no passo 2)
   const sintomasMarcados = SINTOMAS_OPTIONS.filter((s) =>
     data.sintomasSelecionados.includes(s.id)
   );
@@ -315,7 +457,6 @@ function ConsultaWizardModal({
       sintomasSelecionados: prev.sintomasSelecionados.includes(id)
         ? prev.sintomasSelecionados.filter((s) => s !== id)
         : [...prev.sintomasSelecionados, id],
-      // Limpa o sintoma forte se ele foi desmarcado
       sintomaForteId:
         prev.sintomaForteId === id && prev.sintomasSelecionados.includes(id)
           ? null
@@ -342,13 +483,11 @@ function ConsultaWizardModal({
   const handleSubmit = () => {
     const sintomaForteLabel =
       SINTOMAS_OPTIONS.find((s) => s.id === data.sintomaForteId)?.label || "";
-
-    const sintomaTexto =
-      data.sintomaForteId
-        ? `Sintomas mais fortes: ${sintomaForteLabel}.`
-        : data.sintomasSelecionados.length > 0
-        ? `Sintomas: ${sintomasMarcados.map((s) => s.label).join(", ")}.`
-        : "Nenhum sintoma selecionado.";
+    const sintomaTexto = data.sintomaForteId
+      ? `Sintomas mais fortes: ${sintomaForteLabel}.`
+      : data.sintomasSelecionados.length > 0
+      ? `Sintomas: ${sintomasMarcados.map((s) => s.label).join(", ")}.`
+      : "Nenhum sintoma selecionado.";
 
     const respostasAnamnese: AnamneseResposta[] = [
       {
@@ -368,166 +507,152 @@ function ConsultaWizardModal({
     onSubmit(respostasAnamnese, data.exames.map((e) => ({ arquivoBase64: e.base64 })));
   };
 
+  const canAdvanceFromSaude =
+    sintomasMarcados.length === 0 || !!data.sintomaForteId;
+
   return (
     <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-      <DialogContent className="sm:max-w-lg">
-        {/* Step indicator */}
-        <div className="flex items-center gap-0 mb-2">
-          {steps.map((s, i) => (
-            <div key={s.key} className="flex items-center flex-1">
-              <div className="flex flex-col items-center flex-1">
-                <div
-                  className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-colors ${
-                    i < stepIndex
-                      ? "bg-primary border-primary text-primary-foreground"
-                      : i === stepIndex
-                      ? "border-primary text-primary bg-primary/10"
-                      : "border-muted-foreground/30 text-muted-foreground"
-                  }`}
-                >
-                  {i < stepIndex ? <CheckCircle className="h-4 w-4" /> : i + 1}
-                </div>
-                <span className={`text-[10px] mt-0.5 text-center leading-tight ${i === stepIndex ? "text-primary font-medium" : "text-muted-foreground"}`}>
-                  {s.label}
-                </span>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col p-0 gap-0 overflow-hidden">
+
+        {/* Stepper */}
+        <WizardStepperImediata currentStep={step} />
+
+        {/* Scrollable body */}
+        <div className="flex-1 overflow-y-auto">
+
+          {/* ══════════════════════════════════════════════════ */}
+          {/* STEP 1 — Saúde                                    */}
+          {/* ══════════════════════════════════════════════════ */}
+          {step === "saude" && (
+            <div className="p-6">
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-foreground">Como você está se sentindo?</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Essas informações ajudam o médico a se preparar para o seu atendimento
+                </p>
               </div>
-              {i < steps.length - 1 && (
-                <div className={`h-0.5 flex-1 mx-1 mb-4 transition-colors ${i < stepIndex ? "bg-primary" : "bg-muted-foreground/20"}`} />
-              )}
-            </div>
-          ))}
-        </div>
 
-        {/* Step: Sintomas */}
-        {step === "sintomas" && (
-          <>
-            <DialogHeader>
-              <DialogTitle>Marque os sintomas que você tem sentido</DialogTitle>
-            </DialogHeader>
-            <div className="divide-y divide-border rounded-lg border overflow-hidden mt-2">
-              {SINTOMAS_OPTIONS.map((s) => {
-                const checked = data.sintomasSelecionados.includes(s.id);
-                return (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => toggleSintoma(s.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${checked ? "bg-primary/5" : ""}`}
-                  >
-                    <div className={`w-5 h-5 rounded border-2 flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-primary border-primary" : "border-muted-foreground/40"}`}>
-                      {checked && <CheckCircle className="h-3 w-3 text-primary-foreground" />}
-                    </div>
-                    <span className="text-sm">{s.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-            <DialogFooter className="mt-4">
-              <Button onClick={() => setStep("sintomaForte")} className="gap-2">
-                Avançar <ChevronRight className="h-4 w-4" />
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-
-        {/* Step: Sintoma mais forte + Medicamentos */}
-        {step === "sintomaForte" && (
-          <>
-            <DialogHeader>
-              <DialogTitle>Onde você sente a dor mais forte?</DialogTitle>
-              {sintomasMarcados.length > 0 ? (
-                <DialogDescription>
-                  Selecione o sintoma mais intenso entre os que você marcou.
-                </DialogDescription>
-              ) : (
-                <DialogDescription>
-                  Você não marcou nenhum sintoma no passo anterior.
-                </DialogDescription>
-              )}
-            </DialogHeader>
-
-            <div className="space-y-4 mt-2">
-              {/* Radio: sintoma mais forte (apenas os marcados no passo 1) */}
-              {sintomasMarcados.length > 0 ? (
-                <div className="divide-y divide-border rounded-lg border overflow-hidden">
-                  {sintomasMarcados.map((s) => {
-                    const selected = data.sintomaForteId === s.id;
+              {/* Sintomas — grid de pills */}
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Heart className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Quais sintomas você tem sentido?</p>
+                  <span className="ml-auto text-[10px] font-medium text-muted-foreground border border-border rounded-full px-2 py-0.5">Opcional</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {SINTOMAS_OPTIONS.map((s) => {
+                    const checked = data.sintomasSelecionados.includes(s.id);
                     return (
                       <button
                         key={s.id}
                         type="button"
-                        onClick={() =>
-                          setData((prev) => ({ ...prev, sintomaForteId: s.id }))
-                        }
-                        className={`w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${selected ? "bg-primary/5" : ""}`}
+                        onClick={() => toggleSintoma(s.id)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all duration-150 ${
+                          checked
+                            ? "border-primary bg-primary/10 text-primary font-medium"
+                            : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"
+                        }`}
                       >
-                        {/* Radio circle */}
-                        <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${selected ? "border-primary" : "border-muted-foreground/40"}`}>
-                          {selected && (
-                            <div className="w-2.5 h-2.5 rounded-full bg-primary" />
-                          )}
+                        <span className="text-base">{s.icon}</span>
+                        <span className="flex-1 text-xs">{s.label}</span>
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                          checked ? "border-primary bg-primary" : "border-muted-foreground/30"
+                        }`}>
+                          {checked && <CheckCircle className="h-2.5 w-2.5 text-white" />}
                         </div>
-                        <span className="text-sm">{s.label}</span>
                       </button>
                     );
                   })}
                 </div>
-              ) : (
-                <p className="text-sm text-muted-foreground italic">
-                  Nenhum sintoma foi selecionado anteriormente.
-                </p>
+              </div>
+
+              {/* Sintoma forte — só aparece se marcou algum */}
+              {sintomasMarcados.length > 0 && (
+                <div className="mb-5 p-4 bg-amber-50 border border-amber-200 rounded-xl">
+                  <p className="text-sm font-semibold text-amber-800 mb-3">
+                    Qual é o sintoma mais intenso?
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {sintomasMarcados.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setData((prev) => ({
+                          ...prev,
+                          sintomaForteId: s.id === prev.sintomaForteId ? null : s.id,
+                        }))}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition-all ${
+                          data.sintomaForteId === s.id
+                            ? "bg-amber-500 border-amber-500 text-white"
+                            : "bg-white border-amber-300 text-amber-800 hover:bg-amber-100"
+                        }`}
+                      >
+                        <span>{s.icon}</span>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* Medicamentos */}
-              <div className="space-y-1.5 pt-1">
-                <p className="text-sm font-medium text-foreground">
-                  Você toma algum medicamento?{" "}
-                  <span className="font-normal text-muted-foreground">(opcional)</span>
-                </p>
+              <div className="mb-5">
+                <div className="flex items-center gap-2 mb-2">
+                  <Pill className="h-4 w-4 text-primary" />
+                  <p className="text-sm font-semibold text-foreground">Medicamentos em uso</p>
+                  <span className="ml-auto text-[10px] font-medium text-muted-foreground border border-border rounded-full px-2 py-0.5">Opcional</span>
+                </div>
                 <Textarea
-                  placeholder="Ex: Dipirona, Losartana..."
+                  placeholder="Ex: Dipirona 500mg, Losartana 50mg..."
                   value={data.medicamentos}
-                  onChange={(e) =>
-                    setData((prev) => ({ ...prev, medicamentos: e.target.value }))
-                  }
-                  rows={3}
+                  onChange={(e) => setData((prev) => ({ ...prev, medicamentos: e.target.value }))}
+                  rows={2}
+                  className="text-sm resize-none"
                 />
               </div>
+
+              <div className="flex justify-end pt-2 border-t border-border/50">
+                <Button
+                  onClick={() => setStep("exames")}
+                  disabled={!canAdvanceFromSaude}
+                  className="gap-2"
+                >
+                  Próximo: Exames
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
+          )}
 
-            <DialogFooter className="gap-2 mt-4">
-              <Button variant="outline" onClick={() => setStep("sintomas")}>
-                Voltar
-              </Button>
-              <Button
-                onClick={() => setStep("exames")}
-                disabled={sintomasMarcados.length > 0 && !data.sintomaForteId}
-                className="gap-2"
-              >
-                Avançar <ChevronRight className="h-4 w-4" />
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+          {/* ══════════════════════════════════════════════════ */}
+          {/* STEP 2 — Exames                                   */}
+          {/* ══════════════════════════════════════════════════ */}
+          {step === "exames" && (
+            <div className="p-6">
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-foreground">Anexar exames</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Compartilhe resultados de exames para agilizar o atendimento (opcional)
+                </p>
+              </div>
 
-        {/* Step: Exames */}
-        {step === "exames" && (
-          <>
-            <DialogHeader>
-              <DialogTitle>Gostaria de fornecer algum exame?</DialogTitle>
-              <DialogDescription>Anexe imagens ou PDFs (opcional).</DialogDescription>
-            </DialogHeader>
-            <div className="mt-2 space-y-3">
               {/* Drop zone */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="w-full border-2 border-dashed border-muted-foreground/30 rounded-lg p-6 flex flex-col items-center gap-2 hover:border-primary/50 hover:bg-muted/30 transition-colors"
+                className="w-full border-2 border-dashed border-muted-foreground/25 rounded-xl p-8 flex flex-col items-center gap-3 hover:border-primary/40 hover:bg-primary/5 transition-colors mb-4"
               >
-                <Upload className="h-8 w-8 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground text-center">
-                  {isAddingFile ? "Carregando..." : "Clique aqui ou arraste o arquivo para esta área"}
-                </p>
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-muted-foreground/70" />
+                </div>
+                <div className="text-center">
+                  <p className="text-sm font-medium text-foreground">
+                    {isAddingFile ? "Carregando arquivos..." : "Clique ou arraste os arquivos aqui"}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Imagens e PDFs aceitos · Múltiplos arquivos
+                  </p>
+                </div>
               </button>
               <input
                 ref={fileInputRef}
@@ -540,37 +665,145 @@ function ConsultaWizardModal({
 
               {/* File list */}
               {data.exames.length > 0 && (
-                <div className="space-y-2">
+                <div className="space-y-2 mb-4">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {data.exames.length} arquivo{data.exames.length > 1 ? "s" : ""} selecionado{data.exames.length > 1 ? "s" : ""}
+                  </p>
                   {data.exames.map((exame, i) => (
                     <div
                       key={i}
-                      className="flex items-center gap-2 p-2 rounded-lg border border-border bg-muted/20"
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-border bg-muted/40"
                     >
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <Paperclip className="h-4 w-4 text-primary shrink-0" />
                       <span className="text-sm flex-1 truncate">{exame.name}</span>
                       <button
                         type="button"
                         onClick={() => removeExame(i)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1"
                       >
-                        <Trash2 className="h-4 w-4" />
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ))}
                 </div>
               )}
+
+              <div className="flex gap-3 pt-2 border-t border-border/50">
+                <Button variant="outline" onClick={() => setStep("saude")} className="flex-none">
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Voltar
+                </Button>
+                <Button onClick={() => setStep("confirmar")} className="flex-1 gap-2">
+                  {data.exames.length > 0
+                    ? `Avançar com ${data.exames.length} arquivo${data.exames.length > 1 ? "s" : ""}`
+                    : "Avançar sem exames"}
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-            <DialogFooter className="gap-2 mt-4">
-              <Button variant="outline" onClick={() => setStep("medicamentos")}>
-                Voltar
-              </Button>
-              <Button onClick={handleSubmit} className="gap-2">
-                <Stethoscope className="h-4 w-4" />
-                Iniciar Consulta
-              </Button>
-            </DialogFooter>
-          </>
-        )}
+          )}
+
+          {/* ══════════════════════════════════════════════════ */}
+          {/* STEP 3 — Confirmar e iniciar                      */}
+          {/* ══════════════════════════════════════════════════ */}
+          {step === "confirmar" && (
+            <div className="p-6">
+              <div className="mb-5">
+                <h2 className="text-xl font-bold text-foreground">Tudo pronto!</h2>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Revise as informações e inicie sua consulta
+                </p>
+              </div>
+
+              {/* Card de resumo */}
+              <div className="rounded-2xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden mb-5">
+                {/* Header */}
+                <div className="bg-primary/10 px-5 py-4 border-b border-primary/20">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
+                      <Video className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-foreground">Consulta Imediata</p>
+                      <p className="text-xs text-muted-foreground">Clínico Geral · Telemedicina Novità</p>
+                    </div>
+                    <span className="ml-auto inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full border border-green-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      Agora
+                    </span>
+                  </div>
+                </div>
+
+                {/* Detalhes */}
+                <div className="p-5 space-y-4">
+                  {sintomasMarcados.length > 0 ? (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Sintomas informados</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {sintomasMarcados.map((s) => (
+                          <span key={s.id} className="text-xs bg-muted px-2 py-1 rounded-full flex items-center gap-1">
+                            <span>{s.icon}</span>
+                            {s.label}
+                            {data.sintomaForteId === s.id && (
+                              <span className="text-amber-600 font-medium">(principal)</span>
+                            )}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Sintomas</p>
+                      <p className="text-sm text-muted-foreground italic">Nenhum sintoma informado</p>
+                    </div>
+                  )}
+
+                  {data.medicamentos.trim() && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Medicamentos em uso</p>
+                      <p className="text-sm text-foreground">{data.medicamentos}</p>
+                    </div>
+                  )}
+
+                  {data.exames.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Exames anexados</p>
+                      <p className="text-sm text-foreground flex items-center gap-1.5">
+                        <Paperclip className="h-3.5 w-3.5 text-primary" />
+                        {data.exames.length} arquivo{data.exames.length > 1 ? "s" : ""}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Info box */}
+              <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-5">
+                <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
+                <p className="text-xs text-blue-800">
+                  Você será conectado a um <strong>médico clínico geral disponível agora</strong>.
+                  Certifique-se de ter câmera e microfone funcionando antes de iniciar.
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setStep("exames")} className="flex-none">
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Voltar
+                </Button>
+                <Button
+                  onClick={handleSubmit}
+                  className="flex-1 gap-2 gradient-hero text-primary-foreground"
+                  size="lg"
+                >
+                  <Video className="h-4 w-4" />
+                  Iniciar Consulta Agora
+                </Button>
+              </div>
+            </div>
+          )}
+
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -930,6 +1163,7 @@ const Teleconsultas = () => {
   const [evaluatedIds, setEvaluatedIds] = useState<Set<number>>(new Set());
   const [cancelConfirmId, setCancelConfirmId] = useState<number | null>(null);
   const [isCancellingConsultation, setIsCancellingConsultation] = useState(false);
+  const [consultaFilter, setConsultaFilter] = useState<"todos" | "AGUARDANDO" | "EM_ATENDIMENTO" | "CONCLUIDO" | "CANCELADO">("todos");
 
   // Mapa de consultationId → URL do receituário (PDF)
   const [receituarioMap, setReceituarioMap] = useState<Record<number, string>>({});
@@ -2207,13 +2441,63 @@ const Teleconsultas = () => {
                 disabled={isLoadingConsultations}
                 className="gap-2 text-muted-foreground"
               >
-                <RefreshCw
-                  className={`h-4 w-4 ${isLoadingConsultations ? "animate-spin" : ""}`}
-                />
+                <RefreshCw className={`h-4 w-4 ${isLoadingConsultations ? "animate-spin" : ""}`} />
                 Atualizar
               </Button>
             )}
           </div>
+
+          {/* ── Filtros de status ── */}
+          {!isLoadingConsultations && consultations.filter(c => c.especialidadeId === 1).length > 0 && (() => {
+            const base = consultations.filter(c => c.especialidadeId === 1);
+            const counts: Record<string, number> = { todos: base.length };
+            base.forEach(c => {
+              const s = normalizeConsultationStatus(c);
+              counts[s] = (counts[s] || 0) + 1;
+            });
+            const tabs: { key: typeof consultaFilter; label: string; activeBg: string; Icon?: React.ComponentType<{ className?: string }>; ping?: boolean; pulse?: boolean }[] = [
+              { key: "todos",          label: "Todos",           activeBg: "bg-gray-800" },
+              { key: "AGUARDANDO",     label: "Aguardando",      activeBg: "bg-gradient-to-r from-amber-500 to-orange-500", Icon: Stethoscope, ping: true },
+              { key: "EM_ATENDIMENTO", label: "Em Atendimento",  activeBg: "bg-green-500", Icon: Video, pulse: true },
+              { key: "CONCLUIDO",      label: "Concluídas",      activeBg: "bg-emerald-600", Icon: CheckCircle },
+              { key: "CANCELADO",      label: "Canceladas",      activeBg: "bg-slate-400", Icon: XCircle },
+            ];
+            return (
+              <div className="flex items-center gap-2 flex-wrap mb-5">
+                {tabs.map(tab => {
+                  const count = counts[tab.key] || 0;
+                  if (tab.key !== "todos" && count === 0) return null;
+                  const isActive = consultaFilter === tab.key;
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setConsultaFilter(tab.key)}
+                      className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all ${
+                        isActive
+                          ? `${tab.activeBg} text-white shadow-md scale-105`
+                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      {tab.ping && isActive && (
+                        <span className="relative flex h-1.5 w-1.5 shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-white" />
+                        </span>
+                      )}
+                      {tab.pulse && isActive && (
+                        <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shrink-0" />
+                      )}
+                      {tab.Icon && !isActive && <tab.Icon className="h-3 w-3 text-gray-500" />}
+                      {tab.label}
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isActive ? "bg-white/25 text-white" : "bg-gray-200 text-gray-500"}`}>
+                        {count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {/* Loading consultations */}
           {isLoadingConsultations && (
@@ -2224,44 +2508,52 @@ const Teleconsultas = () => {
             </div>
           )}
 
-          {/* Consultations list — apenas Clínico Geral (especialidadeId === 1) */}
-          {!isLoadingConsultations && accessToken && consultations.length > 0 && (
-            <div className="grid gap-4 md:grid-cols-2">
-              {consultations.filter((c) => c.especialidadeId === 1).map((consultation) => (
-                <ConsultationHistoryCard
-                  key={consultation.id}
-                  consultation={consultation}
-                  onJoin={handleJoinConsultation}
-                  onCancel={handleRequestCancel}
-                  onEvaluate={setEvaluatingConsultation}
-                  hasBeenEvaluated={evaluatedIds.has(consultation.id)}
-                  receituarioUrl={receituarioMap[consultation.id]}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Empty state after loading */}
-          {!isLoadingConsultations &&
-            accessToken &&
-            consultations.filter((c) => c.especialidadeId === 1).length === 0 && (
-              <Card className="bg-card border-border/50">
-                <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
-                  <Video className="h-10 w-10 text-muted-foreground" />
-                  <p className="text-muted-foreground text-center">
-                    Você ainda não possui consultas registradas.
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={handleStartNewConsultation}
-                    className="gap-2 mt-1"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Iniciar primeira consulta
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
+          {/* Consultations list */}
+          {!isLoadingConsultations && accessToken && (() => {
+            const base = consultations.filter(c => c.especialidadeId === 1);
+            const filtered = consultaFilter === "todos"
+              ? base
+              : base.filter(c => normalizeConsultationStatus(c) === consultaFilter);
+            if (filtered.length === 0 && base.length > 0) {
+              return (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 rounded-2xl border border-dashed border-gray-200 bg-gray-50">
+                  <p className="text-sm text-muted-foreground">Nenhuma consulta nessa categoria.</p>
+                  <button onClick={() => setConsultaFilter("todos")} className="text-xs text-primary underline underline-offset-2">
+                    Ver todas
+                  </button>
+                </div>
+              );
+            }
+            if (filtered.length === 0) {
+              return (
+                <Card className="bg-card border-border/50">
+                  <CardContent className="flex flex-col items-center justify-center py-12 gap-3">
+                    <Video className="h-10 w-10 text-muted-foreground" />
+                    <p className="text-muted-foreground text-center">Você ainda não possui consultas registradas.</p>
+                    <Button variant="outline" onClick={handleStartNewConsultation} className="gap-2 mt-1">
+                      <Plus className="h-4 w-4" />
+                      Iniciar primeira consulta
+                    </Button>
+                  </CardContent>
+                </Card>
+              );
+            }
+            return (
+              <div className="grid gap-4 md:grid-cols-2">
+                {filtered.map(consultation => (
+                  <ConsultationHistoryCard
+                    key={consultation.id}
+                    consultation={consultation}
+                    onJoin={handleJoinConsultation}
+                    onCancel={handleRequestCancel}
+                    onEvaluate={setEvaluatingConsultation}
+                    hasBeenEvaluated={evaluatedIds.has(consultation.id)}
+                    receituarioUrl={receituarioMap[consultation.id]}
+                  />
+                ))}
+              </div>
+            );
+          })()}
         </div>
       </main>
 
