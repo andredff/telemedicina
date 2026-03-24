@@ -390,7 +390,7 @@ const Dashboard = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+      <main className="page-container">
 
         {/* ── Greeting ─────────────────────────────────────────────────── */}
         <div className="flex items-start justify-between">
@@ -465,9 +465,7 @@ const Dashboard = () => {
 
         {/* ── Quick Actions ─────────────────────────────────────────────── */}
         <div>
-          <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-            Acesso rápido
-          </h2>
+          <p className="section-title">Acesso rápido</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {quickActions.map(({ label, sublabel, icon: Icon, color, bg, route }) => (
               <Card
@@ -493,7 +491,7 @@ const Dashboard = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-lg font-heading font-semibold text-foreground">
+              <h2 className="text-base font-heading font-bold text-foreground leading-tight">
                 Meus Receituários
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">Últimas prescrições das suas consultas</p>

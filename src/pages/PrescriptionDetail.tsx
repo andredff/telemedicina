@@ -75,7 +75,7 @@ const PrescriptionDetail = () => {
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
         <div className="container mx-auto px-4 py-8">
-          <BackLink to="/prescriptions" label="Voltar aos Receituários" />
+          <BackLink to="/prescriptions" label="Receituários" />
           <div className="text-center">
             <p className="text-muted-foreground">
               {prescriptionError ? `Erro: ${prescriptionError}` :
@@ -230,7 +230,7 @@ const PrescriptionDetail = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="page-container">
         <BackLink />
 
         {step === 'select' && (

@@ -86,7 +86,7 @@
     --input: 0 0% 90%;
     --ring: 44 100% 46%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
     /* Custom Novità Colors - Briefing */
     --novita-primary: 44 100% 46%;        /* #EDAF00 */
@@ -151,26 +151,35 @@
     font-family: 'Poppins', var(--e-global-typography-secondary-font-family, sans-serif);
     font-size: 14px;
     font-weight: 400;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   h1, h2, h3, h4, h5, h6 {
     font-family: 'Roboto', var(--e-global-typography-primary-font-family, sans-serif);
     font-weight: 800;
+    line-height: 1.2;
+    letter-spacing: -0.01em;
   }
 
   h1 {
-    font-size: 35px;
+    font-size: clamp(26px, 4vw, 35px);
     font-weight: 800;
   }
 
   h2 {
-    font-size: 26px;
+    font-size: clamp(20px, 3vw, 26px);
     font-weight: 800;
   }
 
   h3 {
     font-size: 18px;
     font-weight: 700;
+  }
+
+  p {
+    line-height: 1.65;
   }
 
   a {
@@ -186,28 +195,62 @@
   .gradient-hero {
     background: var(--gradient-hero, linear-gradient(135deg, #EDAF00, #CC9B00));
   }
-  
+
   .gradient-text {
     background: var(--gradient-accent, linear-gradient(135deg, #EDAF00, #CAB772));
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  
+
   .glass-card {
     @apply bg-card/80 backdrop-blur-xl border border-border/50;
   }
-  
+
   .animate-float {
     animation: float 6s ease-in-out infinite;
   }
-  
+
   .animate-pulse-soft {
     animation: pulse-soft 3s ease-in-out infinite;
   }
 
   .animate-fade-in {
     animation: fade-in 0.3s ease-out forwards;
+  }
+
+  /* ── Page layout utilities ─────────────────────────────────────── */
+  .page-container {
+    @apply max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-8;
+  }
+
+  .section-title {
+    @apply text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4;
+  }
+
+  .section-divider {
+    @apply border-t border-border/60 my-8;
+  }
+
+  /* ── Card variants ─────────────────────────────────────────────── */
+  .card-interactive {
+    @apply bg-card border border-border/50 rounded-xl
+           hover:shadow-card hover:border-primary/20
+           transition-all duration-200 cursor-pointer;
+  }
+
+  /* ── Input focus ring ──────────────────────────────────────────── */
+  .input-ring {
+    @apply focus-visible:ring-2 focus-visible:ring-primary/30 focus-visible:ring-offset-0;
+  }
+
+  /* hide scrollbar */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
   }
 }
 

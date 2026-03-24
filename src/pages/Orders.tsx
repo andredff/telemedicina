@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
@@ -170,19 +170,16 @@ const Orders = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header isAuthenticated onLogout={handleLogout} title="Meus Pedidos" />
-      
-      <main className="container mx-auto px-4 py-8">
-        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
-        {/* Header Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-            Meus Pedidos
-          </h1>
-          <p className="text-muted-foreground">
-            Acompanhe o status de todos os seus pedidos
-          </p>
-        </div>
+      <Header isAuthenticated onLogout={handleLogout} />
+
+      <main className="page-container">
+        <PageHeader
+          title="Meus Pedidos"
+          subtitle="Acompanhe o status de todos os seus pedidos"
+          icon={Package}
+          iconColor="text-orange-500"
+          iconBg="bg-orange-500/10"
+        />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">

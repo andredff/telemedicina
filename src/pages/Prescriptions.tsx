@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import Header from "@/components/Header";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator";
 import {
   Search, FileText, Loader2, Download, ExternalLink,
   Pill, ShoppingCart, Star, Package, AlertTriangle, CheckCircle2, Upload, Wand2,
+  Stethoscope,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
@@ -283,19 +284,14 @@ const Prescriptions = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header isAuthenticated title="Receituários" />
+      <Header isAuthenticated />
 
-      <main className="container mx-auto px-4 py-8">
-        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
-        {/* Header Section */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-2">
-            Meus Receituários
-          </h1>
-          <p className="text-muted-foreground">
-            Visualize e baixe os receituários das suas teleconsultas
-          </p>
-        </div>
+      <main className="page-container">
+        <PageHeader
+          title="Meus Receituários"
+          subtitle="Visualize e baixe os receituários das suas teleconsultas"
+          icon={Stethoscope}
+        />
 
         {/* Search Bar */}
         {assemedReceituarios.length > 0 && (

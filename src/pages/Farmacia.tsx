@@ -265,7 +265,7 @@ const Farmacia = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} title="Farmácia" />
 
-      <main className="container mx-auto px-4 py-8 pb-28">
+      <main className="page-container pb-28 !pt-6 !space-y-0">
         {/* Back + cart counter row */}
         <div className="flex items-center justify-between mb-2">
           <BackLink to="/dashboard" label="Voltar ao Dashboard" />

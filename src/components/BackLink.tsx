@@ -1,30 +1,50 @@
-import { ArrowLeft } from "lucide-react";
+import { Home, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface BackLinkProps {
-  to?: string | number;
+  to?: string;
   label?: string;
 }
 
-const BackLink = ({ to = "/dashboard", label = "Voltar ao Dashboard" }: BackLinkProps) => {
+/**
+ * Breadcrumb de navegação. Sempre inicia em Dashboard.
+ * Uso: <BackLink to="/dashboard" label="Receituários" />
+ * Renderiza: 🏠 Dashboard / Receituários
+ */
+const BackLink = ({ to = "/dashboard", label }: BackLinkProps) => {
   const navigate = useNavigate();
 
-  const handleClick = () => {
-    if (typeof to === "number") {
-      navigate(to);
-    } else {
-      navigate(to);
-    }
-  };
+  const isDashboard = to === "/dashboard" && !label;
 
   return (
-    <button
-      onClick={handleClick}
-      className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-primary transition-colors mb-6 group"
+    <nav
+      aria-label="Navegação"
+      className="flex items-center gap-1 text-sm mb-6"
     >
-      <ArrowLeft className="h-4 w-4 transition-transform group-hover:-translate-x-0.5" />
-      {label}
-    </button>
+      <button
+        onClick={() => navigate("/dashboard")}
+        className="inline-flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors group"
+      >
+        <Home className="h-3.5 w-3.5 group-hover:text-primary transition-colors" />
+        <span>Dashboard</span>
+      </button>
+
+      {label && (
+        <>
+          <ChevronRight className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+          {to !== "/dashboard" ? (
+            <button
+              onClick={() => navigate(to)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {label}
+            </button>
+          ) : (
+            <span className="text-foreground font-medium">{label}</span>
+          )}
+        </>
+      )}
+    </nav>
   );
 };
 

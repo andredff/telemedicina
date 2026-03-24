@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
@@ -2140,39 +2140,26 @@ const Teleconsultas = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Page title */}
-        <div className="mb-8">
-          <BackLink to="/dashboard" label="Voltar ao Dashboard" />
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
-                Consulta Imediata
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Atendimento com clínico geral 24h, sem agendamento
-              </p>
-            </div>
+      <main className="page-container !max-w-4xl">
+        <PageHeader
+          title="Consulta Imediata"
+          subtitle="Atendimento com clínico geral 24h, sem agendamento"
+          icon={Video}
+          actions={
             <Button
               onClick={handleStartNewConsultation}
               disabled={step === "creating_consultation"}
-              className="gap-2 shrink-0"
+              className="gap-2"
               size="lg"
             >
               {step === "creating_consultation" ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Criando consulta...
-                </>
+                <><Loader2 className="h-5 w-5 animate-spin" />Criando consulta...</>
               ) : (
-                <>
-                  <Plus className="h-5 w-5" />
-                  Nova Consulta
-                </>
+                <><Plus className="h-5 w-5" />Nova Consulta</>
               )}
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Info card: créditos de consulta avulsa disponíveis (apenas para usuários sem plano) */}
         {!hasActivePlan && (effectiveAvailableCredits.length > 0 || creditsInUse > 0) && (

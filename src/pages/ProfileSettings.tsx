@@ -269,17 +269,8 @@ const ProfileSettings = () => {
         title="Configurações"
       />
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <BackLink to="/dashboard" label="Voltar ao Dashboard" />
-        {/* Page Title */}
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
-            Meu Perfil
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie suas informações pessoais e assinatura
-          </p>
-        </div>
+      <main className="page-container !max-w-4xl">
+        <BackLink label="Meu Perfil" />
 
         <div className="grid gap-6">
           {/* Subscription Card */}

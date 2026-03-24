@@ -41,7 +41,7 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
-import BackLink from "@/components/BackLink";
+import PageHeader from "@/components/PageHeader";
 import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
@@ -1452,39 +1452,28 @@ const Especialistas = () => {
       <Header isAuthenticated onLogout={handleLogout} />
       <ActiveConsultationBanner accessToken={bannerAccessToken} />
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        {/* Page title */}
-        <div className="mb-8">
-          <BackLink to="/dashboard" label="Voltar ao Dashboard" />
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
-                Consulta com Especialista
-              </h1>
-              <p className="text-muted-foreground mt-1">
-                Atendimento com médicos especialistas
-              </p>
-            </div>
+      <main className="page-container !max-w-4xl">
+        <PageHeader
+          title="Consulta com Especialista"
+          subtitle="Atendimento com médicos especialistas"
+          icon={Stethoscope}
+          iconColor="text-accent"
+          iconBg="bg-accent/10"
+          actions={
             <Button
               onClick={handleStartNewConsultation}
               disabled={step === "creating_consultation"}
-              className="gap-2 shrink-0"
+              className="gap-2"
               size="lg"
             >
               {step === "creating_consultation" ? (
-                <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
-                  Criando consulta...
-                </>
+                <><Loader2 className="h-5 w-5 animate-spin" />Criando consulta...</>
               ) : (
-                <>
-                  <Plus className="h-5 w-5" />
-                  Nova Consulta
-                </>
+                <><Plus className="h-5 w-5" />Nova Consulta</>
               )}
             </Button>
-          </div>
-        </div>
+          }
+        />
 
         {/* Info card: consultas do plano */}
         {hasActivePlan && specialistConsultationsLimit > 0 && (
