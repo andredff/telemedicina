@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -19,6 +19,13 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { useToast } from "@/hooks/use-toast";
+import {
+  extractTextFromUrl,
+  extractTextFromFile,
+  matchMedicationsInText,
+  type MatchedMedication,
+} from "@/services/prescriptionParserService";
+import type { MedicationCatalog } from "@/types/inventory";
 
 interface AssemedReceituario {
   consultationId: number;
@@ -67,7 +74,70 @@ const Dashboard = () => {
   const [receituarios, setReceituarios] = useState<AssemedReceituario[]>([]);
   const [loadingReceituarios, setLoadingReceituarios] = useState(true);
 
+  // ── Parser state ──────────────────────────────────────────────────────────
+  const [parserOpen, setParserOpen]       = useState(false);
+  const [parserRec, setParserRec]         = useState<AssemedReceituario | null>(null);
+  const [parserLoading, setParserLoading] = useState(false);
+  const [parserStep, setParserStep]       = useState<"loading" | "results" | "manual">("loading");
+  const [matchedMeds, setMatchedMeds]     = useState<MatchedMedication[]>([]);
+  const [manualText, setManualText]       = useState("");
+  const [addedIds, setAddedIds]           = useState<Set<string>>(new Set());
+  const [cartCount, setCartCount]         = useState(() => loadCart().length);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const { accessToken: assemedAccessToken } = useAssemedToken();
+
+  const handleAnalyze = async (rec: AssemedReceituario) => {
+    setParserRec(rec);
+    setParserStep("loading");
+    setParserOpen(true);
+    setMatchedMeds([]);
+    setManualText("");
+    setParserLoading(true);
+    const text = await extractTextFromUrl(rec.urlPdf);
+    if (text && text.trim().length > 20) {
+      setMatchedMeds(await matchMedicationsInText(text));
+      setParserStep("results");
+    } else {
+      setParserStep("manual");
+    }
+    setParserLoading(false);
+  };
+
+  const handleManualAnalyze = async () => {
+    if (!manualText.trim()) return;
+    setParserLoading(true);
+    setMatchedMeds(await matchMedicationsInText(manualText));
+    setParserStep("results");
+    setParserLoading(false);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setParserLoading(true);
+    const text = await extractTextFromFile(file);
+    if (text && text.trim().length > 20) {
+      setMatchedMeds(await matchMedicationsInText(text));
+      setParserStep("results");
+    } else {
+      toast({ title: "Não foi possível extrair texto do PDF", description: "Cole o texto manualmente abaixo.", variant: "destructive" });
+    }
+    setParserLoading(false);
+  };
+
+  const addToCart = (med: MedicationCatalog) => {
+    const cart = loadCart();
+    const existing = cart.find(i => i.cartItemId === med.id);
+    if (existing) { existing.quantity += 1; } else {
+      cart.push({ cartItemId: med.id, name: med.name, dosage: med.dosage || "", price: med.price, quantity: 1 });
+    }
+    saveCart(cart);
+    setAddedIds(prev => new Set([...prev, med.id]));
+    setCartCount(cart.length);
+    toast({ title: `${med.name} adicionado ao carrinho` });
+    setTimeout(() => setAddedIds(prev => { const s = new Set(prev); s.delete(med.id); return s; }), 1500);
+  };
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -539,6 +609,130 @@ const Dashboard = () => {
 
       {/* Floating consultation banner */}
       <ActiveConsultationBanner accessToken={assemedAccessToken} />
+
+
+      {/* Modal de Análise de Medicamentos */}
+      <Dialog open={parserOpen} onOpenChange={setParserOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pill className="h-5 w-5 text-emerald-600" />
+              Medicamentos Encontrados
+              {parserRec && (
+                <span className="text-sm font-normal text-muted-foreground ml-1">
+                  — Consulta #{parserRec.consultationId}
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
+
+          {parserLoading && (
+            <div className="flex flex-col items-center py-12 gap-3">
+              <Loader2 className="h-10 w-10 animate-spin text-emerald-600" />
+              <p className="text-sm text-muted-foreground">Analisando receituário...</p>
+            </div>
+          )}
+
+          {!parserLoading && parserStep === "manual" && (
+            <div className="space-y-4">
+              <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex gap-2 text-sm text-amber-800">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Não foi possível ler o PDF automaticamente.</p>
+                  <p className="text-xs mt-1">Faça upload do arquivo ou cole o texto do receituário abaixo.</p>
+                </div>
+              </div>
+              <input ref={fileInputRef} type="file" accept="application/pdf" className="hidden" onChange={handleFileUpload} />
+              <Button variant="outline" size="sm" className="gap-2 w-full" onClick={() => fileInputRef.current?.click()}>
+                <Upload className="h-4 w-4" />Fazer upload do PDF
+              </Button>
+              <Separator />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Ou cole o texto do receituário:</label>
+                <Textarea
+                  placeholder={"Ex: Dipirona 500mg — tomar 1x ao dia\nAmoxicilina 500mg — 1 cápsula a cada 8h..."}
+                  rows={5}
+                  value={manualText}
+                  onChange={(e) => setManualText(e.target.value)}
+                />
+                <Button
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+                  disabled={!manualText.trim() || parserLoading}
+                  onClick={handleManualAnalyze}
+                >
+                  <Search className="h-4 w-4" />Identificar Medicamentos
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {!parserLoading && parserStep === "results" && (
+            <div className="space-y-4">
+              {matchedMeds.length === 0 ? (
+                <div className="text-center py-10 space-y-3">
+                  <Package className="h-12 w-12 mx-auto text-muted-foreground/40" />
+                  <p className="text-muted-foreground">Nenhum medicamento do catálogo encontrado nesta receita.</p>
+                  <Button variant="outline" size="sm" onClick={() => setParserStep("manual")}>Tentar manualmente</Button>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                    <span><strong>{matchedMeds.length}</strong> medicamento{matchedMeds.length > 1 ? "s" : ""} disponíve{matchedMeds.length > 1 ? "is" : "l"} na farmácia.</span>
+                  </div>
+                  <div className="space-y-2">
+                    {matchedMeds.map(({ medication: med, confidence }) => (
+                      <div key={med.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/30 transition-colors">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="font-medium text-sm">{med.name}</p>
+                            {confidence === "high" && (
+                              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4 gap-0.5">
+                                <Star className="h-2.5 w-2.5" />Prescrito
+                              </Badge>
+                            )}
+                          </div>
+                          {med.active_ingredient && <p className="text-xs text-muted-foreground">{med.active_ingredient}</p>}
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            {med.dosage && <span className="text-xs text-muted-foreground">{med.dosage}</span>}
+                            {med.pharmacy_name && <span className="text-xs text-primary/70">· {med.pharmacy_name}</span>}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="font-bold text-sm">R$ {med.price.toFixed(2)}</p>
+                            <p className={`text-[10px] ${med.stock > 0 ? "text-emerald-600" : "text-red-500"}`}>
+                              {med.stock > 0 ? "Em estoque" : "Sem estoque"}
+                            </p>
+                          </div>
+                          <Button
+                            size="sm"
+                            disabled={med.stock === 0}
+                            className={`gap-1.5 text-xs transition-all ${addedIds.has(med.id) ? "bg-emerald-600 text-white" : ""}`}
+                            onClick={() => addToCart(med)}
+                          >
+                            {addedIds.has(med.id)
+                              ? <><CheckCircle2 className="h-3.5 w-3.5" />Adicionado</>
+                              : <><ShoppingCart className="h-3.5 w-3.5" />Adicionar</>}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  {cartCount > 0 && (
+                    <Button variant="outline" className="w-full gap-2" onClick={() => navigate("/cart")}>
+                      <ShoppingCart className="h-4 w-4" />Ver carrinho ({cartCount} {cartCount === 1 ? "item" : "itens"})
+                    </Button>
+                  )}
+                  <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setParserStep("manual")}>
+                    Não encontrou? Buscar manualmente
+                  </Button>
+                </>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

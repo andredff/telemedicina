@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, FileText, ShoppingCart, Pill, User, Calendar,
   ChevronRight, Loader2,
@@ -17,6 +18,8 @@ import { useCart } from "@/hooks/useCart";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchClient } from "@/integrations/supabase/searchClient";
 import { logger } from "@/lib/logger";
+import { getMedicationCatalog } from "@/services/inventoryService";
+import { MedicationCatalog } from "@/types/inventory";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
