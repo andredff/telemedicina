@@ -7,6 +7,26 @@ import type {
   DeactivateRecurrenceResponse,
 } from "./types";
 
+export interface PixSaleResponse {
+  success: boolean;
+  paymentId: string;
+  status: number;
+  message: string;
+  Payment?: {
+    Status: number;
+    QrCodeBase64Image?: string;
+    QrCodeString?: string;
+    PaymentId: string;
+  };
+}
+
+export interface PixStatusResponse {
+  success: boolean;
+  paymentId?: string;
+  status: number;
+  message: string;
+}
+
 function isLocalhostUrl(url: string): boolean {
   if (!url) return false;
   try {
@@ -98,6 +118,30 @@ class CieloClient {
         paymentType: "credit_card",
       }),
     });
+  }
+
+  // ==========================================
+  // PAGAMENTO PIX
+  // ==========================================
+
+  async createPixSale(
+    orderId: string,
+    customer: { name: string; email?: string; cpf?: string },
+    amountInCents: number
+  ): Promise<PixSaleResponse> {
+    return this.localRequest<PixSaleResponse>("/api/cielo/payment", {
+      method: "POST",
+      body: JSON.stringify({
+        orderId,
+        customer,
+        amountInCents,
+        paymentType: "pix",
+      }),
+    });
+  }
+
+  async getPixStatus(paymentId: string): Promise<PixStatusResponse> {
+    return this.localRequest<PixStatusResponse>(`/api/cielo/payment/${paymentId}`);
   }
 
   async captureSale(

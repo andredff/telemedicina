@@ -13,6 +13,7 @@ import {
   ChevronRight, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useCart } from "@/hooks/useCart";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchClient } from "@/integrations/supabase/searchClient";
 import { logger } from "@/lib/logger";
@@ -27,27 +28,6 @@ interface Prescription {
   doctor_crm: string;
   date: string;
   status: string;
-}
-
-interface CartEntry {
-  cartItemId: string;
-  medication_id: string;
-  name: string;
-  dosage: string | null;
-  price: number;
-  pharmacy_id: string | null;
-  pharmacy_name: string;
-  quantity: number;
-}
-
-// ── Cart helpers ───────────────────────────────────────────────────────────
-
-function loadCart(): CartEntry[] {
-  try { return JSON.parse(localStorage.getItem("cart") ?? "[]"); } catch { return []; }
-}
-
-function saveCart(cart: CartEntry[]) {
-  localStorage.setItem("cart", JSON.stringify(cart));
 }
 
 // ── Component ──────────────────────────────────────────────────────────────
@@ -70,7 +50,7 @@ const Farmacia = () => {
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
 
   // Cart
-  const [cart, setCart] = useState<CartEntry[]>(loadCart());
+  const cart = useCart();
 
   // ── Auth ──────────────────────────────────────────────────────────────────
 
@@ -151,8 +131,8 @@ const Farmacia = () => {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const cartCount = cart.reduce((s, e) => s + e.quantity, 0);
-  const cartTotal = cart.reduce((s, e) => s + e.price * e.quantity, 0);
+  const cartCount = cart.items.reduce((s, e) => s + e.quantity, 0);
+  const cartTotal = cart.items.reduce((s, e) => s + e.price * e.quantity, 0);
 
   const getStatusColor = (status: string) => ({
     pending: "bg-yellow-500", completed: "bg-green-500", cancelled: "bg-red-500",

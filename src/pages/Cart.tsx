@@ -7,7 +7,7 @@ import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
-import { CartItem } from "@/types/prescription";
+import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
 import { Trash2, ShoppingBag, Plus, Minus, Truck, Store } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,7 +17,8 @@ import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/
 const Cart = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const cart = useCart();
+  const cartItems = cart.items;
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,7 +30,7 @@ const Cart = () => {
       (event, session) => {
         setSession(session);
         setUser(session?.user ?? null);
-        
+
         if (!session) {
           navigate("/auth");
         }
@@ -39,38 +40,24 @@ const Cart = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      
+
       if (!session) {
         navigate("/auth");
       }
       setLoading(false);
     });
 
-    loadCart();
     getShippingConfig().then(setShippingConfig);
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const loadCart = () => {
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    setCartItems(cart);
-  };
-
   const updateQuantity = (cartItemId: string, newQuantity: number) => {
-    if (newQuantity < 1) return;
-    
-    const updatedCart = cartItems.map((item) =>
-      item.cartItemId === cartItemId ? { ...item, quantity: newQuantity } : item
-    );
-    localStorage.setItem("cart", JSON.stringify(updatedCart));
-    setCartItems(updatedCart);
+    cart.updateQuantity(cartItemId, newQuantity);
   };
 
   const removeItem = (cartItemId: string) => {
-    const updatedCart = cartItems.filter((item) => item.cartItemId !== cartItemId);
-    localStorage.setItem("cart", JSON.stringify(updatedCart));
-    setCartItems(updatedCart);
+    cart.removeItem(cartItemId);
     toast({
       title: "Item removido",
       description: "Medicamento removido do carrinho",

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { CartItem } from "@/types/prescription";
+import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
 import { ShoppingCart, FileText, User, Calendar, AlertCircle, Store, Truck, Star, ChevronRight } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,6 +29,7 @@ const PrescriptionDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { addItems: addCartItems } = useCart();
   const [selectedMeds, setSelectedMeds] = useState<Set<string>>(new Set());
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -215,8 +217,7 @@ const PrescriptionDetail = () => {
         };
       });
 
-    const existingCart = JSON.parse(localStorage.getItem("cart") || "[]");
-    localStorage.setItem("cart", JSON.stringify([...existingCart, ...cartItems]));
+    addCartItems(cartItems);
 
     toast({
       title: "Medicamentos adicionados!",

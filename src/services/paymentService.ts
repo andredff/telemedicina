@@ -51,21 +51,9 @@ export interface PaymentResult {
   pixExpiresAt?: string;
 }
 
-export interface PixPaymentRecord {
-  status: PaymentStatus;
-  amountInCents: number;
-  orderId: string;
-  pixQrCode: string;
-  pixQrCodeUrl: string;
-  pixExpiresAt: string;
-}
-
 // ==========================================
 // Serviço de Pagamento de Medicamentos
 // ==========================================
-
-const pixPayments = new Map<string, PixPaymentRecord>();
-const PIX_EXPIRATION_MINUTES = 30;
 
 /**
  * Processa pagamento de medicamentos (transação única)
@@ -123,104 +111,86 @@ export async function processMedicationPayment(
 }
 
 /**
- * Processa pagamento de medicamentos via PIX (stub/mock)
+ * Processa pagamento de medicamentos via PIX (Cielo real)
  */
 export async function processMedicationPixPayment(
   orderId: string,
   customer: CustomerData,
   amountInCents: number
 ): Promise<PaymentResult> {
-  const paymentId = `PIX-${Date.now()}-${Math.random().toString(36).slice(2, 10).toUpperCase()}`;
-  const expiresAt = new Date(Date.now() + PIX_EXPIRATION_MINUTES * 60 * 1000).toISOString();
-  const pixPayload = buildPixPayload({ orderId, customer, amountInCents, expiresAt });
-  const pixQrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(pixPayload)}`;
+  try {
+    const response = await cieloClient.createPixSale(
+      orderId,
+      {
+        name: customer.name,
+        email: customer.email,
+        cpf: customer.cpf,
+      },
+      amountInCents
+    );
 
-  pixPayments.set(paymentId, {
-    status: 12,
-    amountInCents,
-    orderId,
-    pixQrCode: pixPayload,
-    pixQrCodeUrl,
-    pixExpiresAt: expiresAt,
-  });
+    const payment = response.Payment;
+    const qrCodeString = payment?.QrCodeString || "";
+    const qrCodeBase64 = payment?.QrCodeBase64Image || "";
 
-  return {
-    success: false,
-    paymentId,
-    status: 12,
-    message: "PIX gerado. Aguardando pagamento.",
-    pixQrCode: pixPayload,
-    pixQrCodeUrl,
-    pixExpiresAt: expiresAt,
-  };
+    // Use base64 image from Cielo if available, otherwise generate from QR string
+    const pixQrCodeUrl = qrCodeBase64
+      ? `data:image/png;base64,${qrCodeBase64}`
+      : qrCodeString
+        ? `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrCodeString)}`
+        : "";
+
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+
+    return {
+      success: false, // PIX starts as pending (status 12)
+      paymentId: response.paymentId || payment?.PaymentId,
+      status: 12,
+      message: "PIX gerado. Aguardando pagamento.",
+      pixQrCode: qrCodeString,
+      pixQrCodeUrl,
+      pixExpiresAt: expiresAt,
+    };
+  } catch (error) {
+    return handlePaymentError(error);
+  }
 }
 
 /**
- * Consulta status de um pagamento PIX (stub/mock)
+ * Consulta status de um pagamento PIX via servidor
  */
 export async function getPixPaymentStatus(paymentId: string): Promise<PaymentResult> {
-  const record = pixPayments.get(paymentId);
+  try {
+    const response = await cieloClient.getPixStatus(paymentId);
+    const status = response.status as PaymentStatus;
+    const isConfirmed = status === 2;
 
-  if (!record) {
+    return {
+      success: isConfirmed,
+      paymentId,
+      status,
+      message: isConfirmed
+        ? "Pagamento PIX confirmado"
+        : status === 12
+          ? "Pagamento PIX pendente"
+          : "Pagamento PIX expirado ou negado",
+    };
+  } catch {
     return {
       success: false,
+      paymentId,
       status: 3,
-      message: "Pagamento PIX não encontrado",
+      message: "Erro ao consultar status do PIX",
     };
   }
-
-  const isExpired = new Date(record.pixExpiresAt).getTime() < Date.now();
-  if (isExpired && record.status === 12) {
-    record.status = 3;
-  }
-
-  return {
-    success: record.status === 2,
-    paymentId,
-    status: record.status,
-    message: record.status === 12
-      ? "Pagamento PIX pendente"
-      : record.status === 2
-        ? "Pagamento PIX confirmado"
-        : "Pagamento PIX expirado",
-    pixQrCode: record.pixQrCode,
-    pixQrCodeUrl: record.pixQrCodeUrl,
-    pixExpiresAt: record.pixExpiresAt,
-  };
 }
 
 /**
- * Confirma pagamento PIX (stub/mock)
+ * Confirma pagamento PIX — no fluxo real a confirmação vem via webhook da Cielo.
+ * Esta função consulta o status atual no servidor.
  */
 export async function confirmPixPayment(paymentId: string): Promise<PaymentResult> {
-  const record = pixPayments.get(paymentId);
-
-  if (!record) {
-    return {
-      success: false,
-      status: 3,
-      message: "Pagamento PIX não encontrado",
-    };
-  }
-
-  const isExpired = new Date(record.pixExpiresAt).getTime() < Date.now();
-  if (isExpired) {
-    record.status = 3;
-  } else {
-    record.status = 2;
-  }
-
-  return {
-    success: record.status === 2,
-    paymentId,
-    status: record.status,
-    message: record.status === 2
-      ? "Pagamento PIX confirmado"
-      : "PIX expirado, gere um novo código",
-    pixQrCode: record.pixQrCode,
-    pixQrCodeUrl: record.pixQrCodeUrl,
-    pixExpiresAt: record.pixExpiresAt,
-  };
+  return getPixPaymentStatus(paymentId);
 }
 
 // ==========================================
@@ -451,17 +421,6 @@ function getStatusMessage(status: PaymentStatus): string {
     20: "Transação agendada",
   };
   return messages[status] || "Status desconhecido";
-}
-
-function buildPixPayload(params: {
-  orderId: string;
-  customer: CustomerData;
-  amountInCents: number;
-  expiresAt: string;
-}): string {
-  const amount = (params.amountInCents / 100).toFixed(2);
-  const name = params.customer.name || "Cliente";
-  return `NOVITA|ORDER:${params.orderId}|AMOUNT:${amount}|NAME:${name}|EXPIRES:${params.expiresAt}`;
 }
 
 function handlePaymentError(error: unknown): PaymentResult {

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+
 import { ShoppingCart, User, LogOut, Settings, CreditCard, HelpCircle, Package, X } from "lucide-react";
 import LogoNovita from "@/assets/logo-novita.png";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
+import { useCart } from "@/hooks/useCart";
 
 interface HeaderProps {
   isAuthenticated?: boolean;
@@ -41,33 +42,9 @@ const Header = ({
   onClose,
 }: HeaderProps) => {
   const navigate = useNavigate();
-  const [internalCartCount, setInternalCartCount] = useState(0);
+  const cart = useCart();
 
-  // Auto-load cart count if not provided
-  useEffect(() => {
-    if (cartItemsCount === undefined && isAuthenticated) {
-      const loadCartCount = () => {
-        const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-        setInternalCartCount(cart.length);
-      };
-      
-      loadCartCount();
-      
-      // Listen for storage changes (when cart is updated in other components)
-      const handleStorageChange = () => loadCartCount();
-      window.addEventListener("storage", handleStorageChange);
-      
-      // Also listen for custom cart update events
-      window.addEventListener("cartUpdated", handleStorageChange);
-      
-      return () => {
-        window.removeEventListener("storage", handleStorageChange);
-        window.removeEventListener("cartUpdated", handleStorageChange);
-      };
-    }
-  }, [cartItemsCount, isAuthenticated]);
-
-  const displayCartCount = cartItemsCount ?? internalCartCount;
+  const displayCartCount = cartItemsCount ?? cart.count;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

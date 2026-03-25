@@ -8,7 +8,7 @@ import { MedicationCheckout } from "@/components/checkout";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
-import type { CartItem } from "@/types/prescription";
+import { useCart } from "@/hooks/useCart";
 import type { CustomerData } from "@/services/paymentService";
 
 const CheckoutMedication = () => {
@@ -16,7 +16,8 @@ const CheckoutMedication = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const cart = useCart();
+  const cartItems = cart.items;
   const [paymentDone, setPaymentDone] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
 
@@ -44,18 +45,14 @@ const CheckoutMedication = () => {
       setLoading(false);
     });
 
-    loadCart();
-
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const loadCart = () => {
-    const cart = JSON.parse(localStorage.getItem("cart") || "[]");
-    if (cart.length === 0) {
+  useEffect(() => {
+    if (!cart.loading && cartItems.length === 0 && !paymentDone) {
       navigate("/cart");
     }
-    setCartItems(cart);
-  };
+  }, [cart.loading, cartItems.length, paymentDone, navigate]);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -75,13 +72,12 @@ const CheckoutMedication = () => {
     }
   };
 
-  const handleSuccess = (paymentId: string) => {
+  const handleSuccess = (_paymentId: string) => {
     setPaymentDone(true);
-    localStorage.removeItem("cart");
-    setCartItems([]);
+    cart.clearCart();
   };
 
-  if (loading) {
+  if (loading || cart.loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
@@ -112,8 +108,8 @@ const CheckoutMedication = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header 
-        isAuthenticated 
+      <Header
+        isAuthenticated
         title="Checkout"
       />
 

@@ -214,15 +214,17 @@ export function PixPaymentForm({
             </div>
 
             {/* Botao simulacao (apenas em desenvolvimento) */}
-            <Button
-              variant="secondary"
-              onClick={handleSimulatePayment}
-              className="w-full text-xs"
-              size="sm"
-            >
-              <CheckCircle className="h-3 w-3 mr-1" />
-              Simular confirmacao do pagamento (dev)
-            </Button>
+            {import.meta.env.DEV && (
+              <Button
+                variant="secondary"
+                onClick={handleSimulatePayment}
+                className="w-full text-xs"
+                size="sm"
+              >
+                <CheckCircle className="h-3 w-3 mr-1" />
+                Simular confirmacao do pagamento (dev)
+              </Button>
+            )}
           </div>
         )}
 

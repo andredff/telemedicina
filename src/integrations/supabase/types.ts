@@ -726,6 +726,336 @@ export type Database = {
         }
         Relationships: []
       }
+      payment_logs: {
+        Row: {
+          id: string
+          order_id: string
+          payment_type: string
+          payment_id: string | null
+          amount: number
+          status: string
+          cielo_response: Json | null
+          error_message: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          order_id: string
+          payment_type: string
+          payment_id?: string | null
+          amount: number
+          status: string
+          cielo_response?: Json | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string
+          payment_type?: string
+          payment_id?: string | null
+          amount?: number
+          status?: string
+          cielo_response?: Json | null
+          error_message?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      cielo_webhooks: {
+        Row: {
+          id: string
+          order_id: string | null
+          payment_id: string
+          recurrent_payment_id: string | null
+          old_status: string | null
+          new_status: string | null
+          status: number | null
+          return_code: string | null
+          return_message: string | null
+          raw_payload: Json
+          processed: boolean
+          processed_at: string | null
+          error: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          order_id?: string | null
+          payment_id: string
+          recurrent_payment_id?: string | null
+          old_status?: string | null
+          new_status?: string | null
+          status?: number | null
+          return_code?: string | null
+          return_message?: string | null
+          raw_payload: Json
+          processed?: boolean
+          processed_at?: string | null
+          error?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          order_id?: string | null
+          payment_id?: string
+          recurrent_payment_id?: string | null
+          old_status?: string | null
+          new_status?: string | null
+          status?: number | null
+          return_code?: string | null
+          return_message?: string | null
+          raw_payload?: Json
+          processed?: boolean
+          processed_at?: string | null
+          error?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      saved_cards: {
+        Row: {
+          id: string
+          user_id: string
+          card_token: string
+          card_brand: string | null
+          card_last_four: string
+          card_holder_name: string | null
+          card_expiration_date: string | null
+          is_default: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          card_token: string
+          card_brand?: string | null
+          card_last_four: string
+          card_holder_name?: string | null
+          card_expiration_date?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          card_token?: string
+          card_brand?: string | null
+          card_last_four?: string
+          card_holder_name?: string | null
+          card_expiration_date?: string | null
+          is_default?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_cards_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          order_id: string | null
+          plan_id: string | null
+          recurrent_payment_id: string
+          payment_id: string | null
+          status: string
+          interval: string
+          amount: number
+          current_period_start: string | null
+          current_period_end: string | null
+          next_payment_date: string | null
+          cancelled_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          order_id?: string | null
+          plan_id?: string | null
+          recurrent_payment_id: string
+          payment_id?: string | null
+          status?: string
+          interval: string
+          amount: number
+          current_period_start?: string | null
+          current_period_end?: string | null
+          next_payment_date?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          order_id?: string | null
+          plan_id?: string | null
+          recurrent_payment_id?: string
+          payment_id?: string | null
+          status?: string
+          interval?: string
+          amount?: number
+          current_period_start?: string | null
+          current_period_end?: string | null
+          next_payment_date?: string | null
+          cancelled_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subscriptions_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_credits: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          amount: number
+          payment_id: string | null
+          status: string
+          consultation_id: number | null
+          created_at: string
+          used_at: string | null
+          expires_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          amount: number
+          payment_id?: string | null
+          status?: string
+          consultation_id?: number | null
+          created_at?: string
+          used_at?: string | null
+          expires_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          amount?: number
+          payment_id?: string | null
+          status?: string
+          consultation_id?: number | null
+          created_at?: string
+          used_at?: string | null
+          expires_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_credits_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      consultation_reminders: {
+        Row: {
+          id: string
+          consultation_id: string
+          user_id: string | null
+          user_email: string
+          user_name: string
+          especialidade: string | null
+          profissional: string | null
+          scheduled_at: string
+          reminder_sent: boolean
+          reminded_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          consultation_id: string
+          user_id?: string | null
+          user_email: string
+          user_name: string
+          especialidade?: string | null
+          profissional?: string | null
+          scheduled_at: string
+          reminder_sent?: boolean
+          reminded_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          consultation_id?: string
+          user_id?: string | null
+          user_email?: string
+          user_name?: string
+          especialidade?: string | null
+          profissional?: string | null
+          scheduled_at?: string
+          reminder_sent?: boolean
+          reminded_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "consultation_reminders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_events_log: {
+        Row: {
+          id: string
+          event_type: string
+          recipient: string
+          job_id: string | null
+          payload: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          event_type: string
+          recipient: string
+          job_id?: string | null
+          payload?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          event_type?: string
+          recipient?: string
+          job_id?: string | null
+          payload?: Json | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       user_subscriptions: {
         Row: {
           billing_cycle: string | null
@@ -799,10 +1129,13 @@ export type Database = {
         | "bronze"
         | "prata"
         | "ouro"
+        | "platina"
         | "diamante"
+        | "coletivo"
         | "bronze-coletivo"
         | "prata-coletivo"
         | "ouro-coletivo"
+        | "platina-coletivo"
         | "diamante-coletivo"
       subscription_status: "active" | "inactive" | "cancelled" | "pending"
     }

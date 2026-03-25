@@ -41,7 +41,6 @@ import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminSupport from "./pages/admin/Support";
 import AdminMedications from "./pages/admin/Medications";
-import TestSupabase from "./pages/TestSupabase";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
@@ -96,7 +95,6 @@ const App = () => (
           <Route path="/termos" element={<Terms />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/cancelamento" element={<Cancellation />} />
-          <Route path="/test-supabase" element={<TestSupabase />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
