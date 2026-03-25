@@ -24,6 +24,18 @@ if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.log("✓ Supabase client initialized");
 }
 
+// ─── Sistema de Notificações por E-mail ────────────────────────────────────
+const dispatcher = require("./notifications/dispatcher");
+const { startScheduler } = require("./notifications/scheduler");
+
+const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY || process.env.NODE_ENV === "development";
+dispatcher.init(process.env.RESEND_API_KEY, RESEND_MOCK_MODE);
+
+// Inicia o scheduler de lembretes de consulta (só se Supabase disponível)
+if (supabase) {
+  startScheduler(supabase, dispatcher);
+}
+
 // ─── Cielo config ───────────────────────────────────────────────────────────
 const isSandbox = process.env.CIELO_SANDBOX === "true";
 
@@ -646,25 +658,221 @@ app.put("/api/orders/:id/status", async (req, res) => {
   }
 });
 
+// ─── Notificações — Rotas de Eventos ─────────────────────────────────────────
+// Todas as rotas são desacopladas: aceitam o payload, enfileiram o e-mail
+// e retornam imediatamente sem bloquear.
+
+/**
+ * POST /api/notifications/events
+ * Endpoint genérico para despachar qualquer evento de domínio.
+ * Usado por webhooks do Supabase Auth e integrações internas.
+ *
+ * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | ..., data: { ... } }
+ */
+app.post("/api/notifications/events", (req, res) => {
+  const { tipo, data } = req.body || {};
+
+  if (!tipo || !data) {
+    return res.status(400).json({ error: "Campos obrigatórios: tipo, data" });
+  }
+
+  try {
+    const jobId = dispatcher.dispatch(tipo, data);
+    logEventoAsync(tipo, data, jobId);
+    return res.status(202).json({ accepted: true, jobId });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /api/notifications/consulta-agendada
+ * Registra uma nova consulta para lembrete automático (30 min antes).
+ *
+ * Body: {
+ *   consultaId, email, nome, especialidade, profissional,
+ *   dataHora (ISO 8601), userId (opcional)
+ * }
+ */
+app.post("/api/notifications/consulta-agendada", async (req, res) => {
+  const { consultaId, email, nome, especialidade, profissional, dataHora, userId } = req.body || {};
+
+  if (!consultaId || !email || !nome || !dataHora) {
+    return res.status(400).json({ error: "Campos obrigatórios: consultaId, email, nome, dataHora" });
+  }
+
+  // 1. Dispara notificação imediata de confirmação
+  try {
+    const jobId = dispatcher.dispatch("ConsultaAgendada", {
+      email, nome, especialidade, profissional,
+      dataHora: formatarDataHoraLocal(dataHora),
+      consultaId,
+    });
+    logEventoAsync("ConsultaAgendada", { email, nome }, jobId);
+  } catch (err) {
+    console.error("[Notificação] Erro ao despachar ConsultaAgendada:", err.message);
+  }
+
+  // 2. Registra no banco para o scheduler de lembrete
+  if (supabase) {
+    const { error: dbErr } = await supabase
+      .from("consultation_reminders")
+      .insert({
+        consultation_id: String(consultaId),
+        user_id:         userId || null,
+        user_email:      email.toLowerCase().trim(),
+        user_name:       nome,
+        especialidade:   especialidade || null,
+        profissional:    profissional  || null,
+        scheduled_at:    new Date(dataHora).toISOString(),
+        reminder_sent:   false,
+      })
+      .select("id")
+      .single();
+
+    if (dbErr) {
+      console.error("[Scheduler] Erro ao registrar lembrete:", dbErr.message);
+      // Não falha o request — confirmação foi enviada
+    }
+  }
+
+  return res.status(202).json({
+    accepted:         true,
+    confirmacaoEnviada: true,
+    lembreteAgendado: !!supabase,
+  });
+});
+
+/**
+ * GET /api/notifications/stats
+ * Retorna métricas da fila de e-mails.
+ */
+app.get("/api/notifications/stats", (_req, res) => {
+  res.json({
+    queue:    dispatcher.queueStatus(),
+    modo:     RESEND_MOCK_MODE ? "MOCK (sem RESEND_API_KEY)" : "RESEND",
+    scheduler: supabase ? "ativo" : "inativo (Supabase não configurado)",
+  });
+});
+
+/**
+ * POST /api/notifications/test/:tipo
+ * Dispara um evento de teste com dados sintéticos.
+ * Útil para verificar templates localmente.
+ *
+ * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta
+ * Body:   { email } (opcional — usa padrão se omitido)
+ */
+app.post("/api/notifications/test/:tipo", (req, res) => {
+  const { tipo }  = req.params;
+  const { email } = req.body || {};
+
+  const dest = email || "teste@novita.com.br";
+
+  const FIXTURES = {
+    UsuarioCadastrado: {
+      nome:  "André Tester",
+      email: dest,
+    },
+    SenhaAlterada: {
+      nome:    "André Tester",
+      email:   dest,
+      dataHora: new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+    },
+    ConsultaAgendada: {
+      nome:          "André Tester",
+      email:         dest,
+      especialidade: "Clínico Geral",
+      profissional:  "Dr. Carlos Silva",
+      dataHora:      formatarDataHoraLocal(new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString()),
+      consultaId:    "99999",
+    },
+    LembreteConsulta: {
+      nome:          "André Tester",
+      email:         dest,
+      especialidade: "Cardiologia",
+      profissional:  "Dra. Ana Oliveira",
+      dataHora:      formatarDataHoraLocal(new Date(Date.now() + 30 * 60 * 1000).toISOString()),
+      consultaId:    "99998",
+    },
+  };
+
+  if (!FIXTURES[tipo]) {
+    return res.status(400).json({
+      error: "Tipo inválido",
+      tiposValidos: Object.keys(FIXTURES),
+    });
+  }
+
+  try {
+    const jobId = dispatcher.dispatch(tipo, FIXTURES[tipo]);
+    return res.status(202).json({ accepted: true, jobId, dest, tipo });
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
+  }
+});
+
+// ─── Helper: log assíncrono de eventos no Supabase ────────────────────────────
+function logEventoAsync(tipo, data, jobId) {
+  if (!supabase) return;
+  supabase
+    .from("notification_events_log")
+    .insert({
+      event_type: tipo,
+      recipient:  data.email || "unknown",
+      job_id:     jobId,
+      payload:    data,
+    })
+    .then()
+    .catch(err => console.error("[EventLog] Erro ao logar evento:", err.message));
+}
+
+// ─── Helper: formata data/hora no fuso de São Paulo ───────────────────────────
+function formatarDataHoraLocal(isoString) {
+  try {
+    return new Date(isoString).toLocaleString("pt-BR", {
+      timeZone: "America/Sao_Paulo",
+      day: "2-digit", month: "2-digit", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch {
+    return isoString;
+  }
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 app.get("/api/health", (_req, res) => {
   res.json({
-    status:    "ok",
-    env:       isSandbox ? "sandbox" : "production",
-    merchant:  MERCHANT_ID ? `${MERCHANT_ID.substring(0, 8)}...` : "not configured",
-    supabase:  supabase ? "connected" : "not configured",
-    cielo:     { transactional: CIELO_URLS.transactional },
+    status:        "ok",
+    env:           isSandbox ? "sandbox" : "production",
+    merchant:      MERCHANT_ID ? `${MERCHANT_ID.substring(0, 8)}...` : "not configured",
+    supabase:      supabase ? "connected" : "not configured",
+    cielo:         { transactional: CIELO_URLS.transactional },
+    notifications: {
+      modo:    RESEND_MOCK_MODE ? "MOCK" : "RESEND",
+      queue:   dispatcher.queueStatus(),
+    },
   });
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
+  const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
   console.log(`
-╔══════════════════════════════════════════════════════╗
-║  Cielo Payment Server — API 3.0                      ║
-║  http://localhost:${PORT}                                ║
-║  Env: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Merchant: ${MERCHANT_ID.substring(0, 8)}...  ║
-╚══════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════╗
+║  Novità — Backend Server                                 ║
+║  http://localhost:${PORT}                                    ║
+║                                                          ║
+║  Pagamentos: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${MERCHANT_ID ? MERCHANT_ID.substring(0, 8) + "..." : "não configurado"}          ║
+║  E-mails:    ${emailMode.padEnd(32)}║
+║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║
+║                                                          ║
+║  Endpoints de notificação:                               ║
+║  POST /api/notifications/events                          ║
+║  POST /api/notifications/consulta-agendada               ║
+║  POST /api/notifications/test/:tipo                      ║
+║  GET  /api/notifications/stats                           ║
+╚══════════════════════════════════════════════════════════╝
   `);
 });
 

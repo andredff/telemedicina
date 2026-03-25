@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
@@ -8,18 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, FileText, ShoppingCart, Pill, User, Calendar,
-  ChevronRight, Loader2, Store, Truck, Star, Package,
-  Plus, Minus, X, CheckCircle2,
+  ChevronRight, Loader2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchClient } from "@/integrations/supabase/searchClient";
 import { logger } from "@/lib/logger";
-import { getMedicationCatalog } from "@/services/inventoryService";
-import { MedicationCatalog } from "@/types/inventory";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -73,13 +69,6 @@ const Farmacia = () => {
   const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
 
-  // Medication search (new)
-  const [medSearch, setMedSearch] = useState("");
-  const [medResults, setMedResults] = useState<MedicationCatalog[]>([]);
-  const [medLoading, setMedLoading] = useState(false);
-  const [prescribedNames, setPrescribedNames] = useState<string[]>([]);
-  const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
-
   // Cart
   const [cart, setCart] = useState<CartEntry[]>(loadCart());
 
@@ -111,27 +100,6 @@ const Farmacia = () => {
     }
   }, [prescriptionCode]);
 
-  // ── Medication debounced search ───────────────────────────────────────────
-
-  useEffect(() => {
-    if (medSearch.trim().length < 2) {
-      setMedResults([]);
-      return;
-    }
-    const timer = setTimeout(async () => {
-      setMedLoading(true);
-      try {
-        const results = await getMedicationCatalog({ search: medSearch.trim() });
-        setMedResults(results);
-      } catch (err) {
-        logger.error("Medication search error:", err);
-      } finally {
-        setMedLoading(false);
-      }
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [medSearch]);
-
   // ── Data loaders ──────────────────────────────────────────────────────────
 
   const loadRecentPrescriptions = async () => {
@@ -145,17 +113,7 @@ const Farmacia = () => {
         .order("date", { ascending: false })
         .limit(5);
       if (error) throw error;
-      const prescriptions = data ?? [];
-      setRecentPrescriptions(prescriptions);
-
-      // Load prescribed medication names for highlighting
-      if (prescriptions.length > 0) {
-        const { data: meds } = await supabase
-          .from("medications")
-          .select("name")
-          .in("prescription_id", prescriptions.map((p) => p.id));
-        setPrescribedNames((meds ?? []).map((m: { name: string }) => m.name.toLowerCase()));
-      }
+      setRecentPrescriptions(data ?? []);
     } catch (err) {
       logger.error("Error loading prescriptions:", err);
     } finally {
@@ -191,51 +149,8 @@ const Farmacia = () => {
     }
   };
 
-  // ── Cart helpers ──────────────────────────────────────────────────────────
-
-  const addToCart = useCallback((med: MedicationCatalog) => {
-    const current = loadCart();
-    const existing = current.find((e) => e.medication_id === med.id);
-    const next: CartEntry[] = existing
-      ? current.map((e) => e.medication_id === med.id ? { ...e, quantity: e.quantity + 1 } : e)
-      : [...current, {
-          cartItemId: crypto.randomUUID(),
-          medication_id: med.id,
-          name: med.name,
-          dosage: med.dosage,
-          price: med.price,
-          pharmacy_id: med.pharmacy_id,
-          pharmacy_name: med.pharmacy_name ?? "Farmácia",
-          quantity: 1,
-        }];
-    saveCart(next);
-    setCart(next);
-    setAddedIds((s) => new Set(s).add(med.id));
-    toast({ title: "Adicionado ao carrinho!", description: med.name });
-  }, [toast]);
-
-  const removeFromCart = useCallback((medId: string) => {
-    const next = loadCart().filter((e) => e.medication_id !== medId);
-    saveCart(next);
-    setCart(next);
-  }, []);
-
-  const updateQty = useCallback((medId: string, delta: number) => {
-    const next = loadCart()
-      .map((e) => e.medication_id === medId ? { ...e, quantity: Math.max(0, e.quantity + delta) } : e)
-      .filter((e) => e.quantity > 0);
-    saveCart(next);
-    setCart(next);
-  }, []);
-
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  const isPrescribed = (med: MedicationCatalog) =>
-    prescribedNames.some((n) =>
-      med.name.toLowerCase().includes(n) || (med.active_ingredient ?? "").toLowerCase().includes(n)
-    );
-
-  const cartQty = (medId: string) => cart.find((e) => e.medication_id === medId)?.quantity ?? 0;
   const cartCount = cart.reduce((s, e) => s + e.quantity, 0);
   const cartTotal = cart.reduce((s, e) => s + e.price * e.quantity, 0);
 
@@ -246,8 +161,6 @@ const Farmacia = () => {
   const getStatusText = (status: string) => ({
     pending: "Pendente", completed: "Concluída", cancelled: "Cancelada",
   }[status] ?? status);
-
-  const searchActive = medSearch.trim().length >= 2;
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -290,180 +203,7 @@ const Farmacia = () => {
           </p>
         </div>
 
-        {/* ── NEW: Buscar Medicamentos ──────────────────────────────────── */}
-        <Card className="mb-6 border-primary/20 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Pill className="h-5 w-5 text-primary" />
-              Buscar Medicamentos
-            </CardTitle>
-            <CardDescription>
-              Pesquise por nome ou princípio ativo e adicione direto ao carrinho
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {/* Search input */}
-            <div className="relative">
-              <Search className="h-4 w-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-              <Input
-                className="pl-9 pr-9"
-                placeholder="Ex: Dipirona, Amoxicilina, Ibuprofeno..."
-                value={medSearch}
-                onChange={(e) => setMedSearch(e.target.value)}
-              />
-              {medSearch && (
-                <button
-                  onClick={() => { setMedSearch(""); setMedResults([]); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-
-            {/* Loading skeleton */}
-            {medLoading && (
-              <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {[1, 2, 3, 4].map((i) => (
-                  <div key={i} className="border rounded-xl p-4 space-y-2">
-                    <Skeleton className="h-4 w-3/4" />
-                    <Skeleton className="h-3 w-1/2" />
-                    <Skeleton className="h-3 w-1/3" />
-                    <Skeleton className="h-9 w-full mt-3" />
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {!medLoading && searchActive && medResults.length === 0 && (
-              <div className="mt-4 text-center py-10">
-                <Package className="h-12 w-12 mx-auto mb-3 text-muted-foreground/30" />
-                <p className="text-muted-foreground font-medium">Nenhum medicamento encontrado 😕</p>
-                <p className="text-sm text-muted-foreground mt-1">Tente um nome diferente ou verifique a grafia</p>
-              </div>
-            )}
-
-            {/* Results grid */}
-            {!medLoading && medResults.length > 0 && (
-              <>
-                <p className="text-xs text-muted-foreground mt-4 mb-3">
-                  {medResults.length} resultado{medResults.length !== 1 ? "s" : ""} para &ldquo;{medSearch}&rdquo;
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {medResults.map((med) => {
-                    const prescribed = isPrescribed(med);
-                    const qty = cartQty(med.id);
-                    const justAdded = addedIds.has(med.id);
-                    const outOfStock = med.stock === 0;
-
-                    return (
-                      <div
-                        key={med.id}
-                        className={`border rounded-xl p-4 flex flex-col gap-3 hover:shadow-sm transition-all bg-card ${
-                          prescribed ? "ring-2 ring-blue-400 ring-offset-1" : ""
-                        }`}
-                      >
-                        {/* Header */}
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            {prescribed && (
-                              <Badge className="mb-1 bg-blue-100 text-blue-700 border-blue-200 text-[10px] gap-1">
-                                <Star className="h-2.5 w-2.5" />
-                                Prescrito para você
-                              </Badge>
-                            )}
-                            <p className="font-semibold text-foreground leading-tight">{med.name}</p>
-                            {med.active_ingredient && (
-                              <p className="text-xs text-muted-foreground mt-0.5">{med.active_ingredient}</p>
-                            )}
-                            {med.dosage && (
-                              <p className="text-xs text-muted-foreground/70">{med.dosage}</p>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <p className="text-lg font-bold text-green-700">
-                              R$ {med.price.toFixed(2).replace(".", ",")}
-                            </p>
-                            {outOfStock ? (
-                              <p className="text-[10px] text-red-500 font-medium">Sem estoque</p>
-                            ) : med.stock <= 10 ? (
-                              <p className="text-[10px] text-amber-600">Só {med.stock} unidades</p>
-                            ) : (
-                              <p className="text-[10px] text-muted-foreground">{med.stock} disponíveis</p>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Pharmacy + delivery */}
-                        {med.pharmacy_name && (
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Store className="h-3 w-3 shrink-0" />
-                            <span className="truncate">{med.pharmacy_name}</span>
-                            <Truck className="h-3 w-3 ml-auto shrink-0" />
-                            <span className="shrink-0">2–5 dias</span>
-                          </div>
-                        )}
-
-                        {/* Cart action */}
-                        {outOfStock ? (
-                          <Button size="sm" disabled variant="outline" className="w-full text-muted-foreground">
-                            Indisponível
-                          </Button>
-                        ) : qty > 0 ? (
-                          <div className="flex items-center gap-2">
-                            <Button
-                              size="icon" variant="outline" className="h-8 w-8 shrink-0"
-                              onClick={() => updateQty(med.id, -1)}
-                            >
-                              <Minus className="h-3 w-3" />
-                            </Button>
-                            <span className="flex-1 text-center text-sm font-semibold">{qty}</span>
-                            <Button
-                              size="icon" variant="outline" className="h-8 w-8 shrink-0"
-                              onClick={() => updateQty(med.id, 1)}
-                            >
-                              <Plus className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              size="sm" variant="ghost" className="text-destructive px-2 shrink-0"
-                              onClick={() => removeFromCart(med.id)}
-                            >
-                              <X className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                        ) : (
-                          <Button
-                            size="sm"
-                            className={`w-full gap-2 transition-all ${
-                              justAdded ? "bg-green-600 hover:bg-green-700" : ""
-                            }`}
-                            onClick={() => addToCart(med)}
-                          >
-                            {justAdded ? (
-                              <><CheckCircle2 className="h-4 w-4" />Adicionado!</>
-                            ) : (
-                              <><ShoppingCart className="h-4 w-4" />Adicionar ao carrinho</>
-                            )}
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-
-            {/* Hint when search is empty */}
-            {!searchActive && (
-              <p className="mt-3 text-xs text-muted-foreground text-center">
-                Digite ao menos 2 caracteres para iniciar a busca
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* ── EXISTING: Buscar Receita ───────────────────────────────────── */}
+        {/* ── Buscar Receita ────────────────────────────────────────────── */}
         <Card className="mb-8 border-border/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -471,7 +211,7 @@ const Farmacia = () => {
               Buscar Receita
             </CardTitle>
             <CardDescription>
-              Digite o código da receita recebido por e-mail ou SMS após sua consulta
+              Digite o código da receita recebido por e-mail após sua consulta
             </CardDescription>
           </CardHeader>
           <CardContent>

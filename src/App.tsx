@@ -46,7 +46,6 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
 import AdminUserDetail from "./pages/admin/UserDetail";
-import PrescriptionReformatterPage from "./pages/PrescriptionReformatterPage";
 
 const queryClient = new QueryClient();
 
@@ -85,7 +84,6 @@ const App = () => (
           <Route path="/order/:id" element={<OrderDetail />} />
           <Route path="/blog/:id" element={<BlogPost />} />
           <Route path="/prescription/:id" element={<PrescriptionDetail />} />
-          <Route path="/receita/reformatar" element={<PrescriptionReformatterPage />} />
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
