@@ -61,6 +61,8 @@ export interface DecodedToken {
   perfil: string;
   cliente: string;
   exp: number;
+  /** Token do paciente para entrar na sala de atendimento — embutido no JWT do login-externo */
+  pacienteToken?: string;
 }
 
 // ==========================================
@@ -123,6 +125,8 @@ export interface CreateConsultationRequest {
   textoPerguntaPaciente?: string;
   fusoUsuario?: number;
   tipoProfissional?: number;
+  /** Token do paciente extraído do JWT do login-externo */
+  pacienteToken?: string;
 }
 
 export interface CreateConsultationResponse {

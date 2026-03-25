@@ -25,6 +25,8 @@ import type {
 
 const STORAGE_KEY_TOKEN = "assemed_access_token";
 const STORAGE_KEY_CPF = "assemed_cpf_paciente";
+const STORAGE_KEY_PATIENT_TOKENS = "assemed_patient_tokens"; // cache: { [consultationId]: pacienteToken }
+const STORAGE_KEY_GLOBAL_PATIENT_TOKEN = "assemed_global_patient_token"; // pacienteToken do JWT login-externo
 
 class AssemedClient {
   private clientId: string;
@@ -33,6 +35,8 @@ class AssemedClient {
   private apiUrl: string;
   private accessToken: string | null = null;
   private cpfPaciente: string | null = null; // CPF do paciente para retry de login
+  private patientTokens: Record<number, string> = {}; // cache em memória (por consultationId)
+  private globalPatientToken: string | null = null;   // pacienteToken do JWT login-externo
   /**
    * Define o CPF do paciente para retry automático de login
    */
@@ -78,7 +82,67 @@ class AssemedClient {
       if (storedCpf) {
         this.cpfPaciente = storedCpf;
       }
+      // Recupera cache de pacienteTokens por consulta
+      // Usa localStorage para persistir entre sessões (consultas agendadas podem ser dias depois)
+      const storedPatientTokens = localStorage.getItem(STORAGE_KEY_PATIENT_TOKENS);
+      if (storedPatientTokens) {
+        this.patientTokens = JSON.parse(storedPatientTokens);
+        console.info("[Assemed] Patient tokens recuperados do localStorage:", Object.keys(this.patientTokens).length);
+      }
+      // Recupera o pacienteToken global (extraído do JWT no login-externo)
+      const storedGlobalToken = localStorage.getItem(STORAGE_KEY_GLOBAL_PATIENT_TOKEN);
+      if (storedGlobalToken) {
+        this.globalPatientToken = storedGlobalToken;
+        console.info("[Assemed] Global pacienteToken recuperado do localStorage");
+      }
     } catch { /* ignore storage errors */ }
+  }
+
+  /**
+   * Retorna o pacienteToken global extraído do JWT do login-externo.
+   * Este token identifica o paciente em qualquer atendimento.
+   */
+  getGlobalPatientToken(): string | null {
+    if (this.globalPatientToken) return this.globalPatientToken;
+    try {
+      return localStorage.getItem(STORAGE_KEY_GLOBAL_PATIENT_TOKEN);
+    } catch { return null; }
+  }
+
+  /**
+   * Salva o pacienteToken de uma consulta para uso posterior (entrada na sala).
+   * Usa localStorage para persistência entre sessões — consultas agendadas podem
+   * ser acessadas dias depois da criação.
+   */
+  storePatientToken(consultationId: number, token: string): void {
+    this.patientTokens[consultationId] = token;
+    try {
+      localStorage.setItem(STORAGE_KEY_PATIENT_TOKENS, JSON.stringify(this.patientTokens));
+      console.info("[Assemed] pacienteToken armazenado para consulta:", consultationId);
+    } catch { /* ignore */ }
+  }
+
+  /**
+   * Retorna o pacienteToken cacheado de uma consulta.
+   * Verifica memória, localStorage e também a chave individual legada.
+   */
+  getPatientToken(consultationId: number): string | null {
+    // Memória (mais rápido)
+    if (this.patientTokens[consultationId]) {
+      return this.patientTokens[consultationId];
+    }
+    // localStorage — tenta reler caso o objeto tenha sido atualizado por outra aba
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY_PATIENT_TOKENS);
+      if (raw) {
+        const map: Record<number, string> = JSON.parse(raw);
+        if (map[consultationId]) {
+          this.patientTokens[consultationId] = map[consultationId]; // atualiza memória
+          return map[consultationId];
+        }
+      }
+    } catch { /* ignore */ }
+    return null;
   }
 
   /**
@@ -121,6 +185,7 @@ class AssemedClient {
       if (parts.length !== 3) return null;
 
       const payload = JSON.parse(atob(parts[1]));
+      console.info("[Assemed] JWT payload keys:", Object.keys(payload));
       return {
         usuarioId: payload.usuarioId,
         pacienteId: payload.pacienteId,
@@ -129,6 +194,8 @@ class AssemedClient {
         perfil: payload.perfil,
         cliente: payload.cliente,
         exp: payload.exp,
+        // Tenta extrair o pacienteToken de possíveis nomes de campo do JWT
+        pacienteToken: payload.pacienteToken || payload.token || payload.patientToken || undefined,
       };
     } catch {
       console.error("[Assemed] Erro ao decodificar token");
@@ -321,6 +388,19 @@ class AssemedClient {
 
     this.accessToken = response.accessToken;
     try { sessionStorage.setItem(STORAGE_KEY_TOKEN, response.accessToken); } catch { /* ignore */ }
+
+    // Extrai e persiste o pacienteToken embutido no JWT
+    const decoded = this.decodeToken(response.accessToken);
+    if (decoded?.pacienteToken) {
+      this.globalPatientToken = decoded.pacienteToken;
+      try {
+        localStorage.setItem(STORAGE_KEY_GLOBAL_PATIENT_TOKEN, decoded.pacienteToken);
+        console.info("[Assemed] pacienteToken extraído do JWT e salvo:", decoded.pacienteToken.substring(0, 20) + "...");
+      } catch { /* ignore */ }
+    } else {
+      console.warn("[Assemed] pacienteToken não encontrado no JWT. Payload:", decoded);
+    }
+
     return response;
   }
 
@@ -412,6 +492,30 @@ class AssemedClient {
       { method: "PUT" },
       true
     );
+  }
+
+  /**
+   * Inclui uma consulta agendada na fila de atendimento.
+   * Deve ser chamado quando o paciente clicar em "Iniciar consulta" no dia do agendamento.
+   * Retorna o pacienteToken e metadados de fila/pagamento.
+   * POST /api/Atendimentos/IncluirAtendimentoAgendadoNaFila
+   */
+  async incluirAtendimentoAgendadoNaFila(atendimentoId: number): Promise<CreateConsultationResponse> {
+    const response = await this.request<CreateConsultationResponse>(
+      `/api/Atendimentos/IncluirAtendimentoAgendadoNaFila`,
+      {
+        method: "POST",
+        body: JSON.stringify({ atendimentoId }),
+      },
+      true
+    );
+
+    // Persiste o token retornado para uso posterior (entrada na sala)
+    if (response.pacienteToken) {
+      this.storePatientToken(atendimentoId, response.pacienteToken);
+    }
+
+    return response;
   }
 
   async evaluateConsultation(

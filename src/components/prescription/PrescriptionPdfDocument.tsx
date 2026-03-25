@@ -4,6 +4,8 @@
  * Template PDF da Novità para receitas médicas reformatadas.
  * Usa @react-pdf/renderer — componentes específicos do renderer PDF,
  * não são componentes React normais de DOM.
+ *
+ * Paleta: cores suaves — verde, azul, branco.
  */
 
 import {
@@ -33,19 +35,36 @@ Font.register({
   ],
 });
 
-// ─── Paleta Novità ─────────────────────────────────────────────────────────
+// ─── Paleta suave ──────────────────────────────────────────────────────────
 
-const COLORS = {
-  primary: "#EDAF00",      // Dourado Novità
-  primaryDark: "#B88200",  // Dourado escuro
-  primaryLight: "#FDF8E8", // Fundo dourado suave
-  text: "#1A1A2E",         // Azul-escuro texto
-  textMuted: "#6B7280",    // Cinza para legendas
-  border: "#E5E7EB",       // Borda suave
-  white: "#FFFFFF",
-  surface: "#F9FAFB",      // Fundo seção
-  accent: "#0EA5E9",       // Azul info
-  accentLight: "#E0F2FE",  // Azul claro info
+const C = {
+  // Azul suave
+  blue:        "#2563EB",
+  blueMid:     "#3B82F6",
+  blueLight:   "#EFF6FF",
+  blueSoft:    "#DBEAFE",
+
+  // Verde suave
+  green:       "#16A34A",
+  greenMid:    "#22C55E",
+  greenLight:  "#F0FDF4",
+  greenSoft:   "#DCFCE7",
+
+  // Neutros
+  white:       "#FFFFFF",
+  bg:          "#F8FAFC",
+  border:      "#E2E8F0",
+  borderDark:  "#CBD5E1",
+
+  // Texto
+  text:        "#0F172A",
+  textMid:     "#334155",
+  textMuted:   "#64748B",
+  textLight:   "#94A3B8",
+
+  // Novità gold (acento discreto)
+  gold:        "#D97706",
+  goldLight:   "#FEF3C7",
 };
 
 // ─── Estilos ───────────────────────────────────────────────────────────────
@@ -53,204 +72,222 @@ const COLORS = {
 const styles = StyleSheet.create({
   page: {
     fontFamily: "Roboto",
-    backgroundColor: COLORS.white,
+    backgroundColor: C.white,
     paddingTop: 0,
-    paddingBottom: 48,
+    paddingBottom: 52,
     paddingHorizontal: 0,
   },
 
-  // Header
+  // ── Header ────────────────────────────────────────────────────────────────
   header: {
-    backgroundColor: COLORS.text,
+    backgroundColor: C.blue,
     paddingHorizontal: 40,
-    paddingVertical: 20,
+    paddingVertical: 18,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 0,
   },
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
   logo: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     objectFit: "contain",
   },
   headerBrand: {
-    color: COLORS.white,
-    fontSize: 18,
+    color: C.white,
+    fontSize: 17,
     fontWeight: 700,
-    letterSpacing: 0.5,
+    letterSpacing: 0.3,
   },
   headerSub: {
-    color: COLORS.primary,
-    fontSize: 9,
+    color: "#BFDBFE",
+    fontSize: 8,
     marginTop: 1,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     textTransform: "uppercase",
   },
   headerRight: {
     alignItems: "flex-end",
   },
-  headerDate: {
-    color: COLORS.textMuted,
-    fontSize: 8,
+  headerDateLabel: {
+    color: "#93C5FD",
+    fontSize: 7.5,
     marginBottom: 2,
   },
   headerDateValue: {
-    color: COLORS.white,
+    color: C.white,
     fontSize: 10,
     fontWeight: 700,
   },
 
-  // Faixa dourada sob o header
+  // Faixa verde sob o header
   stripe: {
-    backgroundColor: COLORS.primary,
-    height: 4,
+    backgroundColor: C.green,
+    height: 3,
   },
 
-  // Body wrapper
+  // ── Body ──────────────────────────────────────────────────────────────────
   body: {
     paddingHorizontal: 40,
-    paddingTop: 28,
+    paddingTop: 26,
   },
 
-  // Título principal
-  titleSection: {
-    marginBottom: 24,
-    borderBottomWidth: 2,
-    borderBottomColor: COLORS.primary,
-    paddingBottom: 12,
-  },
+  // Título
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
+    marginBottom: 22,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.border,
   },
   titleBadge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: C.greenLight,
+    borderWidth: 1,
+    borderColor: C.greenSoft,
     borderRadius: 4,
-    paddingHorizontal: 8,
+    paddingHorizontal: 7,
     paddingVertical: 3,
   },
   titleBadgeText: {
-    color: COLORS.text,
+    color: C.green,
     fontSize: 7,
     fontWeight: 700,
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   mainTitle: {
-    color: COLORS.text,
-    fontSize: 20,
+    color: C.text,
+    fontSize: 19,
     fontWeight: 700,
   },
 
-  // Cards de info (paciente / médico)
+  // ── Cards de info ─────────────────────────────────────────────────────────
   infoGrid: {
     flexDirection: "row",
-    gap: 14,
-    marginBottom: 24,
+    gap: 12,
+    marginBottom: 22,
   },
-  infoCard: {
+  infoCardPatient: {
     flex: 1,
-    backgroundColor: COLORS.surface,
+    backgroundColor: C.greenLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
+    borderColor: C.greenSoft,
+    padding: 14,
+  },
+  infoCardDoctor: {
+    flex: 1,
+    backgroundColor: C.blueLight,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.blueSoft,
     padding: 14,
   },
   infoCardHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
-    gap: 6,
+    gap: 5,
   },
-  infoCardDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: COLORS.primary,
+  infoCardDotGreen: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: C.green,
   },
-  infoCardTitle: {
-    color: COLORS.primaryDark,
-    fontSize: 8,
+  infoCardDotBlue: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: C.blue,
+  },
+  infoCardTitleGreen: {
+    color: C.green,
+    fontSize: 7.5,
+    fontWeight: 700,
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+  },
+  infoCardTitleBlue: {
+    color: C.blue,
+    fontSize: 7.5,
     fontWeight: 700,
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
   infoRow: {
-    marginBottom: 5,
+    marginBottom: 6,
   },
   infoLabel: {
-    color: COLORS.textMuted,
-    fontSize: 7.5,
+    color: C.textMuted,
+    fontSize: 7,
     marginBottom: 1,
   },
-  infoValue: {
-    color: COLORS.text,
+  infoValueBold: {
+    color: C.text,
     fontSize: 10,
     fontWeight: 700,
   },
-  infoValueNormal: {
-    color: COLORS.text,
+  infoValue: {
+    color: C.textMid,
     fontSize: 9,
   },
 
-  // Seção de medicamentos
+  // ── Medicamentos ──────────────────────────────────────────────────────────
   medSection: {
-    marginBottom: 24,
+    marginBottom: 22,
   },
-  medSectionTitle: {
+  medSectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
     gap: 8,
+    marginBottom: 10,
   },
-  medSectionTitleLine: {
+  medSectionLine: {
     flex: 1,
     height: 1,
-    backgroundColor: COLORS.border,
+    backgroundColor: C.border,
   },
-  medSectionTitleText: {
-    color: COLORS.text,
-    fontSize: 11,
+  medSectionTitle: {
+    color: C.textMid,
+    fontSize: 10,
     fontWeight: 700,
     letterSpacing: 0.3,
   },
-
-  // Card de medicamento
   medCard: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.border,
-    marginBottom: 10,
+    borderColor: C.border,
+    marginBottom: 8,
     overflow: "hidden",
   },
   medCardHeader: {
-    backgroundColor: COLORS.primaryLight,
+    backgroundColor: C.bg,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
+    borderBottomColor: C.border,
   },
   medNumberBadge: {
-    backgroundColor: COLORS.primary,
-    width: 20,
-    height: 20,
-    borderRadius: 10,
+    backgroundColor: C.blue,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 8,
   },
   medNumberText: {
-    color: COLORS.text,
+    color: C.white,
     fontSize: 8,
     fontWeight: 700,
   },
@@ -260,103 +297,128 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   medName: {
-    color: COLORS.text,
-    fontSize: 12,
+    color: C.text,
+    fontSize: 11,
     fontWeight: 700,
     flex: 1,
   },
   medDosageBadge: {
-    backgroundColor: COLORS.primary,
+    backgroundColor: C.blueSoft,
     borderRadius: 4,
     paddingHorizontal: 7,
     paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: C.blue,
   },
   medDosageBadgeText: {
-    color: COLORS.text,
+    color: C.blue,
     fontSize: 8,
     fontWeight: 700,
   },
   medCardBody: {
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     flexDirection: "row",
-    gap: 12,
+    gap: 14,
   },
   medDetail: {
     flex: 1,
   },
   medDetailLabel: {
-    color: COLORS.textMuted,
-    fontSize: 7,
+    color: C.textLight,
+    fontSize: 6.5,
     marginBottom: 2,
     letterSpacing: 0.5,
     textTransform: "uppercase",
   },
   medDetailValue: {
-    color: COLORS.text,
-    fontSize: 9.5,
+    color: C.textMid,
+    fontSize: 9,
   },
   medInstructions: {
     paddingHorizontal: 14,
-    paddingBottom: 10,
+    paddingBottom: 9,
     borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 8,
+    borderTopColor: C.border,
+    paddingTop: 7,
+    backgroundColor: C.goldLight,
   },
   medInstructionsText: {
-    color: COLORS.textMuted,
+    color: C.gold,
     fontSize: 8.5,
-    fontStyle: "italic",
   },
 
-  // Observações
+  // ── Observações ───────────────────────────────────────────────────────────
   obsSection: {
-    backgroundColor: COLORS.accentLight,
+    backgroundColor: C.blueLight,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: COLORS.accent,
-    padding: 14,
-    marginBottom: 24,
+    borderColor: C.blueSoft,
+    padding: 12,
+    marginBottom: 22,
   },
   obsSectionTitle: {
-    color: COLORS.accent,
-    fontSize: 9,
+    color: C.blue,
+    fontSize: 8.5,
     fontWeight: 700,
     letterSpacing: 0.5,
     textTransform: "uppercase",
-    marginBottom: 6,
+    marginBottom: 5,
   },
   obsText: {
-    color: COLORS.text,
+    color: C.textMid,
     fontSize: 9,
     lineHeight: 1.5,
   },
 
-  // Footer
+  // ── Assinatura ────────────────────────────────────────────────────────────
+  signatureSection: {
+    marginTop: 28,
+    marginBottom: 20,
+    alignItems: "center",
+  },
+  signatureLine: {
+    width: 180,
+    height: 1,
+    backgroundColor: C.borderDark,
+    marginBottom: 6,
+  },
+  signatureText: {
+    color: C.text,
+    fontSize: 9,
+    fontWeight: 700,
+  },
+  signatureSubText: {
+    color: C.textMuted,
+    fontSize: 8,
+    marginTop: 2,
+  },
+
+  // ── Footer ────────────────────────────────────────────────────────────────
   footer: {
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
+    borderTopWidth: 2,
+    borderTopColor: C.green,
     paddingHorizontal: 40,
-    paddingVertical: 14,
+    paddingVertical: 12,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: COLORS.white,
+    backgroundColor: C.white,
   },
   footerLeft: {
     flex: 1,
   },
   footerBrand: {
-    color: COLORS.primaryDark,
+    color: C.blue,
     fontSize: 8,
     fontWeight: 700,
   },
   footerSub: {
-    color: COLORS.textMuted,
+    color: C.textLight,
     fontSize: 7,
     marginTop: 1,
   },
@@ -364,35 +426,12 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   footerValidity: {
-    color: COLORS.textMuted,
+    color: C.textMuted,
     fontSize: 7.5,
   },
-  footerPageNum: {
-    color: COLORS.textMuted,
+  footerPage: {
+    color: C.textLight,
     fontSize: 7,
-    marginTop: 2,
-  },
-
-  // Linha divisória de assinatura
-  signatureSection: {
-    marginTop: 32,
-    marginBottom: 24,
-    alignItems: "center",
-  },
-  signatureLine: {
-    width: 200,
-    height: 1,
-    backgroundColor: COLORS.text,
-    marginBottom: 6,
-  },
-  signatureText: {
-    color: COLORS.text,
-    fontSize: 9,
-    fontWeight: 700,
-  },
-  signatureSubText: {
-    color: COLORS.textMuted,
-    fontSize: 8,
     marginTop: 2,
   },
 });
@@ -416,6 +455,7 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
       creator="Novità"
     >
       <Page size="A4" style={styles.page}>
+
         {/* ── Header ─────────────────────────────────────────────────────── */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
@@ -426,7 +466,7 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
             </View>
           </View>
           <View style={styles.headerRight}>
-            <Text style={styles.headerDate}>Data da receita</Text>
+            <Text style={styles.headerDateLabel}>Data da receita</Text>
             <Text style={styles.headerDateValue}>{displayDate}</Text>
           </View>
         </View>
@@ -436,53 +476,51 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
         <View style={styles.body}>
 
           {/* Título */}
-          <View style={styles.titleSection}>
-            <View style={styles.titleRow}>
-              <View style={styles.titleBadge}>
-                <Text style={styles.titleBadgeText}>Documento Oficial</Text>
-              </View>
-              <Text style={styles.mainTitle}>Receita Médica</Text>
+          <View style={styles.titleRow}>
+            <View style={styles.titleBadge}>
+              <Text style={styles.titleBadgeText}>Documento Oficial</Text>
             </View>
+            <Text style={styles.mainTitle}>Receita Médica</Text>
           </View>
 
           {/* Info grid: Paciente + Médico */}
           <View style={styles.infoGrid}>
             {/* Paciente */}
-            <View style={styles.infoCard}>
+            <View style={styles.infoCardPatient}>
               <View style={styles.infoCardHeader}>
-                <View style={styles.infoCardDot} />
-                <Text style={styles.infoCardTitle}>Dados do Paciente</Text>
+                <View style={styles.infoCardDotGreen} />
+                <Text style={styles.infoCardTitleGreen}>Dados do Paciente</Text>
               </View>
               <View style={styles.infoRow}>
                 <Text style={styles.infoLabel}>Nome completo</Text>
-                <Text style={styles.infoValue}>
+                <Text style={styles.infoValueBold}>
                   {data.patientName || "Não identificado"}
                 </Text>
               </View>
             </View>
 
             {/* Médico */}
-            <View style={styles.infoCard}>
+            <View style={styles.infoCardDoctor}>
               <View style={styles.infoCardHeader}>
-                <View style={styles.infoCardDot} />
-                <Text style={styles.infoCardTitle}>Profissional de Saúde</Text>
+                <View style={styles.infoCardDotBlue} />
+                <Text style={styles.infoCardTitleBlue}>Profissional de Saúde</Text>
               </View>
               {data.doctorName && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Médico(a) responsável</Text>
-                  <Text style={styles.infoValue}>{data.doctorName}</Text>
+                  <Text style={styles.infoValueBold}>{data.doctorName}</Text>
                 </View>
               )}
               {data.doctorCRM && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Registro profissional</Text>
-                  <Text style={styles.infoValueNormal}>{data.doctorCRM}</Text>
+                  <Text style={styles.infoValue}>{data.doctorCRM}</Text>
                 </View>
               )}
               {data.specialty && (
                 <View style={styles.infoRow}>
                   <Text style={styles.infoLabel}>Especialidade</Text>
-                  <Text style={styles.infoValueNormal}>{data.specialty}</Text>
+                  <Text style={styles.infoValue}>{data.specialty}</Text>
                 </View>
               )}
             </View>
@@ -491,19 +529,18 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
           {/* Medicamentos */}
           {data.medications.length > 0 && (
             <View style={styles.medSection}>
-              <View style={styles.medSectionTitle}>
-                <View style={styles.medSectionTitleLine} />
-                <Text style={styles.medSectionTitleText}>
+              <View style={styles.medSectionHeader}>
+                <View style={styles.medSectionLine} />
+                <Text style={styles.medSectionTitle}>
                   {data.medications.length === 1
                     ? "1 Medicamento Prescrito"
                     : `${data.medications.length} Medicamentos Prescritos`}
                 </Text>
-                <View style={styles.medSectionTitleLine} />
+                <View style={styles.medSectionLine} />
               </View>
 
               {data.medications.map((med, i) => (
                 <View key={i} style={styles.medCard}>
-                  {/* Cabeçalho do card */}
                   <View style={styles.medCardHeader}>
                     <View style={styles.medNameRow}>
                       <View style={styles.medNumberBadge}>
@@ -518,7 +555,6 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
                     )}
                   </View>
 
-                  {/* Detalhes */}
                   {(med.frequency || med.duration) && (
                     <View style={styles.medCardBody}>
                       {med.frequency && (
@@ -536,12 +572,9 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
                     </View>
                   )}
 
-                  {/* Instruções */}
                   {med.instructions && (
                     <View style={styles.medInstructions}>
-                      <Text style={styles.medInstructionsText}>
-                        {med.instructions}
-                      </Text>
+                      <Text style={styles.medInstructionsText}>{med.instructions}</Text>
                     </View>
                   )}
                 </View>
@@ -581,9 +614,10 @@ export function PrescriptionPdfDocument({ data, logoUrl }: Props) {
             <Text style={styles.footerValidity}>
               Validade: 30 dias a partir da data de emissão
             </Text>
-            <Text style={styles.footerPageNum}>Página 1 de 1</Text>
+            <Text style={styles.footerPage}>Página 1 de 1</Text>
           </View>
         </View>
+
       </Page>
     </Document>
   );

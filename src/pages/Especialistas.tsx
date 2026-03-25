@@ -135,10 +135,12 @@ function ConsultationHistoryCard({
   consultation,
   onJoin,
   onCancel,
+  joiningLoading,
 }: {
   consultation: Consultation;
   onJoin: (c: Consultation) => void;
   onCancel: (id: number) => void;
+  joiningLoading?: boolean;
 }) {
   const normalizedStatus = normalizeConsultationStatus(consultation);
   const isAgendada = !!consultation.dataAgendamento;
@@ -280,15 +282,20 @@ function ConsultationHistoryCard({
           {showJoinButton && (
             <Button
               size="sm"
+              disabled={joiningLoading}
               onClick={() => onJoin(consultation)}
               className={`flex-1 gap-2 ${normalizedStatus === "EM_ATENDIMENTO" ? "bg-green-500 hover:bg-green-600 text-white" : "bg-amber-500 hover:bg-amber-600 text-white"}`}
             >
-              {normalizedStatus === "AGUARDANDO" && !isAgendada ? (
+              {joiningLoading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" />Conectando...</>
+              ) : isAgendada && normalizedStatus === "AGUARDANDO" ? (
+                <><Video className="h-4 w-4" />Iniciar Consulta</>
+              ) : normalizedStatus === "AGUARDANDO" ? (
                 <><Loader2 className="h-4 w-4 animate-spin" />Entrar na Fila</>
               ) : (
                 <><Video className="h-4 w-4" />Entrar na Consulta</>
               )}
-              <ChevronRight className="h-4 w-4 ml-auto" />
+              {!joiningLoading && <ChevronRight className="h-4 w-4 ml-auto" />}
             </Button>
           )}
 
@@ -501,6 +508,7 @@ const Especialistas = () => {
   const [hasLoadedConsultations, setHasLoadedConsultations] = useState(false);
   const [joiningConsultation, setJoiningConsultation] =
     useState<Consultation | null>(null);
+  const [joiningLoading, setJoiningLoading] = useState(false);
   const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("");
@@ -548,6 +556,7 @@ const Especialistas = () => {
     loadAvailableProfessionals,
     loadAvailableSchedules,
     loadConsultations,
+    joinScheduledConsultation,
     cancelConsultation,
     closeConsultation,
     resetFlow,
@@ -1315,21 +1324,120 @@ const Especialistas = () => {
 
   // ── Join existing consultation ────────────────────────────────────────────
 
+  /**
+   * Resolve o pacienteToken para entrar em uma consulta.
+   * Hierarquia de fontes:
+   *  1. Token na própria consulta (raramente disponível via /obter)
+   *  2. localStorage (salvo no momento da criação — persiste entre sessões)
+   *  3. activeConsultation na mesma sessão
+   *  4. GET /api/Atendimentos/{id} (fallback de rede)
+   */
+  const resolvePatientToken = async (consultation: Consultation): Promise<string | null> => {
+    const { assemedClient } = await import("@/integrations/assemed/client");
+
+    // 1. Token já presente
+    if (consultation.pacienteToken) {
+      console.info("[Especialistas] token disponível na consulta:", consultation.id);
+      return consultation.pacienteToken;
+    }
+
+    // 2. localStorage (consultas agendadas podem ser de sessões anteriores)
+    const cached = assemedClient.getPatientToken(consultation.id);
+    if (cached) {
+      console.info("[Especialistas] token recuperado do localStorage:", consultation.id);
+      return cached;
+    }
+
+    // 3. Mesma sessão — activeConsultation pode ter o token do POST de criação
+    if (activeConsultation?.id === consultation.id && activeConsultation.pacienteToken) {
+      console.info("[Especialistas] token recuperado do activeConsultation:", consultation.id);
+      assemedClient.storePatientToken(consultation.id, activeConsultation.pacienteToken);
+      return activeConsultation.pacienteToken;
+    }
+
+    // 4. Último recurso: GET /api/Atendimentos/{id}
+    try {
+      console.info("[Especialistas] buscando token via GET /api/Atendimentos/", consultation.id);
+      const fresh = await assemedClient.getConsultation(consultation.id);
+      console.info("[Especialistas] getConsultation →", fresh?.id, "pacienteToken:", fresh?.pacienteToken ?? "null");
+      if (fresh?.pacienteToken) {
+        assemedClient.storePatientToken(fresh.id, fresh.pacienteToken);
+        return fresh.pacienteToken;
+      }
+    } catch (err) {
+      console.error("[Especialistas] erro ao buscar consulta:", err);
+    }
+
+    console.error("[Especialistas] pacienteToken não encontrado para consulta:", consultation.id);
+    return null;
+  };
+
   const handleJoinConsultation = async (consultation: Consultation) => {
-    // Se o token estiver ausente, busca detalhes atualizados da consulta
-    if (!consultation.pacienteToken) {
-      try {
-        const { assemedClient } = await import("@/integrations/assemed/client");
-        const fresh = await assemedClient.getConsultation(consultation.id);
-        if (fresh && fresh.pacienteToken) {
-          setJoiningConsultation(fresh);
+    setJoiningLoading(true);
+    try {
+      const isAgendada = !!consultation.dataAgendamento;
+      const normalizedStatus = normalizeConsultationStatus(consultation);
+
+      // Consulta agendada em espera: inclui na fila via API
+      if (isAgendada && normalizedStatus === "AGUARDANDO") {
+        const result = await joinScheduledConsultation(consultation.id);
+
+        if (!result) {
+          // Erro já tratado pelo hook (setError)
           return;
         }
-      } catch {
-        // fallback: usa a consulta original mesmo sem token
+
+        if (result.pendingBillingSessionSecret) {
+          toast({
+            title: "Pagamento pendente",
+            description: "Conclua o pagamento para entrar na consulta.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (!result.pacienteToken) {
+          toast({
+            title: "Erro ao iniciar consulta",
+            description: "Não foi possível iniciar a consulta. Tente novamente.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (result.existePacienteAguardandoSemProfissional) {
+          toast({
+            title: "Aguardando profissional",
+            description: "Você está na fila. O especialista será notificado em instantes.",
+          });
+        }
+
+        setJoiningConsultation({ ...consultation, pacienteToken: result.pacienteToken });
+        return;
       }
+
+      // Consulta imediata ou em atendimento: resolve token pelos caches/API
+      const token = await resolvePatientToken(consultation);
+
+      if (!token) {
+        toast({
+          title: "Sessão expirada",
+          description: "Não foi possível recuperar o acesso à consulta. Tente novamente ou entre em contato com o suporte.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setJoiningConsultation({ ...consultation, pacienteToken: token });
+    } catch {
+      toast({
+        title: "Erro ao iniciar consulta",
+        description: "Não foi possível iniciar a consulta. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setJoiningLoading(false);
     }
-    setJoiningConsultation(consultation);
   };
 
   // ── Cancel consultation ───────────────────────────────────────────────────
@@ -1422,7 +1530,19 @@ const Especialistas = () => {
     );
   }
 
+  // ── Render: loading ao entrar em consulta existente ─────────────────────────
+
+  if (joiningLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Estamos conectando você ao especialista…</p>
+      </div>
+    );
+  }
+
   // ── Render: full-screen iframe for joining existing consultation ───────────
+  // Só renderiza se o token foi resolvido — handleJoinConsultation garante isso.
 
   if (joiningConsultation && joiningConsultation.pacienteToken) {
     return (
@@ -1813,6 +1933,7 @@ const Especialistas = () => {
                     consultation={consultation}
                     onJoin={handleJoinConsultation}
                     onCancel={handleCancelConsultation}
+                    joiningLoading={joiningLoading}
                   />
                 ))}
               </div>

@@ -355,7 +355,13 @@ export function useAssemedConsultation() {
           pacienteId,
           respostasAnamnese: respostasAnamnese || [],
           exames: exames || [],
+          pacienteToken: assemedClient.getGlobalPatientToken() || undefined,
         });
+
+        // Persiste o pacienteToken no cache para uso posterior (entrada na sala)
+        if (consultation.pacienteToken) {
+          assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
+        }
 
         setState((prev) => ({
           ...prev,
@@ -492,6 +498,7 @@ export function useAssemedConsultation() {
           cupomCodigo: "",
           textoPerguntaPaciente: "",
           fusoUsuario: 180,
+          pacienteToken: assemedClient.getGlobalPatientToken() || undefined,
         };
 
         console.log("[Agendamento] Slot original da API:", JSON.stringify(slot));
@@ -500,6 +507,11 @@ export function useAssemedConsultation() {
         // Cria o agendamento
         const consultation = await assemedClient.createConsultation(payload);
         logger.info("[Agendamento] Consulta criada com sucesso:", consultation);
+
+        // Persiste o pacienteToken no cache — o endpoint /obter não retorna o token
+        if (consultation.pacienteToken) {
+          assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
+        }
 
         // Pós-agendamento: busca lista de consultas para garantir dados completos
         setState((prev) => ({ ...prev, isLoadingConsultations: true }));
@@ -535,17 +547,22 @@ export function useAssemedConsultation() {
 
         if (foundConsultation) {
           logger.info("[Agendamento] Consulta agendada encontrada:", foundConsultation);
+          // Preserva o pacienteToken da resposta de criação — o endpoint /obter
+          // não retorna pacienteToken, mas o POST /api/Atendimentos sim.
           setState((prev) => ({
             ...prev,
             step: "in_consultation",
-            activeConsultation: foundConsultation,
+            activeConsultation: {
+              ...foundConsultation,
+              pacienteToken: foundConsultation.pacienteToken || consultation.pacienteToken,
+            },
           }));
         } else {
           logger.warn("[Agendamento] Não foi possível identificar a consulta recém-agendada.");
           setState((prev) => ({
             ...prev,
             step: "in_consultation",
-            activeConsultation: consultation, // fallback
+            activeConsultation: consultation, // fallback — já tem o token
           }));
         }
         return true;
@@ -580,6 +597,24 @@ export function useAssemedConsultation() {
       setState((prev) => ({ ...prev, isLoadingConsultations: false }));
     }
   }, [state.accessToken]);
+
+  /**
+   * Inclui uma consulta agendada na fila e retorna os dados de sessão.
+   * Deve ser chamado ao clicar em "Iniciar consulta" no dia do agendamento.
+   */
+  const joinScheduledConsultation = useCallback(
+    async (consultationId: number): Promise<CreateConsultationResponse | null> => {
+      try {
+        return await assemedClient.incluirAtendimentoAgendadoNaFila(consultationId);
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error ? err.message : "Não foi possível iniciar a consulta. Tente novamente.";
+        setError(message);
+        return null;
+      }
+    },
+    []
+  );
 
   /**
    * Cancela uma consulta
@@ -648,6 +683,7 @@ export function useAssemedConsultation() {
     loadAvailableProfessionals,
     loadAvailableSchedules,
     loadConsultations,
+    joinScheduledConsultation,
     cancelConsultation,
     closeConsultation,
     resetFlow,

@@ -1107,12 +1107,21 @@ function ConsultationIframe({
 
   const handleEnterClick = async () => {
     setIsLoading(true);
-    // Fetch fresh consultation token only when user explicitly clicks
     if (!localToken) {
       try {
         const { assemedClient } = await import("@/integrations/assemed/client");
-        const fresh = await assemedClient.getConsultation(atendimentoId);
-        if (fresh?.pacienteToken) setLocalToken(fresh.pacienteToken);
+        // 1. Verifica cache (token salvo quando a consulta foi criada)
+        const cached = assemedClient.getPatientToken(atendimentoId);
+        if (cached) {
+          setLocalToken(cached);
+        } else {
+          // 2. Busca via GET /api/Atendimentos/{id}
+          const fresh = await assemedClient.getConsultation(atendimentoId);
+          if (fresh?.pacienteToken) {
+            assemedClient.storePatientToken(fresh.id, fresh.pacienteToken);
+            setLocalToken(fresh.pacienteToken);
+          }
+        }
       } catch (err) {
         toast({
           title: "Erro ao preparar consulta",

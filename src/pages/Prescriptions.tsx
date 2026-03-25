@@ -12,10 +12,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import {
   Search, FileText, Loader2, Download, ExternalLink,
-  Pill, ShoppingCart, Star, Package, AlertTriangle, CheckCircle2, Upload, Wand2,
+  Pill, ShoppingCart, Star, Package, AlertTriangle, CheckCircle2, Upload,
   Stethoscope,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -51,7 +50,6 @@ function saveCart(cart: CartEntry[]) {
 
 const Prescriptions = () => {
   const { toast } = useToast();
-  const navigate = useNavigate();
   const { accessToken: assemedAccessToken, isLoading: assemedLoading } = useAssemedToken();
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -426,31 +424,6 @@ const Prescriptions = () => {
                       <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
                     </Button>
                     <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2 border-primary/40 text-primary hover:bg-primary/5"
-                      onClick={() =>
-                        navigate("/receita/reformatar", {
-                          state: {
-                            pdfUrl: rec.urlPdf,
-                            doctorName: rec.profissional || undefined,
-                            specialty: rec.especialidade,
-                            date: (() => {
-                              try {
-                                return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR });
-                              } catch {
-                                return undefined;
-                              }
-                            })(),
-                            consultationId: rec.consultationId,
-                          },
-                        })
-                      }
-                    >
-                      <Wand2 className="h-4 w-4" />
-                      Reformatar Receita
-                    </Button>
-                    <Button
                       size="sm"
                       className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
                       onClick={() => handleAnalyze(rec)}
@@ -647,14 +620,14 @@ const Prescriptions = () => {
                     </Button>
                   )}
 
-                  <Button
+                  {/* <Button
                     variant="ghost"
                     size="sm"
                     className="w-full text-muted-foreground"
                     onClick={() => setParserStep("manual")}
                   >
                     Não encontrou o que procura? Buscar manualmente
-                  </Button>
+                  </Button> */}
                 </>
               )}
             </div>

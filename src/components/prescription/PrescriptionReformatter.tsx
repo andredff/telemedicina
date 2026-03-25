@@ -163,7 +163,8 @@ export function PrescriptionReformatter({
             patientName: parsed.patientName || initialMeta?.patientName,
           };
           setData(merged);
-          setStep("review");
+          // Extração automática bem-sucedida → vai direto para preview
+          setStep("preview");
         } else {
           // CORS bloqueou — vai para upload/manual com metadados pré-preenchidos
           setData({
@@ -622,7 +623,7 @@ export function PrescriptionReformatter({
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={() => setStep("review")}>
-            ← Voltar para edição
+            ← Editar dados
           </Button>
           <PDFDownloadLink
             document={<PrescriptionPdfDocument data={data} logoUrl={logoUrl} />}

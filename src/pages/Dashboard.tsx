@@ -598,7 +598,7 @@ const Dashboard = () => {
                         onClick={() => handleAnalyze(rec)}
                       >
                         <Pill className="h-3.5 w-3.5" />
-                        Analisar Medicamentos
+                        Verificar Medicamentos
                       </Button>
                     </div>
                   </CardContent>
@@ -743,7 +743,7 @@ const Dashboard = () => {
                     </Button>
                   )}
                   <Button variant="ghost" size="sm" className="w-full text-muted-foreground" onClick={() => setParserStep("manual")}>
-                    Não encontrou? Buscar manualmente
+                    Imprimir sua receita
                   </Button>
                 </>
               )}
