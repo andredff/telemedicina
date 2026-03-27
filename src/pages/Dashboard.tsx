@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import Header from "@/components/Header";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
@@ -53,6 +54,15 @@ interface UserSubscription {
     type: string;
     description: string;
   } | null;
+}
+
+// ─── Cart helpers ─────────────────────────────────────────────────────────────
+interface CartEntry { cartItemId: string; name: string; dosage: string; price: number; quantity: number; }
+function loadCart(): CartEntry[] {
+  try { return JSON.parse(localStorage.getItem("cart") || "[]"); } catch { return []; }
+}
+function saveCart(cart: CartEntry[]) {
+  localStorage.setItem("cart", JSON.stringify(cart));
 }
 
 // ─── Time-based greeting ─────────────────────────────────────────────────────
