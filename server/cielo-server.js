@@ -28,6 +28,12 @@ if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.log("✓ Supabase client initialized");
 }
 
+// ─── Receitas — OCR + IA + Matching ─────────────────────────────────────────
+// Disponibiliza supabase para os handlers de receita via app.locals
+app.locals.supabase = supabase;
+const receitasRouter = require("./receitas/index");
+app.use("/api/receitas", receitasRouter);
+
 // ─── Sistema de Notificações por E-mail ────────────────────────────────────
 const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
@@ -859,9 +865,44 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// ─── /api/receitas/extrair — alias para o novo pipeline ──────────────────────
+// Mantém compatibilidade retroativa. O pipeline completo (OCR + IA + matching)
+// está em /api/receitas/analisar (server/receitas/index.js).
+// Este endpoint delega internamente e adapta a resposta ao formato antigo.
+const multerLegacy = require("multer");
+const uploadLegacy = multerLegacy({ storage: multerLegacy.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+app.post("/api/receitas/extrair", uploadLegacy.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+
+    const { extractText }        = require("./receitas/ocr");
+    const { extractMedications } = require("./receitas/ai");
+
+    const ocrResult = await extractText(file.buffer, file.mimetype);
+    if (!ocrResult.text || ocrResult.text.trim().length < 10) {
+      return res.status(422).json({ error: "Não foi possível extrair texto do arquivo." });
+    }
+
+    const aiResult = await extractMedications(ocrResult.text);
+
+    // Retorna no formato legado esperado pelo frontend anterior
+    return res.json({
+      medicamentos: aiResult.medicamentos,
+      provider: aiResult.provider,
+    });
+  } catch (err) {
+    console.error("[receitas/extrair] Erro:", err);
+    return res.status(500).json({ error: "Erro interno ao processar a receita." });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
+  const groqStatus  = process.env.GROQ_API_KEY        ? "configurado" : "não configurado";
+  const ollamaInfo  = "ver /api/receitas/status";
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║  Novità — Backend Server                                 ║
@@ -870,6 +911,13 @@ app.listen(PORT, () => {
 ║  Pagamentos: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${MERCHANT_ID ? MERCHANT_ID.substring(0, 8) + "..." : "não configurado"}          ║
 ║  E-mails:    ${emailMode.padEnd(32)}║
 ║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║
+║                                                          ║
+║  Receitas — OCR + IA + Matching:                         ║
+║  POST /api/receitas/analisar        (arquivo)            ║
+║  POST /api/receitas/analisar-texto  (texto colado)       ║
+║  GET  /api/receitas/status          (provedores IA)      ║
+║  Groq:   ${groqStatus.padEnd(42)}║
+║  Ollama: ${ollamaInfo.padEnd(42)}║
 ║                                                          ║
 ║  Endpoints de notificação:                               ║
 ║  POST /api/notifications/events                          ║

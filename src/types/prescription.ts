@@ -26,3 +26,15 @@ export interface CartItem extends Medication {
   pharmacyId?: string;
   pharmacyName?: string;
 }
+
+/** Item de catálogo adicionado via receita (sem FK em medications) */
+export interface CatalogCartItem {
+  cartItemId: string;  // medicamentoId do catálogo
+  name: string;
+  dosage: string;
+  price: number;
+  quantity: number;
+  maxQuantity?: number;  // limite prescrito na receita
+  principioAtivo?: string;
+  receitaId?: string;   // consultationId da receita de origem (para rastreabilidade)
+}

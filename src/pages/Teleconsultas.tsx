@@ -329,7 +329,7 @@ function ConsultationHistoryCard({
           )}
 
           {/* View prescription */}
-          {normalizedStatus === "CONCLUIDO" && receituarioUrl && (
+          {/* {normalizedStatus === "CONCLUIDO" && receituarioUrl && (
             <Button
               size="sm"
               variant="outline"
@@ -337,9 +337,9 @@ function ConsultationHistoryCard({
               onClick={() => window.open(receituarioUrl, "_blank")}
             >
               <FileText className="h-4 w-4" />
-              Ver Receita
+              Ir para receituario
             </Button>
-          )}
+          )} */}
 
           {/* Evaluate */}
           {normalizedStatus === "CONCLUIDO" && (

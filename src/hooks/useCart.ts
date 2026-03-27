@@ -1,8 +1,22 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { CartItem } from "@/types/prescription";
+import type { CartItem, CatalogCartItem } from "@/types/prescription";
 
 const LOCAL_KEY = "cart";
+const CATALOG_KEY = "catalog_cart";
+
+function readCatalogLocal(): CatalogCartItem[] {
+  try {
+    return JSON.parse(localStorage.getItem(CATALOG_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function writeCatalogLocal(items: CatalogCartItem[]) {
+  localStorage.setItem(CATALOG_KEY, JSON.stringify(items));
+  window.dispatchEvent(new Event("storage"));
+}
 
 function readLocal(): CartItem[] {
   try {
@@ -26,9 +40,19 @@ function writeLocal(items: CartItem[]) {
  */
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>([]);
+  const [catalogItems, setCatalogItems] = useState<CatalogCartItem[]>(readCatalogLocal());
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const synced = useRef(false);
+
+  // ── Sync catalogItems from localStorage on storage events ─────────────────
+  useEffect(() => {
+    function onStorage() {
+      setCatalogItems(readCatalogLocal());
+    }
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
 
   // ── Auth listener ──────────────────────────────────────────────────────────
   useEffect(() => {
@@ -211,13 +235,58 @@ export function useCart() {
     setItems([]);
   }, [userId]);
 
+  // ── Catalog cart mutations ─────────────────────────────────────────────────
+
+  const addCatalogItem = useCallback((item: CatalogCartItem) => {
+    const current = readCatalogLocal();
+    const existing = current.find(i => i.cartItemId === item.cartItemId);
+    let updated: CatalogCartItem[];
+    if (existing) {
+      updated = current.map(i =>
+        i.cartItemId === item.cartItemId ? { ...i, quantity: item.quantity } : i
+      );
+    } else {
+      updated = [...current, item];
+    }
+    writeCatalogLocal(updated);
+    setCatalogItems(updated);
+  }, []);
+
+  const updateCatalogQuantity = useCallback((cartItemId: string, newQuantity: number) => {
+    if (newQuantity < 1) return;
+    const updated = readCatalogLocal().map(i => {
+      if (i.cartItemId !== cartItemId) return i;
+      const capped = i.maxQuantity !== undefined ? Math.min(newQuantity, i.maxQuantity) : newQuantity;
+      return { ...i, quantity: capped };
+    });
+    writeCatalogLocal(updated);
+    setCatalogItems(updated);
+  }, []);
+
+  const removeCatalogItem = useCallback((cartItemId: string) => {
+    const updated = readCatalogLocal().filter(i => i.cartItemId !== cartItemId);
+    writeCatalogLocal(updated);
+    setCatalogItems(updated);
+  }, []);
+
+  const clearCatalogItems = useCallback(() => {
+    localStorage.removeItem(CATALOG_KEY);
+    window.dispatchEvent(new Event("storage"));
+    setCatalogItems([]);
+  }, []);
+
   return {
     items,
+    catalogItems,
     loading,
-    count: items.length,
+    count: items.length + catalogItems.length,
     addItems,
     updateQuantity,
     removeItem,
     clearCart,
+    addCatalogItem,
+    updateCatalogQuantity,
+    removeCatalogItem,
+    clearCatalogItems,
   };
 }
