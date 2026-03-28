@@ -11,13 +11,51 @@ import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
 import {
   Trash2, ShoppingCart, Plus, Minus, Truck, Store,
-  Tag, ShoppingBag, ArrowRight, Shield, RotateCcw, AlertTriangle,
+  Tag, ShoppingBag, ArrowRight, Shield, RotateCcw, AlertTriangle, Pill,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
 import type { CartItem, CatalogCartItem } from "@/types/prescription";
 
 // ─── Item row component ───────────────────────────────────────────────────────
+
+function QuantityControl({
+  quantity,
+  onDecrease,
+  onIncrease,
+  disableDecrease,
+  disableIncrease,
+}: {
+  quantity: number;
+  onDecrease: () => void;
+  onIncrease: () => void;
+  disableDecrease: boolean;
+  disableIncrease: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg p-0.5">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md hover:bg-background"
+        onClick={onDecrease}
+        disabled={disableDecrease}
+      >
+        <Minus className="h-3 w-3" />
+      </Button>
+      <span className="w-8 text-center text-sm font-semibold tabular-nums">{quantity}</span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md hover:bg-background"
+        onClick={onIncrease}
+        disabled={disableIncrease}
+      >
+        <Plus className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
 
 function PrescriptionItemRow({
   item,
@@ -29,67 +67,49 @@ function PrescriptionItemRow({
   onRemove: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-4 py-5 border-b border-border/50 last:border-0">
+    <div className="flex gap-4 py-4 border-b border-border/40 last:border-0">
       {/* Icon */}
-      <div className="h-12 w-12 rounded-xl bg-primary/8 flex items-center justify-center shrink-0">
-        <ShoppingCart className="h-5 w-5 text-primary/60" />
+      <div className="h-11 w-11 rounded-xl bg-primary/8 flex items-center justify-center shrink-0 mt-0.5">
+        <Pill className="h-5 w-5 text-primary/70" />
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <p className="font-semibold text-foreground leading-snug">{item.name}</p>
-            {item.dosage && (
-              <p className="text-xs text-muted-foreground mt-0.5">{item.dosage}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm text-foreground leading-snug">{item.name}</p>
+            {item.dosage && <p className="text-xs text-muted-foreground mt-0.5">{item.dosage}</p>}
+            {item.frequency && <p className="text-xs text-muted-foreground/70 mt-0.5">{item.frequency}</p>}
+            {item.pharmacyName && (
+              <span className="inline-flex items-center gap-1 text-[11px] bg-primary/8 text-primary px-2 py-0.5 rounded-full mt-1">
+                <Store className="h-2.5 w-2.5" />
+                {item.pharmacyName}
+              </span>
             )}
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {item.frequency && (
-                <span className="text-xs text-muted-foreground">{item.frequency}</span>
-              )}
-              {item.pharmacyName && (
-                <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                  <Store className="h-3 w-3" />
-                  {item.pharmacyName}
-                </span>
-              )}
-            </div>
           </div>
-          <p className="font-bold text-foreground shrink-0">
+          <p className="font-bold text-base text-foreground shrink-0 tabular-nums">
             R$ {(item.price * item.quantity).toFixed(2)}
           </p>
         </div>
 
         <div className="flex items-center justify-between mt-3">
-          <p className="text-xs text-muted-foreground">
-            R$ {item.price.toFixed(2)} / unid.
+          <p className="text-xs text-muted-foreground tabular-nums">
+            R$ {item.price.toFixed(2)} × {item.quantity}
           </p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 rounded-lg"
-              onClick={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
-              disabled={item.quantity <= 1}
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="w-8 text-center text-sm font-semibold tabular-nums">
-              {item.quantity}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 rounded-lg"
-              onClick={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
+          <div className="flex items-center gap-2">
+            <QuantityControl
+              quantity={item.quantity}
+              onDecrease={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
+              onIncrease={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
+              disableDecrease={item.quantity <= 1}
+              disableIncrease={false}
+            />
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 ml-1"
+              className="h-7 w-7 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
               onClick={() => onRemove(item.cartItemId)}
+              title="Remover item"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>
@@ -110,65 +130,56 @@ function CatalogItemRow({
   onRemove: (id: string) => void;
 }) {
   return (
-    <div className="flex gap-4 py-5 border-b border-border/50 last:border-0">
+    <div className="flex gap-4 py-4 border-b border-border/40 last:border-0">
       {/* Icon */}
-      <div className="h-12 w-12 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-        <Tag className="h-5 w-5 text-emerald-600" />
+      <div className="h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+        <Tag className="h-4.5 w-4.5 text-emerald-600" />
       </div>
 
       {/* Info */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-semibold text-foreground leading-snug">{item.name}</p>
-              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4 shrink-0">
+              <p className="font-semibold text-sm text-foreground leading-snug">{item.name}</p>
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4 shrink-0 font-medium">
                 Com desconto
               </Badge>
             </div>
-            {item.principioAtivo && (
-              <p className="text-xs text-muted-foreground mt-0.5">{item.principioAtivo}</p>
-            )}
-            {item.dosage && (
-              <p className="text-xs text-muted-foreground">{item.dosage}</p>
+            {item.principioAtivo && <p className="text-xs text-muted-foreground mt-0.5">{item.principioAtivo}</p>}
+            {item.dosage && <p className="text-xs text-muted-foreground/70">{item.dosage}</p>}
+            {item.receitaId && (
+              <p className="text-[11px] text-emerald-600/80 mt-0.5">Receita #{item.receitaId}</p>
             )}
           </div>
-          <p className="font-bold text-foreground shrink-0">
+          <p className="font-bold text-base text-foreground shrink-0 tabular-nums">
             R$ {(item.price * item.quantity).toFixed(2)}
           </p>
         </div>
 
         <div className="flex items-center justify-between mt-3">
-          <p className="text-xs text-muted-foreground">
-            R$ {item.price.toFixed(2)} / unid.
+          <p className="text-xs text-muted-foreground tabular-nums">
+            R$ {item.price.toFixed(2)} × {item.quantity}
+            {item.maxQuantity !== undefined && (
+              <span className="ml-1 text-muted-foreground/60">
+                (máx. {item.maxQuantity})
+              </span>
+            )}
           </p>
-          <div className="flex items-center gap-1">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 rounded-lg"
-              onClick={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
-              disabled={item.quantity <= 1}
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="w-8 text-center text-sm font-semibold tabular-nums">
-              {item.quantity}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-7 w-7 rounded-lg"
-              onClick={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
-              disabled={item.maxQuantity !== undefined && item.quantity >= item.maxQuantity}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
+          <div className="flex items-center gap-2">
+            <QuantityControl
+              quantity={item.quantity}
+              onDecrease={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
+              onIncrease={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
+              disableDecrease={item.quantity <= 1}
+              disableIncrease={item.maxQuantity !== undefined && item.quantity >= item.maxQuantity}
+            />
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 rounded-lg text-destructive hover:text-destructive hover:bg-destructive/10 ml-1"
+              className="h-7 w-7 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
               onClick={() => onRemove(item.cartItemId)}
+              title="Remover item"
             >
               <Trash2 className="h-3.5 w-3.5" />
             </Button>

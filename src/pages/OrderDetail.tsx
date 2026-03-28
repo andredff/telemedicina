@@ -26,7 +26,10 @@ import {
   CheckCircle,
   Printer,
   Share2,
-  XCircle
+  XCircle,
+  FileText,
+  Stethoscope,
+  ExternalLink,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -54,6 +57,9 @@ interface Order {
   installments: number | null;
   shipping_cost: number;
   subtotal: number;
+  receita_id: string | null;
+  receita_url_pdf: string | null;
+  consulta_id: string | null;
 }
 
 const OrderDetail = () => {
@@ -365,6 +371,58 @@ const OrderDetail = () => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Receita / Consulta Card */}
+            {(order.receita_id || order.consulta_id) && (
+              <Card className="border-primary/20 bg-primary/[0.02]">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Stethoscope className="h-5 w-5 text-primary" />
+                    Origem do Pedido
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">
+                        Consulta #{order.receita_id ?? order.consulta_id}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Receita vinculada ao pedido
+                      </p>
+                    </div>
+                  </div>
+                  {order.receita_url_pdf && (
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="flex-1 gap-1.5"
+                        onClick={() => window.open(order.receita_url_pdf!, "_blank")}
+                      >
+                        <FileText className="h-4 w-4" />
+                        Ver Receita
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => window.open(order.receita_url_pdf!, "_blank")}
+                        title="Abrir em nova aba"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+                  <Badge className="bg-primary/10 text-primary border-primary/20 text-xs">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Vinculado à receita
+                  </Badge>
+                </CardContent>
+              </Card>
+            )}
 
             {/* Payment Info Card */}
             <Card>

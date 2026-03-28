@@ -9,7 +9,8 @@ import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner"
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText, Calendar, ChevronRight, Video, Pill, Crown,
-  Stethoscope, ArrowRight, Sparkles, Package,
+  Stethoscope, ArrowRight, Sparkles, Package, CheckCircle2,
+  ShoppingCart, User,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -19,6 +20,7 @@ import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 
 interface AssemedReceituario {
   consultationId: number;
@@ -71,6 +73,7 @@ const Dashboard = () => {
   const [selectedRec, setSelectedRec] = useState<AssemedReceituario | null>(null);
 
   const { accessToken: assemedAccessToken } = useAssemedToken();
+  const { isPaid } = usePaidPrescriptions();
 
   const openMedicModal = (rec: AssemedReceituario) => {
     setSelectedRec(rec);
@@ -398,21 +401,19 @@ const Dashboard = () => {
           <p className="section-title">Acesso rápido</p>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {quickActions.map(({ label, sublabel, icon: Icon, color, bg, route }) => (
-              <Card
+              <button
                 key={route}
-                className="bg-card border-border/50 hover:shadow-md hover:border-primary/20 transition-all cursor-pointer group"
+                className="group text-left bg-card border border-border/50 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 hover:shadow-md hover:border-primary/20 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 onClick={() => navigate(route)}
               >
-                <CardContent className="p-4 sm:p-5 flex flex-col items-center text-center gap-3">
-                  <div className={`w-12 h-12 rounded-2xl ${bg} flex items-center justify-center transition-colors`}>
-                    <Icon className={`h-6 w-6 ${color}`} />
-                  </div>
-                  <div>
-                    <p className="font-semibold text-sm text-foreground leading-tight">{label}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">{sublabel}</p>
-                  </div>
-                </CardContent>
-              </Card>
+                <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center transition-colors group-hover:scale-105 duration-200`}>
+                  <Icon className={`h-5 w-5 ${color}`} />
+                </div>
+                <div>
+                  <p className="font-semibold text-sm text-foreground leading-tight">{label}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{sublabel}</p>
+                </div>
+              </button>
             ))}
           </div>
         </div>
@@ -470,68 +471,93 @@ const Dashboard = () => {
                 ))}
               </>
             ) : receituarios.length > 0 ? (
-              receituarios.map((rec) => (
+              receituarios.map((rec) => {
+                const pago = isPaid(rec.consultationId);
+                const dataFormatada = (() => {
+                  try { return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR }); } catch { return rec.data; }
+                })();
+                const horaFormatada = (() => {
+                  try { return format(new Date(rec.data), "HH:mm", { locale: ptBR }); } catch { return ""; }
+                })();
+                return (
                 <Card
                   key={rec.consultationId}
-                  className="bg-card border-border/50 transition-all hover:shadow-md hover:border-primary/20 flex flex-col"
+                  className={`flex flex-col overflow-hidden border transition-all duration-200 hover:shadow-md ${
+                    pago
+                      ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
+                      : "border-border/60 bg-card hover:border-primary/30"
+                  }`}
                 >
-                  <CardHeader className="pb-2">
-                    <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                          <FileText className="h-4 w-4 text-primary" />
+                  {/* Status bar */}
+                  <div className={`h-1 w-full ${pago ? "bg-blue-400" : "bg-emerald-500"}`} />
+
+                  <div className="p-4 flex flex-col flex-1 gap-3">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          pago ? "bg-blue-100" : "bg-primary/10"
+                        }`}>
+                          <FileText className={`h-4 w-4 ${pago ? "text-blue-600" : "text-primary"}`} />
                         </div>
-                        <CardTitle className="text-sm font-semibold">
-                          Consulta #{rec.consultationId}
-                        </CardTitle>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-sm text-foreground leading-tight">Receituário</p>
+                          <p className="text-xs text-muted-foreground">#{rec.consultationId}</p>
+                        </div>
                       </div>
-                      <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] shrink-0">
-                        Concluída
+                      <Badge className={`shrink-0 text-[10px] font-medium px-2 py-0.5 ${
+                        pago
+                          ? "bg-blue-100 text-blue-700 border-blue-200"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      }`}>
+                        {pago
+                          ? <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
+                          : <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
+                        }
                       </Badge>
                     </div>
-                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2">
-                      <Calendar className="h-3 w-3 shrink-0" />
-                      {(() => {
-                        try { return format(new Date(rec.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }); }
-                        catch { return rec.data; }
-                      })()}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="flex flex-col flex-1 justify-between gap-3">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Especialidade</p>
-                        <p className="text-sm font-medium mt-0.5">{rec.especialidade}</p>
+
+                    {/* Info */}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center gap-2 text-sm">
+                        <Stethoscope className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-foreground font-medium truncate">{rec.especialidade}</span>
                       </div>
                       {rec.profissional && (
-                        <div className="text-right">
-                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Profissional</p>
-                          <p className="text-sm font-medium mt-0.5 max-w-[120px] truncate" title={rec.profissional}>
-                            {rec.profissional}
-                          </p>
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <User className="h-3.5 w-3.5 shrink-0" />
+                          <span className="truncate">{rec.profissional}</span>
                         </div>
                       )}
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Calendar className="h-3.5 w-3.5 shrink-0" />
+                        <span>{dataFormatada}{horaFormatada && <span className="ml-1 opacity-70">· {horaFormatada}</span>}</span>
+                      </div>
                     </div>
-                    {/* <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2 text-xs"
-                      onClick={() => window.open(rec.urlPdf, "_blank")}
-                    >
-                      <Download className="h-3.5 w-3.5" />
-                      Baixar Receituário
-                    </Button> */}
-                    <Button
-                      size="sm"
-                      className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
-                      onClick={() => openMedicModal(rec)}
-                    >
-                      <Pill className="h-4 w-4" />
-                      Adquirir medicamentos da receita
-                    </Button>
-                  </CardContent>
+
+                    {/* Action */}
+                    <div className="mt-auto">
+                      <Button
+                        size="sm"
+                        className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
+                          pago
+                            ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                        disabled={pago}
+                        onClick={() => openMedicModal(rec)}
+                        variant="ghost"
+                      >
+                        {pago
+                          ? <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
+                          : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
+                        }
+                      </Button>
+                    </div>
+                  </div>
                 </Card>
-              ))
+                );
+              })
             ) : (
               <div className="col-span-full">
                 <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border bg-muted/30">

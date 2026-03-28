@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
-  Search, FileText, Loader2, Download, ExternalLink,
-  Stethoscope, ShoppingCart, Pill,
+  Search, FileText, Loader2,
+  Stethoscope, ShoppingCart, Pill, CheckCircle2, Calendar, User,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -17,6 +17,7 @@ import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { AssemedApiError } from "@/integrations/assemed/client";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,7 @@ const Prescriptions = () => {
 
   // Carrinho
   const [cartCount, setCartCount] = useState(() => loadCart().length);
+  const { isPaid } = usePaidPrescriptions();
 
   // Modal de medicamentos
   const [medicModalOpen, setMedicModalOpen] = useState(false);
@@ -258,69 +260,95 @@ const Prescriptions = () => {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredReceituarios.map((rec, index) => (
+            {filteredReceituarios.map((rec, index) => {
+              const pago = isPaid(rec.consultationId);
+              const dataFormatada = (() => {
+                try { return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR }); } catch { return rec.data; }
+              })();
+              const horaFormatada = (() => {
+                try { return format(new Date(rec.data), "HH:mm", { locale: ptBR }); } catch { return ""; }
+              })();
+              return (
               <Card
                 key={`assemed-rec-${rec.consultationId}-${index}`}
-                className="bg-card border-border/50 hover:shadow-card transition-all"
+                className={`flex flex-col overflow-hidden border transition-all duration-200 hover:shadow-md ${
+                  pago
+                    ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
+                    : "border-border/60 bg-card hover:border-primary/30"
+                }`}
               >
-                <CardHeader className="pb-2">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary shrink-0" />
-                      <CardTitle className="text-base">Consulta #{rec.consultationId}</CardTitle>
+                {/* Status bar */}
+                <div className={`h-1 w-full ${pago ? "bg-blue-400" : "bg-emerald-500"}`} />
+
+                <div className="p-5 flex flex-col flex-1 gap-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        pago ? "bg-blue-100" : "bg-primary/10"
+                      }`}>
+                        <FileText className={`h-5 w-5 ${pago ? "text-blue-600" : "text-primary"}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-foreground leading-tight">Receituário</p>
+                        <p className="text-xs text-muted-foreground">Consulta #{rec.consultationId}</p>
+                      </div>
                     </div>
-                    <Badge className="bg-green-100 text-green-700 border-green-200 shrink-0">
-                      {rec.status === "CONCLUIDO" ? "Concluída" : rec.status}
+                    <Badge className={`shrink-0 text-[11px] font-medium px-2 py-0.5 ${
+                      pago
+                        ? "bg-blue-100 text-blue-700 border-blue-200"
+                        : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                    }`}>
+                      {pago ? (
+                        <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
+                      ) : (
+                        <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
+                      )}
                     </Badge>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-2 gap-2 text-sm">
-                    <div>
-                      <p className="text-muted-foreground text-xs">Especialidade</p>
-                      <p className="font-medium">{rec.especialidade}</p>
+
+                  {/* Info grid */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Stethoscope className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <span className="text-foreground font-medium truncate">{rec.especialidade}</span>
                     </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs">Profissional</p>
-                      <p className="font-medium">{rec.profissional || "—"}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-muted-foreground text-xs">Data</p>
-                      <p className="font-medium">
-                        {(() => {
-                          try {
-                            return format(new Date(rec.data), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-                          } catch {
-                            return rec.data;
-                          }
-                        })()}
-                      </p>
+                    {rec.profissional && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <User className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                        <span className="text-muted-foreground truncate">{rec.profissional}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Calendar className="h-3.5 w-3.5 shrink-0" />
+                      <span>{dataFormatada}{horaFormatada && <span className="ml-1 text-muted-foreground/70">· {horaFormatada}</span>}</span>
                     </div>
                   </div>
 
-                  <div className="pt-2 border-t border-border/50 space-y-2">
-                    {/* <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full gap-2"
-                      onClick={() => window.open(rec.urlPdf, "_blank")}
-                    >
-                      <Download className="h-4 w-4" />
-                      Baixar Receituário
-                      <ExternalLink className="h-3 w-3 ml-auto opacity-50" />
-                    </Button> */}
+                  {/* Action */}
+                  <div className="mt-auto pt-1">
                     <Button
                       size="sm"
-                      className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white"
+                      className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
+                        pago
+                          ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      }`}
+                      disabled={pago}
                       onClick={() => openMedicModal(rec)}
+                      variant="ghost"
                     >
-                      <Pill className="h-4 w-4" />
-                      Adquirir medicamentos da receita
+                      {pago ? (
+                        <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
+                      ) : (
+                        <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
+                      )}
                     </Button>
                   </div>
-                </CardContent>
+                </div>
               </Card>
-            ))}
+              );
+            })}
           </div>
         )}
       </main>

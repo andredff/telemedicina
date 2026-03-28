@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Calendar, MapPin, CreditCard, ChevronRight, Truck, CheckCircle, Clock } from "lucide-react";
+import { Package, Calendar, MapPin, CreditCard, ChevronRight, Truck, CheckCircle, Clock, FileText, Stethoscope } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
@@ -28,6 +28,9 @@ interface Order {
   subtotal: number;
   created_at: string;
   user_id: string;
+  receita_id: string | null;
+  receita_url_pdf: string | null;
+  consulta_id: string | null;
 }
 
 
@@ -299,6 +302,34 @@ const Orders = () => {
                         ))}
                       </div>
                     </div>
+
+                    {/* Consulta / Receita */}
+                    {(order.receita_id || order.consulta_id) && (
+                      <div className="pt-3 border-t">
+                        <div className="flex items-center justify-between p-3 rounded-xl bg-primary/5 border border-primary/15">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                              <Stethoscope className="h-4 w-4 text-primary" />
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground font-medium">Origem do pedido</p>
+                              <p className="text-sm font-semibold text-foreground">
+                                Consulta #{order.receita_id ?? order.consulta_id}
+                              </p>
+                            </div>
+                          </div>
+                          {order.receita_url_pdf && (
+                            <button
+                              onClick={() => window.open(order.receita_url_pdf!, '_blank')}
+                              className="flex items-center gap-1.5 text-xs font-medium text-primary hover:underline shrink-0"
+                            >
+                              <FileText className="h-3.5 w-3.5" />
+                              Ver receita
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Delivery Address */}
                     <div className="pt-3 border-t">

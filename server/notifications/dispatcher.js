@@ -17,6 +17,7 @@ const EVENTOS_VALIDOS = new Set([
   "SenhaAlterada",
   "ConsultaAgendada",
   "LembreteConsulta",
+  "NotificacaoPedido",
 ]);
 
 // ─── Validadores de payload ───────────────────────────────────────────────────
@@ -38,6 +39,12 @@ const VALIDADORES = {
     if (!d.email)   throw new Error("LembreteConsulta: campo 'email' obrigatório");
     if (!d.nome)    throw new Error("LembreteConsulta: campo 'nome' obrigatório");
     if (!d.dataHora) throw new Error("LembreteConsulta: campo 'dataHora' obrigatório");
+  },
+  NotificacaoPedido: (d) => {
+    if (!d.nome)      throw new Error("NotificacaoPedido: campo 'nome' obrigatório");
+    if (!d.pedidoId)  throw new Error("NotificacaoPedido: campo 'pedidoId' obrigatório");
+    if (!d.status)    throw new Error("NotificacaoPedido: campo 'status' obrigatório");
+    if (!d.email)     throw new Error("NotificacaoPedido: campo 'email' obrigatório");
   },
 };
 

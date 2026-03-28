@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 import { searchCep, formatCep } from "@/integrations/correios/client";
 import { isCepInDeliveryRegion, getRegionLabel } from "@/lib/cepRegion";
 import {
@@ -190,6 +191,8 @@ export function PrescriptionMedicationsModal({
 }: PrescriptionMedicationsModalProps) {
   const { toast } = useToast();
   const cart = useCart();
+  const { isPaid } = usePaidPrescriptions();
+  const receitaJaPaga = consultationId !== undefined && isPaid(consultationId);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [step, setStep] = useState<FlowStep>("question");
@@ -231,6 +234,7 @@ export function PrescriptionMedicationsModal({
       maxQuantity: max,
       principioAtivo: item.principioAtivo ?? undefined,
       receitaId: consultationId !== undefined ? String(consultationId) : undefined,
+      receitaUrlPdf: prescriptionPdfUrl,
     });
     onCartUpdated?.(cart.count + 1);
     toast({ title: `${item.nome} adicionado ao carrinho` });
@@ -251,6 +255,7 @@ export function PrescriptionMedicationsModal({
         maxQuantity: max,
         principioAtivo: item.principioAtivo ?? undefined,
         receitaId: consultationId !== undefined ? String(consultationId) : undefined,
+        receitaUrlPdf: prescriptionPdfUrl,
       });
     }
     onCartUpdated?.(cart.count + available.length);
@@ -656,6 +661,19 @@ export function PrescriptionMedicationsModal({
         {/* ═══ STEP 3: Catálogo (CEP válido) ══════════════════════════════════ */}
         {step === "catalog" && (
           <div className="space-y-4 py-2">
+            {/* Banner: receita já paga */}
+            {receitaJaPaga && (
+              <div className="flex items-start gap-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-3">
+                <CheckCircle2 className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-semibold text-blue-800">Medicamentos já adquiridos</p>
+                  <p className="text-xs text-blue-700 mt-0.5">
+                    Você já realizou a compra dos medicamentos desta receita. Não é possível adicionar novamente.
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Confirmação de região */}
             {regionInfo && (
               <div className="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
@@ -752,15 +770,15 @@ export function PrescriptionMedicationsModal({
 
                           <Button
                             size="sm"
-                            disabled={item.estoque === 0}
+                            disabled={item.estoque === 0 || receitaJaPaga}
                             className={`gap-1.5 text-xs shrink-0 transition-all ${
-                              jaAdicionado
+                              jaAdicionado || receitaJaPaga
                                 ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                                 : "bg-primary hover:bg-primary/90"
                             }`}
-                            onClick={() => addToCart(item)}
+                            onClick={() => !receitaJaPaga && addToCart(item)}
                           >
-                            {jaAdicionado
+                            {jaAdicionado || receitaJaPaga
                               ? <><CheckCircle2 className="h-3.5 w-3.5" />Adicionado</>
                               : <><ShoppingCart className="h-3.5 w-3.5" />Adicionar</>}
                           </Button>
@@ -772,7 +790,7 @@ export function PrescriptionMedicationsModal({
 
                 {/* CTAs */}
                 <div className="flex flex-col gap-2 pt-1">
-                  {availableInStock.filter(e => !addedIds.has(e.medicamentoId)).length > 1 && (
+                  {!receitaJaPaga && availableInStock.filter(e => !addedIds.has(e.medicamentoId)).length > 1 && (
                     <Button
                       className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 h-11"
                       onClick={addAll}

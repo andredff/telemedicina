@@ -3,6 +3,47 @@ import { assemedClient, AssemedApiError } from "@/integrations/assemed/client";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 
+// ── Notification helper ─────────────────────────────────────────────────────
+function getServerUrl() {
+  if (import.meta.env.DEV) return "";
+  return import.meta.env.VITE_LOCAL_SERVER_URL || "";
+}
+
+async function notifyConsultaAgendada(params: {
+  consultaId: string | number;
+  especialidade: string;
+  profissional?: string;
+  dataHora: string;
+}) {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", user.id)
+      .single();
+
+    const baseUrl = getServerUrl();
+    await fetch(`${baseUrl}/api/notifications/consulta-agendada`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        consultaId: String(params.consultaId),
+        email: user.email,
+        nome: profile?.full_name || user.email,
+        especialidade: params.especialidade,
+        profissional: params.profissional || "A definir",
+        dataHora: params.dataHora,
+        userId: user.id,
+      }),
+    });
+  } catch {
+    // Fire-and-forget — don't block the consultation flow
+  }
+}
+
 /**
  * Transforma mensagens de erro técnicas da API Assemed em mensagens amigáveis para o usuário.
  */
@@ -363,6 +404,13 @@ export function useAssemedConsultation() {
           assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
         }
 
+        // Notifica consulta imediata criada (fire-and-forget)
+        notifyConsultaAgendada({
+          consultaId: consultation.id,
+          especialidade: "Clínico Geral",
+          dataHora: new Date().toISOString(),
+        });
+
         setState((prev) => ({
           ...prev,
           step: "in_consultation",
@@ -377,6 +425,72 @@ export function useAssemedConsultation() {
           err instanceof Error
             ? err.message
             : "Erro ao criar atendimento";
+        setError(message);
+        return false;
+      }
+    },
+    [state.accessToken]
+  );
+
+  /**
+   * Cria uma consulta imediata (on-demand) com especialista.
+   * Usa a especialidade real (não força clínico geral).
+   */
+  const createSpecialistConsultation = useCallback(
+    async (
+      specialty: Specialty,
+      respostasAnamnese?: AnamneseResposta[],
+      exames?: { arquivoBase64: string }[]
+    ): Promise<boolean> => {
+      if (!state.accessToken) {
+        setError("Token de acesso não disponível. Tente novamente.");
+        return false;
+      }
+
+      setState((prev) => ({ ...prev, step: "creating_consultation" }));
+
+      try {
+        const decoded = assemedClient.decodeToken(state.accessToken);
+        if (!decoded?.pacienteId) {
+          throw new Error("Não foi possível obter o ID do paciente do token.");
+        }
+
+        const pacienteId = parseInt(decoded.pacienteId, 10);
+
+        const consultation = await assemedClient.createConsultation({
+          formatoAtendimento: 0,
+          tipoProfissional: specialty.tipoProfissionalId,
+          especialidadeId: specialty.id,
+          pacienteId,
+          respostasAnamnese: respostasAnamnese || [],
+          exames: exames || [],
+          pacienteToken: assemedClient.getGlobalPatientToken() || undefined,
+        });
+
+        if (consultation.pacienteToken) {
+          assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
+        }
+
+        notifyConsultaAgendada({
+          consultaId: consultation.id,
+          especialidade: specialty.nome,
+          dataHora: new Date().toISOString(),
+        });
+
+        setState((prev) => ({
+          ...prev,
+          step: "in_consultation",
+          activeConsultation: {
+            ...consultation,
+            especialidadeNome: specialty.nome,
+          },
+        }));
+        return true;
+      } catch (err: unknown) {
+        const message =
+          err instanceof Error
+            ? err.message
+            : "Erro ao criar atendimento com especialista";
         setError(message);
         return false;
       }
@@ -547,6 +661,15 @@ export function useAssemedConsultation() {
 
         if (foundConsultation) {
           logger.info("[Agendamento] Consulta agendada encontrada:", foundConsultation);
+
+          // Notifica consulta agendada + registra lembrete 30 min (fire-and-forget)
+          notifyConsultaAgendada({
+            consultaId: foundConsultation.id,
+            especialidade: specialty.nome,
+            profissional: slot.profissionalNome,
+            dataHora: slot.dataHora,
+          });
+
           // Preserva o pacienteToken da resposta de criação — o endpoint /obter
           // não retorna pacienteToken, mas o POST /api/Atendimentos sim.
           setState((prev) => ({
@@ -679,6 +802,7 @@ export function useAssemedConsultation() {
     silentAuthenticate,
     startConsultationFlow,
     createConsultation,
+    createSpecialistConsultation,
     createScheduledConsultation,
     loadAvailableProfessionals,
     loadAvailableSchedules,

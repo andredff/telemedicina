@@ -9,6 +9,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import { useCart } from "@/hooks/useCart";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 import type { CustomerData } from "@/services/paymentService";
 import type { CatalogCartItem } from "@/types/prescription";
 
@@ -20,6 +21,7 @@ const CheckoutMedication = () => {
   const cart = useCart();
   const cartItems = cart.items;
   const catalogItems = cart.catalogItems;
+  const { markAsPaid } = usePaidPrescriptions();
   const [paymentDone, setPaymentDone] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
 
@@ -133,6 +135,7 @@ const CheckoutMedication = () => {
             catalogItems={catalogItems as CatalogCartItem[]}
             customer={customer}
             onSuccess={handleSuccess}
+            onPrescriptionsPaid={markAsPaid}
             onCancel={() => navigate("/cart")}
           />
         </div>

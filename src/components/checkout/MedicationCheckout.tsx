@@ -131,6 +131,7 @@ export function MedicationCheckout({
   type OrderGroup = {
     orderId: string;
     receitaId: string | undefined;
+    receitaUrlPdf: string | undefined;
     orderItems: { name: string; quantity: number; price: number; receitaId?: string }[];
     groupSubtotal: number;
   };
@@ -143,6 +144,7 @@ export function MedicationCheckout({
       groups.push({
         orderId: generateOrderId(),
         receitaId: undefined,
+        receitaUrlPdf: undefined,
         orderItems: items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
         groupSubtotal: items.reduce((s, i) => s + i.price * i.quantity, 0),
       });
@@ -158,9 +160,12 @@ export function MedicationCheckout({
 
     for (const [key, groupItems] of byReceita.entries()) {
       const receitaId = key === "__sem-receita__" ? undefined : key;
+      // All items in the same group share the same PDF URL — take the first non-null
+      const receitaUrlPdf = groupItems.find(i => i.receitaUrlPdf)?.receitaUrlPdf;
       groups.push({
         orderId: generateOrderId(),
         receitaId,
+        receitaUrlPdf,
         orderItems: groupItems.map(i => ({
           name: i.name,
           quantity: i.quantity,
@@ -185,6 +190,8 @@ export function MedicationCheckout({
     orderSubtotal: number;
     orderShipping: number;
     orderTotal: number;
+    receitaId?: string;
+    receitaUrlPdf?: string;
   }) => {
     try {
       const orderData = {
@@ -200,6 +207,9 @@ export function MedicationCheckout({
         installments: parseInt(installments),
         shipping_cost: params.orderShipping,
         subtotal: params.orderSubtotal,
+        receita_id: params.receitaId ?? null,
+        receita_url_pdf: params.receitaUrlPdf ?? null,
+        consulta_id: params.receitaId ?? null, // receitaId == consultationId no modelo Assemed
       };
 
       const { data, error } = await supabase
@@ -245,6 +255,8 @@ export function MedicationCheckout({
         orderSubtotal: group.groupSubtotal,
         orderShipping: shippingPerGroup,
         orderTotal: groupTotal,
+        receitaId: group.receitaId,
+        receitaUrlPdf: group.receitaUrlPdf,
       });
     }
 

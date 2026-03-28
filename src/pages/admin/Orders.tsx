@@ -48,7 +48,9 @@ import {
   Eye,
   Bell,
   Mail,
-  History
+  History,
+  FileText,
+  ExternalLink,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +74,9 @@ interface Order {
   items: OrderItem[];
   prescription_id?: string;
   tracking_code?: string;
+  receita_id?: string;
+  receita_url_pdf?: string;
+  consulta_id?: string;
 }
 
 interface NotificationHistory {
@@ -93,6 +98,7 @@ export default function AdminOrders() {
   const [estimatedDelivery, setEstimatedDelivery] = useState('');
   const [notificationHistory, setNotificationHistory] = useState<NotificationHistory[]>([]);
   const [sendingNotification, setSendingNotification] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     fetchOrders();
@@ -129,6 +135,9 @@ export default function AdminOrders() {
           items: itemsData as OrderItem[],
           prescription_id: order.prescription_id as string,
           tracking_code: order.tracking_code as string,
+          receita_id: order.receita_id as string | undefined,
+          receita_url_pdf: order.receita_url_pdf as string | undefined,
+          consulta_id: order.consulta_id as string | undefined,
         };
       });
 
@@ -382,8 +391,32 @@ export default function AdminOrders() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{order.prescription_id || 'N/A'}</TableCell>
-                  <TableCell>{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}</TableCell>
+                  <TableCell>
+                    {order.receita_url_pdf ? (
+                      <button
+                        onClick={() => setPdfPreviewUrl(order.receita_url_pdf!)}
+                        className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
+                        title="Visualizar receita"
+                      >
+                        <FileText className="h-4 w-4" />
+                        Consulta #{order.receita_id ?? order.consulta_id ?? order.prescription_id ?? 'N/A'}
+                      </button>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {order.receita_id ?? order.consulta_id ?? order.prescription_id ?? '—'}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}</span>
+                      {order.receita_url_pdf && (
+                        <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] px-1.5 py-0">
+                          <CheckCircle2 className="h-3 w-3 mr-0.5" />Receita
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {new Date(order.date).toLocaleDateString('pt-BR', {
                       day: '2-digit',
@@ -515,7 +548,68 @@ export default function AdminOrders() {
                     <p className="font-mono font-medium">{selectedOrder.tracking_code}</p>
                   </div>
                 )}
+                {(selectedOrder.receita_id || selectedOrder.consulta_id) && (
+                  <div className="col-span-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-muted-foreground flex items-center gap-1.5">
+                          <FileText className="h-4 w-4" />
+                          Receita Vinculada
+                        </Label>
+                        <p className="font-medium mt-0.5">
+                          Consulta #{selectedOrder.receita_id ?? selectedOrder.consulta_id}
+                        </p>
+                      </div>
+                      {selectedOrder.receita_url_pdf && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => setPdfPreviewUrl(selectedOrder.receita_url_pdf!)}
+                          >
+                            <FileText className="h-4 w-4" />
+                            Ver Receita
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => window.open(selectedOrder.receita_url_pdf!, '_blank')}
+                            title="Abrir em nova aba"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Order Items */}
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Package className="h-4 w-4" />
+                    Itens do Pedido ({selectedOrder.items.length})
+                  </Label>
+                  <div className="border rounded-lg divide-y">
+                    {selectedOrder.items.map((item, i) => (
+                      <div key={i} className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
+                        </div>
+                        <span className="font-medium text-sm">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="p-3 flex items-center justify-between bg-muted/50">
+                      <span className="font-semibold text-sm">Total</span>
+                      <span className="font-bold text-primary">R$ {selectedOrder.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notification History */}
               <div>
@@ -554,6 +648,39 @@ export default function AdminOrders() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Receita Preview Dialog */}
+      <Dialog open={!!pdfPreviewUrl} onOpenChange={(open) => { if (!open) setPdfPreviewUrl(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-5 pb-3">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Receita Médica
+            </DialogTitle>
+            <DialogDescription>
+              Valide se os medicamentos do pedido correspondem à receita
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden px-6 pb-4">
+            {pdfPreviewUrl && (
+              <iframe
+                src={pdfPreviewUrl}
+                className="w-full h-[65vh] rounded-lg border"
+                title="Receita PDF"
+              />
+            )}
+          </div>
+          <div className="flex justify-end gap-2 px-6 pb-5">
+            <Button variant="outline" onClick={() => setPdfPreviewUrl(null)}>Fechar</Button>
+            {pdfPreviewUrl && (
+              <Button variant="outline" className="gap-2" onClick={() => window.open(pdfPreviewUrl, '_blank')}>
+                <ExternalLink className="h-4 w-4" />
+                Abrir em nova aba
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

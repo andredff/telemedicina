@@ -9,13 +9,11 @@ import {
   AlertCircle,
   Stethoscope,
   X,
-  ExternalLink,
   FileText,
   Star,
   Plus,
   RefreshCw,
   User as UserIcon,
-  CalendarCheck,
   Calendar,
   Ban,
   ChevronRight,
@@ -23,7 +21,7 @@ import {
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -42,7 +40,7 @@ import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
 import PageHeader from "@/components/PageHeader";
-import type { Consultation, Specialty, ConsultationStatus, AvailableProfessional, ScheduleSlot, AnamneseResposta } from "@/integrations/assemed/types";
+import type { Consultation, Specialty, ConsultationStatus, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -544,17 +542,13 @@ const Especialistas = () => {
     step,
     accessToken,
     specialties,
-    availableProfessionals,
-    availableSchedules,
     activeConsultation,
     consultations,
     isLoadingConsultations,
     error,
     silentAuthenticate,
     startConsultationFlow,
-    createScheduledConsultation,
-    loadAvailableProfessionals,
-    loadAvailableSchedules,
+    createSpecialistConsultation,
     loadConsultations,
     joinScheduledConsultation,
     cancelConsultation,
@@ -572,18 +566,8 @@ const Especialistas = () => {
     [consultations]
   );
 
-  // selectedScheduleSpecialty tracks the specialty chosen in the scheduling modal
+  // Tracks the specialty chosen in the modal for the active consultation
   const [selectedScheduleSpecialty, setSelectedScheduleSpecialty] = useState<Specialty | null>(null);
-
-  // Controla se o fluxo atual é um agendamento (não abre iframe imediatamente)
-  const [isScheduledFlow, setIsScheduledFlow] = useState(false);
-
-  // Dados de confirmação após criar agendamento com especialista
-  const [scheduledConfirmation, setScheduledConfirmation] = useState<{
-    slotDate: string;
-    specialty: string;
-    professional: string;
-  } | null>(null);
 
   const fetchProfile = useCallback(async (userId: string) => {
     try {
@@ -1261,34 +1245,22 @@ const Especialistas = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, pageLoading]);
 
-  // Scheduling flow: specialty selected → load professionals
-  const handleScheduleSelectSpecialty = async (specialty: Specialty) => {
+  // Specialty selected in modal — just track it
+  const handleScheduleSelectSpecialty = (specialty: Specialty) => {
     setSelectedScheduleSpecialty(specialty);
     setSelectedSpecialtyName(specialty.nome);
-    await loadAvailableProfessionals(specialty.id);
   };
 
-  // Scheduling flow: professional selected → load schedules
-  const handleScheduleSelectProfessional = async (professional: AvailableProfessional) => {
-    const especialidadeId = selectedScheduleSpecialty?.id ?? 0;
-    await loadAvailableSchedules(professional.profissionalId, especialidadeId);
-  };
-
-  // Scheduling flow: confirm → create scheduled consultation
+  // Confirm → create on-demand specialist consultation
   const handleScheduleConfirm = async (
     specialty: Specialty,
-    professional: AvailableProfessional,
-    slot: ScheduleSlot,
     respostasAnamnese: AnamneseResposta[],
     exames: { arquivoBase64: string }[]
   ) => {
     setShowSpecialtyModal(false);
-    // Sinaliza que é agendamento para não abrir iframe automaticamente
-    setIsScheduledFlow(true);
 
-    const success = await createScheduledConsultation(
+    const success = await createSpecialistConsultation(
       specialty,
-      slot,
       respostasAnamnese,
       exames
     );
@@ -1296,24 +1268,12 @@ const Especialistas = () => {
     if (success) {
       if (isUsingPlanConsultation) {
         await incrementSpecialistConsultations();
-        logger.info("[Especialistas] Consulta do plano incrementada após agendamento");
+        logger.info("[Especialistas] Consulta do plano incrementada após criação");
       }
 
-      // Chama /obter para obter a lista atualizada com dataAgendamento preenchido
-      logger.info("[Especialistas] Agendamento criado — recarregando consultas via /obter");
       if (accessToken) {
         await loadConsultations();
       }
-
-      // Exibe tela de confirmação com os dados do slot (já disponíveis localmente)
-      setScheduledConfirmation({
-        slotDate: slot.dataHora,
-        specialty: specialty.nome,
-        professional: slot.profissionalNome,
-      });
-    } else {
-      // Falhou: desfaz o flag de agendamento
-      setIsScheduledFlow(false);
     }
   };
 
@@ -1516,10 +1476,8 @@ const Especialistas = () => {
   }, [closeConsultation, loadConsultations, accessToken]);
 
   // ── Render: new consultation - show iframe inline ────────────────────────────
-  // Para agendamentos (isScheduledFlow), não abre o iframe imediatamente:
-  // o usuário só entra no dia e horário corretos.
 
-  if (activeConsultation && activeConsultation.pacienteToken && !isScheduledFlow) {
+  if (activeConsultation && activeConsultation.pacienteToken) {
     return (
       <ConsultationIframe
         atendimentoId={activeConsultation.id}
@@ -1589,7 +1547,7 @@ const Especialistas = () => {
               {step === "creating_consultation" ? (
                 <><Loader2 className="h-5 w-5 animate-spin" />Criando consulta...</>
               ) : (
-                <><Plus className="h-5 w-5" />Nova Consulta</>
+                <><Plus className="h-5 w-5" />Agendar Consulta</>
               )}
             </Button>
           }
@@ -1680,20 +1638,17 @@ const Especialistas = () => {
           </Alert>
         )}
 
-        {/* Schedule specialist modal (replaces old immediate-creation modal) */}
+        {/* Specialist consultation modal (anamnese + on-demand) */}
         <ScheduleSpecialistModal
           open={showSpecialtyModal}
           onOpenChange={(open) => {
             if (!open) handleCloseSpecialtyModal();
           }}
           specialties={specialties}
-          availableProfessionals={availableProfessionals}
-          availableSchedules={availableSchedules}
           flowStep={step}
           error={error}
           onSelectSpecialty={handleScheduleSelectSpecialty}
-          onSelectProfessional={handleScheduleSelectProfessional}
-          onConfirmSchedule={handleScheduleConfirm}
+          onConfirm={handleScheduleConfirm}
           onClose={handleCloseSpecialtyModal}
         />
 
@@ -1942,104 +1897,6 @@ const Especialistas = () => {
         </div>
       </main>
 
-      {/* ── Dialog de confirmação de agendamento ─────────────────────────── */}
-      <Dialog
-        open={!!scheduledConfirmation}
-        onOpenChange={(open) => {
-          if (!open) {
-            setScheduledConfirmation(null);
-            setIsScheduledFlow(false);
-            closeConsultation();
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-lg">
-              <CalendarCheck className="h-5 w-5 text-primary" />
-              Consulta Agendada!
-            </DialogTitle>
-            <DialogDescription>
-              Seu agendamento foi confirmado com sucesso.
-            </DialogDescription>
-          </DialogHeader>
-
-          {scheduledConfirmation && (() => {
-            const apptDate = new Date(scheduledConfirmation.slotDate);
-            const releaseDate = new Date(apptDate.getTime() - 10 * 60_000);
-            const isToday = new Date().toDateString() === apptDate.toDateString();
-            const now = new Date();
-            const canEnterNow = isToday && now >= releaseDate;
-
-            return (
-              <div className="space-y-4 py-2">
-                {/* Bloco principal: data e hora */}
-                <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Calendar className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Data da Consulta</p>
-                      <p className="font-semibold text-foreground text-base">
-                        {format(apptDate, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Clock className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Horário</p>
-                      <p className="font-semibold text-foreground text-base">
-                        {format(apptDate, "HH:mm", { locale: ptBR })}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
-                      <Stethoscope className="h-5 w-5 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Especialidade / Profissional</p>
-                      <p className="font-semibold text-foreground">{scheduledConfirmation.specialty}</p>
-                      <p className="text-sm text-muted-foreground">{scheduledConfirmation.professional}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Regra de acesso */}
-                <div className={`rounded-lg border p-3 text-sm flex items-start gap-2 ${canEnterNow ? "border-green-200 bg-green-50 text-green-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
-                  <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-                  <div>
-                    {canEnterNow ? (
-                      <p>Você já pode entrar na consulta. O botão <strong>"Entrar na Consulta"</strong> estará disponível na lista abaixo.</p>
-                    ) : (
-                      <>
-                        <p className="font-medium">Acesso liberado {isToday ? "hoje" : "no dia da consulta"} às {format(releaseDate, "HH:mm", { locale: ptBR })}</p>
-                        <p className="mt-0.5 text-xs opacity-80">O botão de entrada será liberado 10 minutos antes do horário agendado.</p>
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <Button
-                  className="w-full gap-2"
-                  onClick={() => {
-                    setScheduledConfirmation(null);
-                    setIsScheduledFlow(false);
-                    closeConsultation();
-                  }}
-                >
-                  <CheckCircle className="h-4 w-4" />
-                  Entendido
-                </Button>
-              </div>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

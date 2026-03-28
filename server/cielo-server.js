@@ -8,6 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env"), override: false });
 
 const express = require("express");
 const cors = require("cors");
+const rateLimit = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
@@ -19,6 +20,18 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
 app.use(express.json());
+
+// ─── Rate limiting — proteção contra abuso nos endpoints de pagamento ────────
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10,             // máx 10 requests por IP por minuto
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas tentativas de pagamento. Aguarde um momento." },
+});
+
+// ─── Webhook secret — proteção contra payloads forjados ──────────────────────
+const WEBHOOK_SECRET = process.env.CIELO_WEBHOOK_SECRET || "";
 
 // ─── Supabase (optional) ────────────────────────────────────────────────────
 let supabase = null;
@@ -37,6 +50,7 @@ app.use("/api/receitas", receitasRouter);
 // ─── Sistema de Notificações por E-mail ────────────────────────────────────
 const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
+const emailTemplates = require("./notifications/templates");
 
 const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY || process.env.NODE_ENV === "development";
 dispatcher.init(process.env.RESEND_API_KEY, RESEND_MOCK_MODE);
@@ -193,7 +207,7 @@ function simulatePayment(cardNumber, amountInCents, paymentType) {
 }
 
 // ─── POST /api/cielo/payment ─────────────────────────────────────────────────
-app.post("/api/cielo/payment", async (req, res) => {
+app.post("/api/cielo/payment", paymentLimiter, async (req, res) => {
   try {
     if (!MERCHANT_ID || !MERCHANT_KEY) {
       return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
@@ -211,6 +225,26 @@ app.post("/api/cielo/payment", async (req, res) => {
 
     if (!orderId || !customer || !amountInCents) {
       return res.status(400).json({ success: false, message: "Missing required fields: orderId, customer, amountInCents" });
+    }
+
+    // ── Idempotência: verifica se já existe pagamento bem-sucedido para este orderId ──
+    if (supabase) {
+      const { data: existing } = await supabase
+        .from("payment_logs")
+        .select("payment_id, status")
+        .eq("order_id", String(orderId))
+        .eq("status", "success")
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        console.log(`[Cielo] Pagamento duplicado bloqueado — orderId=${orderId} paymentId=${existing[0].payment_id}`);
+        return res.json({
+          success:   true,
+          paymentId: existing[0].payment_id,
+          message:   "Pagamento já processado anteriormente",
+          duplicate: true,
+        });
+      }
     }
 
     // ── Monta request Cielo ──────────────────────────────────────────────────
@@ -451,22 +485,65 @@ app.put("/api/cielo/recurrence/:id/interval", async (req, res) => {
 });
 
 // ─── Webhook ─────────────────────────────────────────────────────────────────
+// P5: Autenticação via secret na query string
+// P6: Confirma status real com GET na Cielo antes de persistir
+// P7: Mapeamento completo de status (inclui 12, 13, 20)
 app.post("/api/cielo/webhook", async (req, res) => {
   try {
-    const payload = req.body;
-    console.log("[Cielo] Webhook:", JSON.stringify(payload));
-
-    if (supabase && payload.PaymentId) {
-      const statusMap = { 1: "processing", 2: "processing", 3: "cancelled", 10: "cancelled", 11: "cancelled" };
-      const newStatus = statusMap[payload.Status] || "pending";
-
-      await supabase.from("orders")
-        .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
-        .eq("payment_id", payload.PaymentId);
+    // P5 — Validação de autenticação do webhook
+    if (WEBHOOK_SECRET) {
+      const providedSecret = req.query.secret || req.headers["x-webhook-secret"];
+      if (providedSecret !== WEBHOOK_SECRET) {
+        console.warn("[Cielo] Webhook rejeitado — secret inválido", { ip: req.ip });
+        return res.status(403).json({ error: "Forbidden" });
+      }
     }
 
+    const payload = req.body;
+    console.log("[Cielo] Webhook recebido:", JSON.stringify(payload));
+
+    if (!supabase || !payload.PaymentId) {
+      return res.json({ received: true });
+    }
+
+    // P6 — Consulta Cielo para confirmar o status real da transação
+    let confirmedStatus = payload.Status;
+    if (MERCHANT_ID && MERCHANT_KEY) {
+      try {
+        const queryUrl = `${CIELO_URLS.query}/${payload.PaymentId}`;
+        const { parsed } = await callCielo("GET", queryUrl);
+        if (parsed?.Payment?.Status !== undefined) {
+          confirmedStatus = parsed.Payment.Status;
+          console.log(`[Cielo] Webhook status confirmado via API: payload=${payload.Status} → real=${confirmedStatus}`);
+        } else {
+          console.warn("[Cielo] Não foi possível confirmar status via API — usando payload do webhook");
+        }
+      } catch (err) {
+        console.warn("[Cielo] Erro ao confirmar status via API:", err.message, "— usando payload do webhook");
+      }
+    }
+
+    // P7 — Mapeamento completo de status Cielo → status do pedido
+    const statusMap = {
+      1:  "processing",  // Autorizado
+      2:  "processing",  // Capturado/Pago
+      3:  "cancelled",   // Negado
+      10: "cancelled",   // Cancelado (Void)
+      11: "cancelled",   // Estornado (Refund)
+      12: "pending",     // Pendente (PIX aguardando)
+      13: "cancelled",   // Abortado
+      20: "processing",  // Agendado (Recorrência)
+    };
+    const newStatus = statusMap[confirmedStatus] || "pending";
+
+    await supabase.from("orders")
+      .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
+      .eq("payment_id", payload.PaymentId);
+
+    console.log(`[Cielo] Webhook processado — PaymentId=${payload.PaymentId} status=${confirmedStatus} → ${newStatus}`);
     return res.json({ received: true });
   } catch (err) {
+    console.error("[Cielo] Webhook erro:", err.message);
     return res.status(500).json({ error: err.message });
   }
 });
@@ -562,6 +639,15 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     dataHora: new Date().toISOString(),
   });
 
+  // Renderiza template completo com identidade visual
+  const { subject, html } = emailTemplates.notificacaoPedido({
+    nome:         nomeUsuario,
+    pedidoId,
+    status:       novoStatus,
+    mensagem:     mensagemOpcional,
+    trackingCode: trackingCode || undefined,
+  });
+
   // Registra notificação no banco
   const sentAt = new Date().toISOString();
   if (supabase) {
@@ -570,8 +656,8 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
       customer_email: email,
       customer_name:  nomeUsuario,
       status:         novoStatus,
-      subject:        `Atualização do pedido #${pedidoId.substring(0, 8)} — ${novoStatus}`,
-      body:           mensagemOpcional,
+      subject,
+      body:           html,
       tracking_code:  trackingCode || null,
       sent_at:        sentAt,
     }).catch(err => console.error("[Notificação] Erro ao registrar log:", err.message));
@@ -580,21 +666,15 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
   // Envia email com retry (até 3 tentativas)
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
     try {
-      // Chama o próprio endpoint Resend (reutiliza a lógica já centralizada)
       const baseUrl = `http://localhost:${process.env.PORT || 5174}`;
       const resp = await fetch(`${baseUrl}/api/resend/emails`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to:      [email],
-          subject: `Atualização do pedido #${pedidoId.substring(0, 8).toUpperCase()} — Novità`,
-          html:    `<p>Olá, ${nomeUsuario}!</p><p>${mensagemOpcional}</p>`,
-        }),
+        body: JSON.stringify({ to: [email], subject, html }),
       });
 
       if (resp.ok) {
         console.log(`[Notificação] 📧 Email enviado (tentativa ${tentativa}) → ${email}`);
-        console.log({ pedidoId, status: "EMAIL_ENVIADO", timestamp: new Date() });
         return;
       }
 
@@ -677,7 +757,7 @@ app.put("/api/orders/:id/status", async (req, res) => {
  * Endpoint genérico para despachar qualquer evento de domínio.
  * Usado por webhooks do Supabase Auth e integrações internas.
  *
- * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | ..., data: { ... } }
+ * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | "ConsultaAgendada" | ..., data: { ... } }
  */
 app.post("/api/notifications/events", (req, res) => {
   const { tipo, data } = req.body || {};
@@ -770,7 +850,7 @@ app.get("/api/notifications/stats", (_req, res) => {
  * Dispara um evento de teste com dados sintéticos.
  * Útil para verificar templates localmente.
  *
- * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta
+ * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta | NotificacaoPedido
  * Body:   { email } (opcional — usa padrão se omitido)
  */
 app.post("/api/notifications/test/:tipo", (req, res) => {
@@ -804,6 +884,14 @@ app.post("/api/notifications/test/:tipo", (req, res) => {
       profissional:  "Dra. Ana Oliveira",
       dataHora:      formatarDataHoraLocal(new Date(Date.now() + 30 * 60 * 1000).toISOString()),
       consultaId:    "99998",
+    },
+    NotificacaoPedido: {
+      nome:     "André Tester",
+      email:    dest,
+      pedidoId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      status:   "shipped",
+      mensagem: "Seu pedido saiu para entrega e chegará em breve!",
+      trackingCode: "BR123456789",
     },
   };
 

@@ -36,5 +36,6 @@ export interface CatalogCartItem {
   quantity: number;
   maxQuantity?: number;  // limite prescrito na receita
   principioAtivo?: string;
-  receitaId?: string;   // consultationId da receita de origem (para rastreabilidade)
+  receitaId?: string;      // consultationId da receita de origem (para rastreabilidade)
+  receitaUrlPdf?: string;  // URL do PDF da receita
 }

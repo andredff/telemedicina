@@ -3,9 +3,6 @@ import {
   Loader2,
   AlertCircle,
   Stethoscope,
-  CalendarDays,
-  Clock,
-  User as UserIcon,
   ArrowLeft,
   CheckCircle,
   FileText,
@@ -15,7 +12,7 @@ import {
   Paperclip,
   Heart,
   Pill,
-  CalendarCheck,
+  Video,
   Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -26,13 +23,8 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
-import { format, addMonths, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isToday, isBefore, startOfDay } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import type {
   Specialty,
-  AvailableProfessional,
-  AvailableScheduleDay,
-  ScheduleSlot,
   AnamneseResposta,
 } from "@/integrations/assemed/types";
 import type { ConsultationFlowStep } from "@/hooks/useAssemedConsultation";
@@ -47,12 +39,7 @@ const SINTOMAS_OPTIONS = [
   { id: 5, label: "Dor de garganta", icon: "😮" },
 ];
 
-type ScheduleStep =
-  | "specialty"
-  | "professional"
-  | "anamnese"
-  | "schedule"
-  | "confirm";
+type WizardStep = "specialty" | "saude" | "exames" | "confirmar";
 
 interface ExamFile {
   name: string;
@@ -65,16 +52,11 @@ interface ScheduleSpecialistModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   specialties: Specialty[];
-  availableProfessionals: AvailableProfessional[];
-  availableSchedules: AvailableScheduleDay[];
   flowStep: ConsultationFlowStep;
   error: string | null;
   onSelectSpecialty: (specialty: Specialty) => void;
-  onSelectProfessional: (professional: AvailableProfessional) => void;
-  onConfirmSchedule: (
+  onConfirm: (
     specialty: Specialty,
-    professional: AvailableProfessional,
-    slot: ScheduleSlot,
     respostasAnamnese: AnamneseResposta[],
     exames: { arquivoBase64: string }[]
   ) => void;
@@ -94,21 +76,16 @@ function fileToBase64(file: File): Promise<string> {
 
 // ─── Wizard step config ────────────────────────────────────────────────────
 
-const WIZARD_STEPS: { key: ScheduleStep; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { key: "specialty",    label: "Especialidade", icon: Stethoscope },
-  { key: "professional", label: "Profissional",  icon: UserIcon },
-  { key: "anamnese",     label: "Saúde",         icon: Heart },
-  { key: "schedule",     label: "Horário",        icon: CalendarDays },
-  { key: "confirm",      label: "Confirmar",      icon: CheckCircle },
+const WIZARD_STEPS: { key: WizardStep; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
+  { key: "specialty",  label: "Especialidade", icon: Stethoscope },
+  { key: "saude",      label: "Saúde",         icon: Heart },
+  { key: "exames",     label: "Exames",        icon: FileText },
+  { key: "confirmar",  label: "Iniciar",       icon: Video },
 ];
 
 // ─── Sub-components ────────────────────────────────────────────────────────
 
-function WizardStepper({
-  currentStep,
-}: {
-  currentStep: ScheduleStep;
-}) {
+function WizardStepper({ currentStep }: { currentStep: WizardStep }) {
   const idx = WIZARD_STEPS.findIndex((s) => s.key === currentStep);
   return (
     <div className="flex items-center gap-0 px-6 pt-5 pb-4 border-b border-border/50">
@@ -160,178 +137,23 @@ function WizardStepper({
   );
 }
 
-/** Barra de resumo fixada no topo do body (após stepper) quando já há seleções */
-function SelectionSummaryStrip({
-  specialty,
-  professional,
-  slot,
-}: {
-  specialty: Specialty | null;
-  professional: AvailableProfessional | null;
-  slot: ScheduleSlot | null;
-}) {
-  if (!specialty && !professional && !slot) return null;
-  return (
-    <div className="bg-muted/50 border-b border-border/50 px-6 py-2 flex flex-wrap gap-x-4 gap-y-1">
-      {specialty && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <Stethoscope className="h-3 w-3 text-primary" />
-          <span className="font-medium text-foreground">{specialty.nome}</span>
-        </span>
-      )}
-      {professional && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <UserIcon className="h-3 w-3 text-primary" />
-          <span className="font-medium text-foreground">{professional.nome}</span>
-        </span>
-      )}
-      {slot?.dataHora && !isNaN(new Date(slot.dataHora).getTime()) && (
-        <span className="flex items-center gap-1 text-xs text-muted-foreground">
-          <CalendarDays className="h-3 w-3 text-primary" />
-          <span className="font-medium text-foreground">
-            {format(new Date(slot.dataHora), "dd/MM 'às' HH:mm", { locale: ptBR })}
-          </span>
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ─── Mini Calendar ─────────────────────────────────────────────────────────
-
-function MiniCalendar({
-  availableDates,
-  selectedDate,
-  onSelectDate,
-}: {
-  availableDates: string[];
-  selectedDate: string | null;
-  onSelectDate: (date: string) => void;
-}) {
-  const availableSet = new Set(availableDates);
-
-  // Find the first available month
-  const firstAvailable = availableDates.length > 0
-    ? new Date(availableDates[0] + "T12:00:00")
-    : new Date();
-
-  const [viewMonth, setViewMonth] = useState(startOfMonth(firstAvailable));
-
-  const days = eachDayOfInterval({
-    start: startOfMonth(viewMonth),
-    end: endOfMonth(viewMonth),
-  });
-
-  // Padding for day-of-week alignment (Mon = 0)
-  const firstDayOfWeek = (viewMonth.getDay() + 6) % 7; // 0 = Mon
-
-  const prevMonth = () => setViewMonth((m) => addMonths(m, -1));
-  const nextMonth = () => setViewMonth((m) => addMonths(m, 1));
-
-  const WEEKDAYS = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-
-  return (
-    <div className="rounded-xl border border-border bg-card p-3 select-none">
-      {/* Month navigation */}
-      <div className="flex items-center justify-between mb-3">
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={prevMonth}>
-          <ArrowLeft className="h-3.5 w-3.5" />
-        </Button>
-        <span className="text-sm font-semibold capitalize">
-          {format(viewMonth, "MMMM yyyy", { locale: ptBR })}
-        </span>
-        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={nextMonth}>
-          <ChevronRight className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/* Week header */}
-      <div className="grid grid-cols-7 mb-1">
-        {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center text-[10px] font-medium text-muted-foreground py-1">
-            {d}
-          </div>
-        ))}
-      </div>
-
-      {/* Day grid */}
-      <div className="grid grid-cols-7 gap-0.5">
-        {/* Padding cells */}
-        {Array.from({ length: firstDayOfWeek }).map((_, i) => (
-          <div key={`pad-${i}`} />
-        ))}
-
-        {days.map((day) => {
-          const key = format(day, "yyyy-MM-dd");
-          const isAvailable = availableSet.has(key);
-          const isSelected = selectedDate === key;
-          const isPast = isBefore(startOfDay(day), startOfDay(new Date()));
-          const isTodayDay = isToday(day);
-
-          return (
-            <button
-              key={key}
-              type="button"
-              disabled={!isAvailable || isPast}
-              onClick={() => isAvailable && !isPast && onSelectDate(key)}
-              className={`
-                relative h-8 w-full rounded-lg text-xs font-medium transition-all duration-150
-                ${isSelected
-                  ? "bg-primary text-primary-foreground shadow-sm"
-                  : isAvailable && !isPast
-                  ? "bg-green-50 text-green-700 hover:bg-green-100 border border-green-200 cursor-pointer"
-                  : "text-muted-foreground/40 cursor-default"
-                }
-                ${isTodayDay && !isSelected ? "ring-1 ring-primary/50" : ""}
-              `}
-            >
-              {format(day, "d")}
-              {isAvailable && !isPast && !isSelected && (
-                <span className="absolute bottom-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-green-500" />
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
-      <div className="flex items-center gap-3 mt-3 pt-2 border-t border-border/50">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-green-50 border border-green-200" />
-          <span className="text-[10px] text-muted-foreground">Disponível</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-primary" />
-          <span className="text-[10px] text-muted-foreground">Selecionado</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main Component ────────────────────────────────────────────────────────
 
 export function ScheduleSpecialistModal({
   open,
   onOpenChange,
   specialties,
-  availableProfessionals,
-  availableSchedules,
   flowStep,
   error,
   onSelectSpecialty,
-  onSelectProfessional,
-  onConfirmSchedule,
+  onConfirm,
   onClose,
 }: ScheduleSpecialistModalProps) {
   // ── Navigation ────────────────────────────────────────────────────────
-  const [currentStep, setCurrentStep] = useState<ScheduleStep>("specialty");
+  const [currentStep, setCurrentStep] = useState<WizardStep>("specialty");
 
   // ── Selections ────────────────────────────────────────────────────────
   const [selectedSpecialty, setSelectedSpecialty] = useState<Specialty | null>(null);
-  const [selectedProfessional, setSelectedProfessional] = useState<AvailableProfessional | null>(null);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<ScheduleSlot | null>(null);
 
   // ── Anamnese ──────────────────────────────────────────────────────────
   const [sintomasSelecionados, setSintomasSelecionados] = useState<number[]>([]);
@@ -348,9 +170,6 @@ export function ScheduleSpecialistModal({
     if (open) {
       setCurrentStep("specialty");
       setSelectedSpecialty(null);
-      setSelectedProfessional(null);
-      setSelectedDate(null);
-      setSelectedSlot(null);
       setSintomasSelecionados([]);
       setSintomaForteId(null);
       setMedicamentos("");
@@ -358,24 +177,11 @@ export function ScheduleSpecialistModal({
     }
   }, [open]);
 
-  // ── Auto-advance when API finishes loading professionals ───────────────
-  useEffect(() => {
-    if (flowStep === "selecting_professional" && currentStep === "specialty") {
-      setCurrentStep("professional");
-    }
-  }, [flowStep, currentStep]);
-
   // ── Derived ───────────────────────────────────────────────────────────
   const filteredSpecialties = specialties.filter((s) => {
     const nome = s.nome.toLowerCase();
     return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
   });
-
-  const availableDateStrings = availableSchedules.map((d) => d.data);
-
-  const slotsForSelectedDate = selectedDate
-    ? availableSchedules.find((d) => d.data === selectedDate)?.horarios || []
-    : [];
 
   const sintomasMarcados = SINTOMAS_OPTIONS.filter((s) =>
     sintomasSelecionados.includes(s.id)
@@ -386,25 +192,14 @@ export function ScheduleSpecialistModal({
     flowStep === "authenticating" ||
     flowStep === "registering" ||
     flowStep === "loading_specialties" ||
-    flowStep === "loading_professionals" ||
-    flowStep === "loading_schedules" ||
     flowStep === "creating_consultation";
-
-  const showLoading = isLoading && !(
-    currentStep === "anamnese" && flowStep === "loading_schedules"
-  );
-
-  const schedulesStillLoading =
-    currentStep === "schedule" && flowStep === "loading_schedules";
 
   const getLoadingMessage = () => {
     switch (flowStep) {
       case "registering": return "Cadastrando paciente...";
       case "authenticating": return "Autenticando...";
       case "loading_specialties": return "Carregando especialidades...";
-      case "loading_professionals": return "Carregando profissionais disponíveis...";
-      case "loading_schedules": return "Carregando horários disponíveis...";
-      case "creating_consultation": return "Confirmando agendamento...";
+      case "creating_consultation": return "Iniciando consulta...";
       default: return "Carregando...";
     }
   };
@@ -413,15 +208,7 @@ export function ScheduleSpecialistModal({
   const handleSelectSpecialty = (specialty: Specialty) => {
     setSelectedSpecialty(specialty);
     onSelectSpecialty(specialty);
-    // Don't advance yet — wait for API (auto-advance via useEffect)
-  };
-
-  const handleSelectProfessional = (professional: AvailableProfessional) => {
-    setSelectedProfessional(professional);
-    setSelectedDate(null);
-    setSelectedSlot(null);
-    onSelectProfessional(professional);
-    setCurrentStep("anamnese");
+    setCurrentStep("saude");
   };
 
   const toggleSintoma = (id: number) => {
@@ -432,14 +219,24 @@ export function ScheduleSpecialistModal({
     });
   };
 
-  const handleSelectSlot = (slot: ScheduleSlot) => {
-    setSelectedSlot(slot);
-    setCurrentStep("confirm");
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setIsAddingFile(true);
+    const newExames = await Promise.all(
+      files.map(async (f) => ({ name: f.name, base64: await fileToBase64(f) }))
+    );
+    setExamFiles((prev) => [...prev, ...newExames]);
+    setIsAddingFile(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }, []);
+
+  const removeExame = (index: number) => {
+    setExamFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleConfirm = () => {
-    if (!selectedSpecialty || !selectedProfessional || !selectedSlot) return;
-    if (!selectedSlot.dataHora || isNaN(new Date(selectedSlot.dataHora).getTime())) return;
+    if (!selectedSpecialty) return;
 
     const sintomaForteLabel = SINTOMAS_OPTIONS.find((s) => s.id === sintomaForteId)?.label || "";
     const sintomaTexto = sintomaForteId
@@ -463,10 +260,8 @@ export function ScheduleSpecialistModal({
       },
     ];
 
-    onConfirmSchedule(
+    onConfirm(
       selectedSpecialty,
-      selectedProfessional,
-      selectedSlot,
       respostasAnamnese,
       examFiles.map((f) => ({ arquivoBase64: f.base64 }))
     );
@@ -474,40 +269,21 @@ export function ScheduleSpecialistModal({
 
   const handleBack = () => {
     switch (currentStep) {
-      case "confirm":
-        setCurrentStep("schedule");
-        setSelectedSlot(null);
+      case "confirmar":
+        setCurrentStep("exames");
         break;
-      case "schedule":
-        setCurrentStep("anamnese");
+      case "exames":
+        setCurrentStep("saude");
         break;
-      case "anamnese":
-        setCurrentStep("professional");
-        setSelectedProfessional(null);
-        setSelectedDate(null);
-        break;
-      case "professional":
+      case "saude":
         setCurrentStep("specialty");
         setSelectedSpecialty(null);
         break;
     }
   };
 
-  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (!files.length) return;
-    setIsAddingFile(true);
-    const newExames = await Promise.all(
-      files.map(async (f) => ({ name: f.name, base64: await fileToBase64(f) }))
-    );
-    setExamFiles((prev) => [...prev, ...newExames]);
-    setIsAddingFile(false);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  }, []);
-
-  const removeExame = (index: number) => {
-    setExamFiles((prev) => prev.filter((_, i) => i !== index));
-  };
+  const canAdvanceFromSaude =
+    sintomasMarcados.length === 0 || !!sintomaForteId;
 
   // ── Render ────────────────────────────────────────────────────────────
   return (
@@ -517,18 +293,11 @@ export function ScheduleSpecialistModal({
         {/* Stepper */}
         <WizardStepper currentStep={currentStep} />
 
-        {/* Summary strip */}
-        <SelectionSummaryStrip
-          specialty={selectedSpecialty}
-          professional={selectedProfessional}
-          slot={selectedSlot}
-        />
-
         {/* Scrollable body */}
         <div className="flex-1 overflow-y-auto">
 
           {/* ── Global loading ───────────────────────────────────────── */}
-          {showLoading && (
+          {isLoading && (
             <div className="flex flex-col items-center justify-center py-16 gap-4">
               <div className="relative">
                 <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
@@ -560,12 +329,12 @@ export function ScheduleSpecialistModal({
           {/* ══════════════════════════════════════════════════════════ */}
           {/* STEP 1 — Especialidade                                    */}
           {/* ══════════════════════════════════════════════════════════ */}
-          {!showLoading && flowStep !== "error" && currentStep === "specialty" && flowStep === "selecting_specialty" && (
+          {!isLoading && flowStep !== "error" && currentStep === "specialty" && flowStep === "selecting_specialty" && (
             <div className="p-6">
               <div className="mb-5">
                 <h2 className="text-xl font-bold text-foreground">Escolha a especialidade</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Selecione a área médica para o seu agendamento
+                  Selecione a área médica para a sua consulta
                 </p>
               </div>
 
@@ -631,99 +400,23 @@ export function ScheduleSpecialistModal({
           )}
 
           {/* ══════════════════════════════════════════════════════════ */}
-          {/* STEP 2 — Profissional                                     */}
+          {/* STEP 2 — Saúde (anamnese)                                 */}
           {/* ══════════════════════════════════════════════════════════ */}
-          {!showLoading && flowStep !== "error" && currentStep === "professional" && flowStep === "selecting_professional" && (
+          {!isLoading && flowStep !== "error" && currentStep === "saude" && (
             <div className="p-6">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-foreground">Escolha o profissional</h2>
+                <h2 className="text-xl font-bold text-foreground">Como você está se sentindo?</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {selectedSpecialty?.nome} · Profissionais disponíveis para agendamento
+                  Essas informações ajudam o médico a se preparar para o seu atendimento
                 </p>
               </div>
 
-              {availableProfessionals.length > 0 ? (
-                <div className="space-y-3">
-                  {availableProfessionals.map((professional, idx) => (
-                    <button
-                      key={professional.profissionalId}
-                      type="button"
-                      onClick={() => handleSelectProfessional(professional)}
-                      className="w-full group text-left"
-                    >
-                      <div className="flex items-center gap-4 p-4 rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm transition-all duration-150">
-                        {/* Avatar */}
-                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary/20 flex items-center justify-center shrink-0">
-                          <UserIcon className="h-6 w-6 text-primary/70" />
-                        </div>
-
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="font-semibold text-foreground text-sm">{professional.nome}</p>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                {professional.especialidadeNome}
-                              </p>
-                            </div>
-                            {idx === 0 && (
-                              <Badge className="bg-green-50 text-green-700 border-green-200 text-[10px] shrink-0">
-                                Disponível
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1 mt-2">
-                            <CalendarCheck className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-[11px] text-muted-foreground">
-                              Horários disponíveis para agendamento
-                            </span>
-                          </div>
-                        </div>
-
-                        <ChevronRight className="h-4 w-4 text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0" />
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-10">
-                  <UserIcon className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="font-medium text-muted-foreground">Nenhum profissional disponível</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Não há profissionais disponíveis para {selectedSpecialty?.nome} no momento.
-                  </p>
-                  <Button variant="outline" size="sm" className="mt-4" onClick={handleBack}>
-                    Escolher outra especialidade
-                  </Button>
-                </div>
-              )}
-
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <Button variant="ghost" size="sm" onClick={handleBack} className="text-muted-foreground">
-                  <ArrowLeft className="h-4 w-4 mr-1" />
-                  Voltar
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════════════ */}
-          {/* STEP 3 — Anamnese (sintomas + exames unificados)          */}
-          {/* ══════════════════════════════════════════════════════════ */}
-          {!showLoading && flowStep !== "error" && currentStep === "anamnese" && (
-            <div className="p-6">
-              <div className="mb-5">
-                <h2 className="text-xl font-bold text-foreground">Informações de saúde</h2>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Ajude o médico a se preparar melhor para a sua consulta
-                </p>
-              </div>
-
-              {/* Sintomas */}
+              {/* Sintomas — grid de pills */}
               <div className="mb-5">
                 <div className="flex items-center gap-2 mb-3">
                   <Heart className="h-4 w-4 text-primary" />
                   <p className="text-sm font-semibold text-foreground">Quais sintomas você tem sentido?</p>
-                  <Badge variant="outline" className="text-[10px] ml-auto">Opcional</Badge>
+                  <span className="ml-auto text-[10px] font-medium text-muted-foreground border border-border rounded-full px-2 py-0.5">Opcional</span>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   {SINTOMAS_OPTIONS.map((s) => {
@@ -733,7 +426,7 @@ export function ScheduleSpecialistModal({
                         key={s.id}
                         type="button"
                         onClick={() => toggleSintoma(s.id)}
-                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all duration-150 text-sm ${
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border-2 text-left transition-all duration-150 ${
                           checked
                             ? "border-primary bg-primary/10 text-primary font-medium"
                             : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"
@@ -783,7 +476,7 @@ export function ScheduleSpecialistModal({
                 <div className="flex items-center gap-2 mb-2">
                   <Pill className="h-4 w-4 text-primary" />
                   <p className="text-sm font-semibold text-foreground">Medicamentos em uso</p>
-                  <Badge variant="outline" className="text-[10px] ml-auto">Opcional</Badge>
+                  <span className="ml-auto text-[10px] font-medium text-muted-foreground border border-border rounded-full px-2 py-0.5">Opcional</span>
                 </div>
                 <Textarea
                   placeholder="Ex: Dipirona 500mg, Losartana 50mg..."
@@ -794,286 +487,160 @@ export function ScheduleSpecialistModal({
                 />
               </div>
 
-              {/* Exames */}
-              <div className="mb-5">
-                <div className="flex items-center gap-2 mb-2">
-                  <FileText className="h-4 w-4 text-primary" />
-                  <p className="text-sm font-semibold text-foreground">Exames (opcional)</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full border-2 border-dashed border-muted-foreground/25 rounded-xl p-4 flex flex-col items-center gap-1.5 hover:border-primary/40 hover:bg-primary/5 transition-colors"
-                >
-                  <Upload className="h-6 w-6 text-muted-foreground/50" />
-                  <p className="text-xs text-muted-foreground">
-                    {isAddingFile ? "Carregando..." : "Anexar imagens ou PDFs de exames"}
-                  </p>
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,.pdf"
-                  multiple
-                  className="hidden"
-                  onChange={handleFileChange}
-                />
-                {examFiles.length > 0 && (
-                  <div className="mt-2 space-y-1.5">
-                    {examFiles.map((exame, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border"
-                      >
-                        <Paperclip className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-xs flex-1 truncate">{exame.name}</span>
-                        <button
-                          type="button"
-                          onClick={() => removeExame(i)}
-                          className="text-muted-foreground hover:text-destructive transition-colors"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Loading hint */}
-              {flowStep === "loading_schedules" && (
-                <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg mb-4">
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-primary shrink-0" />
-                  <p className="text-xs text-muted-foreground">
-                    Buscando horários disponíveis em segundo plano...
-                  </p>
-                </div>
-              )}
-
               <div className="flex gap-3 pt-2 border-t border-border/50">
                 <Button variant="outline" onClick={handleBack} className="flex-none">
                   <ArrowLeft className="h-4 w-4 mr-1" />
                   Voltar
                 </Button>
                 <Button
-                  onClick={() => setCurrentStep("schedule")}
+                  onClick={() => setCurrentStep("exames")}
+                  disabled={!canAdvanceFromSaude}
                   className="flex-1 gap-2"
-                  disabled={flowStep === "loading_schedules"}
                 >
-                  {flowStep === "loading_schedules" ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Aguardando horários...
-                    </>
-                  ) : (
-                    <>
-                      Escolher horário
-                      <ChevronRight className="h-4 w-4" />
-                    </>
-                  )}
+                  Próximo: Exames
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════════════ */}
-          {/* STEP 4 — Horário                                          */}
+          {/* STEP 3 — Exames                                           */}
           {/* ══════════════════════════════════════════════════════════ */}
-          {currentStep === "schedule" && (
+          {!isLoading && flowStep !== "error" && currentStep === "exames" && (
             <div className="p-6">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-foreground">Escolha data e horário</h2>
+                <h2 className="text-xl font-bold text-foreground">Anexar exames</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  {selectedProfessional?.nome} · Selecione o melhor horário para você
+                  Compartilhe resultados de exames para agilizar o atendimento (opcional)
                 </p>
               </div>
 
-              {schedulesStillLoading ? (
-                <div className="flex flex-col items-center justify-center py-12 gap-4">
-                  <Loader2 className="h-10 w-10 animate-spin text-primary" />
-                  <div className="text-center">
-                    <p className="font-medium">Buscando horários disponíveis...</p>
-                    <p className="text-sm text-muted-foreground mt-1">Isso leva apenas alguns segundos</p>
-                  </div>
+              {/* Drop zone */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full border-2 border-dashed border-muted-foreground/25 rounded-xl p-8 flex flex-col items-center gap-3 hover:border-primary/40 hover:bg-primary/5 transition-colors mb-4"
+              >
+                <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
+                  <Upload className="h-6 w-6 text-muted-foreground/70" />
                 </div>
-              ) : availableSchedules.length > 0 ? (
-                <div className="space-y-5">
-                  {/* Calendar */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-3">
-                      <CalendarDays className="h-4 w-4 text-primary" />
-                      <p className="text-sm font-semibold">Selecione uma data</p>
-                    </div>
-                    <MiniCalendar
-                      availableDates={availableDateStrings}
-                      selectedDate={selectedDate}
-                      onSelectDate={(date) => {
-                        setSelectedDate(date);
-                        setSelectedSlot(null);
-                      }}
-                    />
-                  </div>
-
-                  {/* Time slots */}
-                  {selectedDate && (
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock className="h-4 w-4 text-primary" />
-                        <p className="text-sm font-semibold">
-                          Horários disponíveis em{" "}
-                          {format(new Date(selectedDate + "T12:00:00"), "dd 'de' MMMM", { locale: ptBR })}
-                        </p>
-                      </div>
-
-                      {slotsForSelectedDate.length > 0 ? (
-                        <>
-                          {/* First available highlight */}
-                          {!selectedSlot && (
-                            <div className="flex items-center gap-1.5 mb-2 text-xs text-green-700">
-                              <Sparkles className="h-3 w-3" />
-                              <span>Primeiro horário disponível: <strong>{format(new Date(slotsForSelectedDate[0].dataHora), "HH:mm")}</strong></span>
-                            </div>
-                          )}
-                          <div className="grid grid-cols-4 sm:grid-cols-5 gap-2">
-                            {slotsForSelectedDate.map((slot, idx) => {
-                              const time = format(new Date(slot.dataHora), "HH:mm");
-                              const isSelected = selectedSlot?.dataHora === slot.dataHora;
-                              const isFirst = idx === 0;
-                              return (
-                                <button
-                                  key={idx}
-                                  type="button"
-                                  onClick={() => handleSelectSlot(slot)}
-                                  className={`relative py-2 px-1 rounded-xl border-2 text-sm font-semibold transition-all duration-150 ${
-                                    isSelected
-                                      ? "bg-primary border-primary text-primary-foreground shadow-sm scale-105"
-                                      : "bg-card border-green-200 text-green-700 hover:border-primary hover:bg-primary/10 hover:scale-105"
-                                  }`}
-                                >
-                                  {time}
-                                  {isFirst && !isSelected && (
-                                    <span className="absolute -top-1.5 left-1/2 -translate-x-1/2 text-[8px] bg-green-500 text-white px-1 rounded-full whitespace-nowrap">
-                                      Mais cedo
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </>
-                      ) : (
-                        <p className="text-sm text-muted-foreground py-4 text-center">
-                          Nenhum horário disponível nesta data. Selecione outro dia.
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {!selectedDate && (
-                    <div className="text-center py-4 text-sm text-muted-foreground">
-                      ☝️ Selecione uma data para ver os horários disponíveis
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-10">
-                  <CalendarDays className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-                  <p className="font-medium text-muted-foreground">Sem horários disponíveis</p>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Não há horários para {selectedProfessional?.nome}. Tente outro profissional.
+                <div className="text-center">
+                  <p className="text-sm font-medium text-foreground">
+                    {isAddingFile ? "Carregando arquivos..." : "Clique ou arraste os arquivos aqui"}
                   </p>
-                  <Button variant="outline" size="sm" className="mt-4" onClick={handleBack}>
-                    Voltar e escolher outro profissional
-                  </Button>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Imagens e PDFs aceitos · Múltiplos arquivos
+                  </p>
+                </div>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,.pdf"
+                multiple
+                className="hidden"
+                onChange={handleFileChange}
+              />
+
+              {/* File list */}
+              {examFiles.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  <p className="text-xs text-muted-foreground font-medium">
+                    {examFiles.length} arquivo{examFiles.length > 1 ? "s" : ""} selecionado{examFiles.length > 1 ? "s" : ""}
+                  </p>
+                  {examFiles.map((exame, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center gap-2 p-2.5 rounded-xl border border-border bg-muted/40"
+                    >
+                      <Paperclip className="h-4 w-4 text-primary shrink-0" />
+                      <span className="text-sm flex-1 truncate">{exame.name}</span>
+                      <button
+                        type="button"
+                        onClick={() => removeExame(i)}
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
                 </div>
               )}
 
-              <div className="mt-4 pt-4 border-t border-border/50">
-                <Button variant="ghost" size="sm" onClick={handleBack} className="text-muted-foreground">
+              <div className="flex gap-3 pt-2 border-t border-border/50">
+                <Button variant="outline" onClick={() => setCurrentStep("saude")} className="flex-none">
                   <ArrowLeft className="h-4 w-4 mr-1" />
                   Voltar
+                </Button>
+                <Button onClick={() => setCurrentStep("confirmar")} className="flex-1 gap-2">
+                  {examFiles.length > 0
+                    ? `Avançar com ${examFiles.length} arquivo${examFiles.length > 1 ? "s" : ""}`
+                    : "Avançar sem exames"}
+                  <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>
             </div>
           )}
 
           {/* ══════════════════════════════════════════════════════════ */}
-          {/* STEP 5 — Confirmar                                        */}
+          {/* STEP 4 — Confirmar e iniciar                              */}
           {/* ══════════════════════════════════════════════════════════ */}
-          {!showLoading && flowStep !== "error" && currentStep === "confirm" && (
+          {!isLoading && flowStep !== "error" && currentStep === "confirmar" && (
             <div className="p-6">
               <div className="mb-5">
-                <h2 className="text-xl font-bold text-foreground">Confirme o agendamento</h2>
+                <h2 className="text-xl font-bold text-foreground">Tudo pronto!</h2>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Revise os detalhes antes de confirmar
+                  Revise as informações e inicie sua consulta
                 </p>
               </div>
 
-              {/* Confirmation card */}
+              {/* Card de resumo */}
               <div className="rounded-2xl border-2 border-primary/20 bg-gradient-to-br from-primary/5 to-transparent overflow-hidden mb-5">
-                {/* Header do card */}
+                {/* Header */}
                 <div className="bg-primary/10 px-5 py-4 border-b border-primary/20">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                      <CalendarCheck className="h-5 w-5 text-primary" />
+                      <Video className="h-5 w-5 text-primary" />
                     </div>
                     <div>
-                      <p className="font-bold text-foreground">Consulta com especialista</p>
-                      <p className="text-xs text-muted-foreground">Telemedicina Novità</p>
+                      <p className="font-bold text-foreground">Agendamento com Especialista</p>
+                      <p className="text-xs text-muted-foreground">{selectedSpecialty?.nome} · Telemedicina Novità</p>
                     </div>
+                    <span className="ml-auto inline-flex items-center gap-1 bg-green-100 text-green-700 text-xs font-semibold px-2.5 py-1 rounded-full border border-green-200">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      Agora
+                    </span>
                   </div>
                 </div>
 
                 {/* Detalhes */}
                 <div className="p-5 space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Especialidade</p>
-                      <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                        <Stethoscope className="h-3.5 w-3.5 text-primary" />
-                        {selectedSpecialty?.nome}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Profissional</p>
-                      <p className="font-semibold text-sm text-foreground flex items-center gap-1.5">
-                        <UserIcon className="h-3.5 w-3.5 text-primary" />
-                        {selectedProfessional?.nome}
-                      </p>
-                    </div>
-                  </div>
-
-                  {selectedSlot?.dataHora && !isNaN(new Date(selectedSlot.dataHora).getTime()) && (
-                    <div className="p-3 bg-primary/10 rounded-xl">
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Data e Horário</p>
-                      <p className="font-bold text-foreground capitalize">
-                        {format(new Date(selectedSlot.dataHora), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}
-                      </p>
-                      <p className="text-2xl font-black text-primary mt-0.5">
-                        {format(new Date(selectedSlot.dataHora), "HH:mm")}
-                      </p>
-                    </div>
-                  )}
-
-                  {sintomasMarcados.length > 0 && (
+                  {sintomasMarcados.length > 0 ? (
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide mb-2">Sintomas informados</p>
                       <div className="flex flex-wrap gap-1.5">
                         {sintomasMarcados.map((s) => (
-                          <span key={s.id} className="text-xs bg-muted px-2 py-1 rounded-full">
-                            {s.icon} {s.label}
+                          <span key={s.id} className="text-xs bg-muted px-2 py-1 rounded-full flex items-center gap-1">
+                            <span>{s.icon}</span>
+                            {s.label}
                             {sintomaForteId === s.id && (
-                              <span className="ml-1 text-amber-600 font-medium">(principal)</span>
+                              <span className="text-amber-600 font-medium">(principal)</span>
                             )}
                           </span>
                         ))}
                       </div>
                     </div>
+                  ) : (
+                    <div>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Sintomas</p>
+                      <p className="text-sm text-muted-foreground italic">Nenhum sintoma informado</p>
+                    </div>
                   )}
 
                   {medicamentos.trim() && (
                     <div>
-                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Medicamentos</p>
+                      <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Medicamentos em uso</p>
                       <p className="text-sm text-foreground">{medicamentos}</p>
                     </div>
                   )}
@@ -1082,7 +649,7 @@ export function ScheduleSpecialistModal({
                     <div>
                       <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Exames anexados</p>
                       <p className="text-sm text-foreground flex items-center gap-1.5">
-                        <Paperclip className="h-3.5 w-3.5" />
+                        <Paperclip className="h-3.5 w-3.5 text-primary" />
                         {examFiles.length} arquivo{examFiles.length > 1 ? "s" : ""}
                       </p>
                     </div>
@@ -1090,28 +657,28 @@ export function ScheduleSpecialistModal({
                 </div>
               </div>
 
-              {/* Info de lembrança */}
+              {/* Info box */}
               <div className="flex items-start gap-2 p-3 bg-blue-50 border border-blue-200 rounded-xl mb-5">
                 <AlertCircle className="h-4 w-4 text-blue-500 mt-0.5 shrink-0" />
                 <p className="text-xs text-blue-800">
-                  Você poderá entrar na consulta <strong>10 minutos antes</strong> do horário agendado.
-                  Certifique-se de ter câmera e microfone disponíveis.
+                  Você será conectado a um <strong>Atendente disponível agora</strong>.
+                  Certifique-se de ter câmera e microfone funcionando antes de iniciar.
                 </p>
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={handleBack} className="flex-none">
+                <Button variant="outline" onClick={() => setCurrentStep("exames")} className="flex-none">
                   <ArrowLeft className="h-4 w-4 mr-1" />
                   Voltar
                 </Button>
                 <Button
                   onClick={handleConfirm}
-                  disabled={!selectedSpecialty || !selectedProfessional || !selectedSlot?.dataHora}
+                  disabled={!selectedSpecialty}
                   className="flex-1 gap-2 gradient-hero text-primary-foreground"
                   size="lg"
                 >
-                  <CalendarCheck className="h-4 w-4" />
-                  Confirmar Agendamento
+                  <Video className="h-4 w-4" />
+                  Iniciar Atendimento Agora
                 </Button>
               </div>
             </div>

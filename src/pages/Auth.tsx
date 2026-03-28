@@ -14,13 +14,18 @@ import { z } from "zod";
 // Validation schemas
 const loginSchema = z.object({
   email: z.string().trim().email({ message: "Email inválido" }).max(255),
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+  password: z.string().min(1, { message: "Senha é obrigatória" }),
 });
 
 const signupSchema = z.object({
   name: z.string().trim().min(2, { message: "Nome deve ter pelo menos 2 caracteres" }).max(100),
   email: z.string().trim().email({ message: "Email inválido" }).max(255),
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+  password: z
+    .string()
+    .min(8, { message: "Senha deve ter pelo menos 8 caracteres" })
+    .regex(/[A-Z]/, { message: "Senha deve conter pelo menos uma letra maiúscula" })
+    .regex(/[a-z]/, { message: "Senha deve conter pelo menos uma letra minúscula" })
+    .regex(/\d/, { message: "Senha deve conter pelo menos um número" }),
   cpf: z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "CPF inválido" }),
   phone: z.string().min(10, { message: "Telefone inválido" }).max(20),
   birthDate: z.string().min(10, { message: "Data de nascimento é obrigatória" }),
@@ -46,6 +51,27 @@ const formatPhone = (value: string): string => {
   if (digits.length <= 10) return `(${digits.slice(0, 2)}) ${digits.slice(2, 6)}-${digits.slice(6)}`;
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
+
+function getServerUrl() {
+  if (import.meta.env.DEV) return "";
+  return import.meta.env.VITE_LOCAL_SERVER_URL || "";
+}
+
+async function notifyUserRegistered(email: string, name: string) {
+  try {
+    const baseUrl = getServerUrl();
+    await fetch(`${baseUrl}/api/notifications/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tipo: "UsuarioCadastrado",
+        data: { email, nome: name },
+      }),
+    });
+  } catch {
+    // Fire-and-forget — don't block the user
+  }
+}
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -310,11 +336,14 @@ const Auth = () => {
         description: "Bem-vindo à Novità!",
       });
 
+      // Dispara email de boas-vindas (fire-and-forget)
+      notifyUserRegistered(result.data.email, result.data.name);
+
       // Auto-login after signup (since auto-confirm is enabled)
       if (data.session) {
         navigate(getRedirectPath(selectedPlan || null));
       }
-      
+
       setIsLoading(false);
     } catch (error) {
       toast({
@@ -606,10 +635,10 @@ const Auth = () => {
                             id="signup-password"
                             name="password"
                             type={showPassword ? "text" : "password"}
-                            placeholder="Mínimo 6 caracteres"
+                            placeholder="Mínimo 8 caracteres (A-z, 0-9)"
                             required
                             autoComplete="new-password"
-                            minLength={6}
+                            minLength={8}
                           />
                           <button
                             type="button"

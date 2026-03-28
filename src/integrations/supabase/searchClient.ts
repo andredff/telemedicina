@@ -147,6 +147,26 @@ export class PrescriptionSearchService {
     }
   }
 
+  static async getPrescriptionByConsultationId(consultationId: string): Promise<PrescriptionWithMedications | null> {
+    try {
+      const { data, error } = await supabase
+        .from('prescriptions')
+        .select('*, medications(*)')
+        .eq('consultation_id', consultationId)
+        .maybeSingle();
+
+      if (error) {
+        throw error;
+      }
+
+      return data || null;
+
+    } catch (error) {
+      console.error('[SearchClient] Error getting prescription by consultation ID:', error);
+      return null;
+    }
+  }
+
   static async getSearchSuggestions(query: string): Promise<string[]> {
     try {
       if (!query || query.length < 2) {
