@@ -1,30 +1,23 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { supabase } from '@/integrations/supabase/client';
 import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
-import { 
-  Dialog, 
-  DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogTrigger 
-} from '@/components/ui/dialog';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
 import {
   Card,
@@ -32,8 +25,10 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen, Eye, Loader2 } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen, Newspaper, Pen, Eye, Loader2, ArrowLeft, ImagePlus, X, Replace } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+
+const RichTextEditor = lazy(() => import('@/components/admin/RichTextEditor'));
 
 interface BlogPost {
   id: string;
@@ -48,7 +43,10 @@ interface BlogPost {
   views: number;
   content?: string;
   excerpt?: string;
+  featured_image?: string | null;
 }
+
+type ViewMode = 'list' | 'editor';
 
 export default function AdminContent() {
   const [blogPosts, setBlogPosts] = useState<BlogPost[]>([]);
@@ -57,15 +55,17 @@ export default function AdminContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [editingPost, setEditingPost] = useState<Partial<BlogPost> | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement>(null);
 
   const fetchPosts = async () => {
     try {
       setLoading(true);
       const { data, error } = await AdminQueries.getAllBlogPosts();
-      
+
       if (error) throw error;
-      
+
       const formattedPosts = (data || []).map((post: Record<string, unknown>) => ({
         id: post.id as string,
         title: post.title as string,
@@ -79,8 +79,9 @@ export default function AdminContent() {
         views: (post.views as number) || 0,
         content: post.content as string,
         excerpt: post.excerpt as string,
+        featured_image: (post.featured_image as string) || null,
       }));
-      
+
       setBlogPosts(formattedPosts);
     } catch (error) {
       logger.error('Error fetching blog posts:', error);
@@ -108,7 +109,17 @@ export default function AdminContent() {
 
   const handleEditPost = (post: BlogPost) => {
     setEditingPost({ ...post });
-    setIsDialogOpen(true);
+    setViewMode('editor');
+  };
+
+  const handleNewPost = () => {
+    setEditingPost(buildEmptyPost());
+    setViewMode('editor');
+  };
+
+  const handleBackToList = () => {
+    setViewMode('list');
+    setEditingPost(null);
   };
 
   const generateSlug = (title: string): string => {
@@ -129,13 +140,12 @@ export default function AdminContent() {
       });
       return;
     }
-    
+
     setSaving(true);
     try {
       const slug = editingPost.slug || generateSlug(editingPost.title);
-      
+
       if (editingPost.id) {
-        // Update existing post
         const { error } = await AdminQueries.updateBlogPost(editingPost.id, {
           title: editingPost.title,
           slug,
@@ -143,17 +153,17 @@ export default function AdminContent() {
           excerpt: editingPost.excerpt,
           category: editingPost.category,
           status: editingPost.status,
+          featured_image: editingPost.featured_image ?? undefined,
           published_at: editingPost.status === 'published' ? new Date().toISOString() : undefined,
         });
-        
+
         if (error) throw error;
-        
+
         toast({
           title: 'Sucesso',
           description: 'Post atualizado com sucesso'
         });
       } else {
-        // Create new post
         const { error } = await AdminQueries.createBlogPost({
           title: editingPost.title,
           slug,
@@ -161,17 +171,18 @@ export default function AdminContent() {
           excerpt: editingPost.excerpt,
           category: editingPost.category,
           status: editingPost.status || 'draft',
+          featured_image: editingPost.featured_image ?? undefined,
         });
-        
+
         if (error) throw error;
-        
+
         toast({
           title: 'Sucesso',
           description: 'Novo post criado com sucesso'
         });
       }
-      
-      setIsDialogOpen(false);
+
+      setViewMode('list');
       setEditingPost(null);
       fetchPosts();
     } catch (error) {
@@ -189,9 +200,9 @@ export default function AdminContent() {
   const handleDeletePost = async (postId: string) => {
     try {
       const { error } = await AdminQueries.deleteBlogPost(postId);
-      
+
       if (error) throw error;
-      
+
       setBlogPosts(blogPosts.filter(post => post.id !== postId));
       toast({
         title: 'Sucesso',
@@ -213,10 +224,10 @@ export default function AdminContent() {
       draft: { text: 'Rascunho', color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' },
       scheduled: { text: 'Agendado', color: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' }
     };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || 
+
+    const config = statusConfig[status as keyof typeof statusConfig] ||
                    statusConfig.draft;
-    
+
     return (
       <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
         <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
@@ -232,7 +243,56 @@ export default function AdminContent() {
     status: 'draft',
     content: '',
     excerpt: '',
+    featured_image: null,
   });
+
+  const handleCoverUpload = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast({ title: 'Erro', description: 'Selecione um arquivo de imagem válido (JPG, PNG, WebP)', variant: 'destructive' });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'Erro', description: 'A imagem deve ter no máximo 5MB', variant: 'destructive' });
+      return;
+    }
+
+    setUploadingCover(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
+      const filePath = `blog-covers/${fileName}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('blog-content')
+        .upload(filePath, file, { cacheControl: '3600', upsert: false });
+
+      if (uploadError) throw uploadError;
+
+      const { data: urlData } = supabase.storage
+        .from('blog-content')
+        .getPublicUrl(filePath);
+
+      if (urlData.publicUrl) {
+        setEditingPost(prev => prev ? { ...prev, featured_image: urlData.publicUrl } : null);
+        toast({ title: 'Sucesso', description: 'Imagem de capa carregada' });
+      }
+    } catch (error) {
+      logger.error('Error uploading cover image:', error);
+      toast({ title: 'Erro', description: 'Falha ao fazer upload da imagem', variant: 'destructive' });
+    } finally {
+      setUploadingCover(false);
+    }
+  }, []);
+
+  const handleCoverFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleCoverUpload(file);
+    e.target.value = '';
+  }, [handleCoverUpload]);
+
+  const handleRemoveCover = () => {
+    setEditingPost(prev => prev ? { ...prev, featured_image: null } : null);
+  };
 
   if (loading) {
     return (
@@ -242,6 +302,223 @@ export default function AdminContent() {
     );
   }
 
+  // ==========================================
+  // EDITOR VIEW (full-page)
+  // ==========================================
+  if (viewMode === 'editor' && editingPost) {
+    return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="sm" onClick={handleBackToList}>
+              <ArrowLeft className="h-4 w-4 mr-1" />
+              Voltar
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold">
+                {editingPost.id ? 'Editar Post' : 'Novo Post'}
+              </h1>
+              <p className="text-gray-500 text-sm">
+                {editingPost.id ? 'Modifique o conteúdo do post' : 'Crie um novo artigo para o blog'}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={handleBackToList}>
+              Cancelar
+            </Button>
+            <Button onClick={handleSavePost} disabled={saving}>
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Salvando...
+                </>
+              ) : (
+                'Salvar Post'
+              )}
+            </Button>
+          </div>
+        </div>
+
+        {/* Post metadata */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Título *</label>
+            <Input
+              value={editingPost.title || ''}
+              onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
+              placeholder="Título do post"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Categoria *</label>
+            <Select
+              value={editingPost.category || ''}
+              onValueChange={(value) => setEditingPost({ ...editingPost, category: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione uma categoria" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Saúde Mental">Saúde Mental</SelectItem>
+                <SelectItem value="Telemedicina">Telemedicina</SelectItem>
+                <SelectItem value="Nutrição">Nutrição</SelectItem>
+                <SelectItem value="Exercícios">Exercícios</SelectItem>
+                <SelectItem value="Prevenção">Prevenção</SelectItem>
+                <SelectItem value="Bem-estar">Bem-estar</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1.5">Status</label>
+            <Select
+              value={editingPost.status || 'draft'}
+              onValueChange={(value) => setEditingPost({ ...editingPost, status: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione um status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="draft">Rascunho</SelectItem>
+                <SelectItem value="published">Publicado</SelectItem>
+                <SelectItem value="archived">Arquivado</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Excerpt */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Resumo</label>
+          <Input
+            value={editingPost.excerpt || ''}
+            onChange={(e) => setEditingPost({ ...editingPost, excerpt: e.target.value })}
+            placeholder="Breve descrição do post (exibido na listagem do blog)"
+          />
+        </div>
+
+        {/* Featured Image (Cover) - hidden for now
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Imagem de Capa</label>
+          {editingPost.featured_image ? (
+            <div className="border rounded-lg overflow-hidden bg-gray-50">
+              <div className="relative aspect-video max-h-[300px] overflow-hidden">
+                <img
+                  src={editingPost.featured_image}
+                  alt="Imagem de capa"
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute top-2 right-2 flex gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="bg-white/90 hover:bg-white shadow-sm"
+                    onClick={() => coverInputRef.current?.click()}
+                    disabled={uploadingCover}
+                  >
+                    {uploadingCover ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <>
+                        <Replace className="h-4 w-4 mr-1" />
+                        Alterar
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    className="bg-white/90 hover:bg-red-50 text-red-600 hover:text-red-700 shadow-sm"
+                    onClick={handleRemoveCover}
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Remover
+                  </Button>
+                </div>
+              </div>
+              <div className="px-3 py-2 text-xs text-gray-500 border-t">
+                Proporção recomendada: 16:9 &middot; Tamanho máximo: 5MB
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => coverInputRef.current?.click()}
+              disabled={uploadingCover}
+              className="w-full border-2 border-dashed border-gray-300 rounded-lg p-8 flex flex-col items-center justify-center gap-3 hover:border-orange-400 hover:bg-orange-50/50 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {uploadingCover ? (
+                <>
+                  <Loader2 className="h-8 w-8 text-gray-400 animate-spin" />
+                  <span className="text-sm text-gray-500">Fazendo upload...</span>
+                </>
+              ) : (
+                <>
+                  <ImagePlus className="h-8 w-8 text-gray-400" />
+                  <div className="text-center">
+                    <span className="text-sm font-medium text-gray-700">Clique para adicionar imagem de capa</span>
+                    <p className="text-xs text-gray-500 mt-1">
+                      JPG, PNG ou WebP &middot; Máx. 5MB &middot; Proporção recomendada: 16:9
+                    </p>
+                  </div>
+                </>
+              )}
+            </button>
+          )}
+          <input
+            ref={coverInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={handleCoverFileSelect}
+          />
+        </div>
+        */}
+
+        {/* Rich Text Editor */}
+        <div>
+          <label className="block text-sm font-medium mb-1.5">Conteúdo</label>
+          <Suspense fallback={
+            <div className="border rounded-lg flex items-center justify-center h-[400px]">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          }>
+            <RichTextEditor
+              content={editingPost.content || ''}
+              onChange={(html) => setEditingPost({ ...editingPost, content: html })}
+              placeholder="Escreva o conteúdo do post aqui..."
+            />
+          </Suspense>
+        </div>
+
+        {/* Bottom save bar */}
+        <div className="flex justify-end gap-2 pt-4 border-t">
+          <Button variant="outline" onClick={handleBackToList}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSavePost} disabled={saving}>
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Salvando...
+              </>
+            ) : (
+              'Salvar Post'
+            )}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ==========================================
+  // LIST VIEW
+  // ==========================================
   return (
     <div className="space-y-6">
       <div>
@@ -260,7 +537,7 @@ export default function AdminContent() {
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
-        
+
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filtrar por status" />
@@ -272,107 +549,11 @@ export default function AdminContent() {
             <SelectItem value="scheduled">Agendados</SelectItem>
           </SelectContent>
         </Select>
-        
-        <Dialog
-          open={isDialogOpen}
-          onOpenChange={(open) => {
-            setIsDialogOpen(open);
-            if (!open) setEditingPost(null);
-          }}
-        >
-          <DialogTrigger asChild>
-            <Button
-              onClick={() => {
-                setEditingPost(buildEmptyPost());
-              }}
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Post
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingPost?.id ? 'Editar Post' : 'Novo Post'}</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Título</label>
-                <Input
-                  value={editingPost?.title || ''}
-                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, title: e.target.value } : null)}
-                  placeholder="Título do post"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">Categoria</label>
-                <Select
-                  value={editingPost?.category || ''}
-                  onValueChange={(value) => setEditingPost(editingPost ? { ...editingPost, category: value } : null)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione uma categoria" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Saúde Mental">Saúde Mental</SelectItem>
-                    <SelectItem value="Telemedicina">Telemedicina</SelectItem>
-                    <SelectItem value="Nutrição">Nutrição</SelectItem>
-                    <SelectItem value="Exercícios">Exercícios</SelectItem>
-                    <SelectItem value="Prevenção">Prevenção</SelectItem>
-                    <SelectItem value="Bem-estar">Bem-estar</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">Status</label>
-                <Select
-                  value={editingPost?.status || 'draft'}
-                  onValueChange={(value) => setEditingPost(editingPost ? { ...editingPost, status: value } : null)}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione um status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="draft">Rascunho</SelectItem>
-                    <SelectItem value="published">Publicado</SelectItem>
-                    <SelectItem value="archived">Arquivado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">Resumo</label>
-                <Input
-                  value={editingPost?.excerpt || ''}
-                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, excerpt: e.target.value } : null)}
-                  placeholder="Breve descrição do post"
-                />
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium mb-2">Conteúdo</label>
-                <Textarea
-                  value={editingPost?.content || ''}
-                  onChange={(e) => setEditingPost(editingPost ? { ...editingPost, content: e.target.value } : null)}
-                  placeholder="Conteúdo do post..."
-                  className="min-h-[200px]"
-                />
-              </div>
-              
-              <Button onClick={handleSavePost} className="w-full" disabled={saving}>
-                {saving ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Salvando...
-                  </>
-                ) : (
-                  'Salvar Post'
-                )}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+
+        <Button onClick={handleNewPost}>
+          <Plus className="h-4 w-4 mr-2" />
+          Novo Post
+        </Button>
       </div>
 
       {/* Blog Posts Table */}
@@ -454,7 +635,7 @@ export default function AdminContent() {
             <div className="text-2xl font-bold">{blogPosts.length}</div>
           </CardContent>
         </Card>
-        
+
         <Card className="flex-1 min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Publicados</CardTitle>
@@ -464,7 +645,7 @@ export default function AdminContent() {
             <div className="text-2xl font-bold">{blogPosts.filter(p => p.status === 'published').length}</div>
           </CardContent>
         </Card>
-        
+
         <Card className="flex-1 min-w-[200px]">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Visualizações Totais</CardTitle>

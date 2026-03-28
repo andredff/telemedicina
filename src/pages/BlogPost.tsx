@@ -7,6 +7,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, ArrowLeft, ArrowRight, Clock, User, Share2, Loader2 } from "lucide-react";
+import DOMPurify from "dompurify";
 
 interface BlogPost {
   id: string;
@@ -173,7 +174,7 @@ const BlogPostPage = () => {
             {/* Article Content */}
             <Card className="bg-card border-border/50">
               <CardContent className="p-6 md:p-8 prose prose-lg max-w-none dark:prose-invert">
-                <div dangerouslySetInnerHTML={{ __html: post.content }} />
+                <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content, { ADD_TAGS: ['iframe'], ADD_ATTR: ['target', 'rel'] }) }} />
               </CardContent>
             </Card>
 

@@ -119,9 +119,9 @@ const Header = ({
                         Meus Pedidos
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate("/como-funciona")}>
+                      <DropdownMenuItem onClick={() => navigate("/suporte")}>
                         <HelpCircle className="mr-2 h-4 w-4" />
-                        Ajuda
+                        Suporte
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>

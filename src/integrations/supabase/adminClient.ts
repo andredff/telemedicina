@@ -402,6 +402,7 @@ export const AdminQueries = {
     category: string;
     status: string;
     author_id?: string;
+    featured_image?: string;
   }) {
     if (!supabaseAdmin) {
       return { data: null, error: new Error("Supabase admin client not configured") };
@@ -429,6 +430,7 @@ export const AdminQueries = {
     category: string;
     status: string;
     published_at: string;
+    featured_image: string | null;
   }>) {
     if (!supabaseAdmin) {
       return { data: null, error: new Error("Supabase admin client not configured") };
@@ -478,7 +480,7 @@ export const AdminQueries = {
     try {
       const result = await supabaseAdmin
         .from('support_tickets')
-        .select('*, profiles(full_name, email)')
+        .select('*, profiles!support_tickets_user_id_fkey(full_name, email)')
         .order('created_at', { ascending: false });
       
       if (result.error) return { data: [], error: result.error };

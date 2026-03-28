@@ -45,6 +45,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
 import AdminUserDetail from "./pages/admin/UserDetail";
+import Support from "./pages/Support";
 
 const queryClient = new QueryClient();
 
@@ -95,6 +96,7 @@ const App = () => (
           <Route path="/termos" element={<Terms />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/cancelamento" element={<Cancellation />} />
+          <Route path="/suporte" element={<Support />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>

@@ -21,6 +21,7 @@ import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
 import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
+import SupportFAB from "@/components/SupportFAB";
 
 interface AssemedReceituario {
   consultationId: number;
@@ -590,6 +591,8 @@ const Dashboard = () => {
         prescriptionTitle={selectedRec ? `Consulta #${selectedRec.consultationId}` : undefined}
         consultationId={selectedRec?.consultationId}
       />
+
+      <SupportFAB />
     </div>
   );
 };

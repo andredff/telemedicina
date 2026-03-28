@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
 import { supabase } from '@/integrations/supabase/client';
 import { logger } from "@/lib/logger";
@@ -6,26 +6,26 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { 
-  Table, 
-  TableBody, 
-  TableCell, 
-  TableHead, 
-  TableHeader, 
-  TableRow 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow
 } from '@/components/ui/table';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
 } from '@/components/ui/select';
-import { 
-  Tabs, 
-  TabsContent, 
-  TabsList, 
-  TabsTrigger 
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger
 } from '@/components/ui/tabs';
 import {
   Card,
@@ -40,7 +40,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail, Save, BookOpen, Loader2, RefreshCw, Edit, Trash2, Eye } from 'lucide-react';
+import { Search, Plus, MessageCircle, CheckCircle2, Clock, AlertCircle, Mail, Save, BookOpen, Loader2, RefreshCw, Edit, Trash2, Eye, Send, User } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface Ticket {
@@ -55,6 +55,16 @@ interface Ticket {
   category?: string;
   created_at: string;
   updated_at: string;
+}
+
+interface TicketMessage {
+  id: string;
+  ticket_id: string;
+  sender_id: string | null;
+  sender_type: string;
+  message: string;
+  created_at: string;
+  profiles?: { full_name: string | null } | null;
 }
 
 interface KnowledgeArticle {
@@ -76,7 +86,16 @@ export default function AdminSupport() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
-  
+
+  // Ticket detail dialog state
+  const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
+  const [showTicketDialog, setShowTicketDialog] = useState(false);
+  const [messages, setMessages] = useState<TicketMessage[]>([]);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [replyMessage, setReplyMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
   // Knowledge Base state
   const [articles, setArticles] = useState<KnowledgeArticle[]>([]);
   const [articlesLoading, setArticlesLoading] = useState(false);
@@ -96,9 +115,9 @@ export default function AdminSupport() {
     try {
       setLoading(true);
       const { data, error } = await AdminQueries.getAllTickets();
-      
+
       if (error) throw error;
-      
+
       const formattedTickets = (data || []).map((ticket: Record<string, unknown>) => ({
         id: ticket.id as string,
         ticket_number: ticket.ticket_number as string,
@@ -112,7 +131,7 @@ export default function AdminSupport() {
         created_at: ticket.created_at as string,
         updated_at: ticket.updated_at as string,
       }));
-      
+
       setTickets(formattedTickets);
     } catch (error) {
       logger.error('Error fetching tickets:', error);
@@ -126,14 +145,86 @@ export default function AdminSupport() {
     }
   };
 
-  // Knowledge Base functions
+  // ── Ticket Detail ──────────────────────────────────────────────────
+
+  const openTicketDetail = async (ticket: Ticket) => {
+    setSelectedTicket(ticket);
+    setShowTicketDialog(true);
+    setMessagesLoading(true);
+    setReplyMessage('');
+
+    try {
+      const { data, error } = await AdminQueries.getTicketMessages(ticket.id);
+      if (error) throw error;
+      setMessages((data as TicketMessage[]) || []);
+    } catch (error) {
+      logger.error('Error fetching messages:', error);
+      toast({ title: 'Erro', description: 'Falha ao carregar mensagens', variant: 'destructive' });
+    } finally {
+      setMessagesLoading(false);
+    }
+  };
+
+  const handleSendReply = async () => {
+    if (!replyMessage.trim() || !selectedTicket) return;
+
+    setSending(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await AdminQueries.addTicketMessage(
+        selectedTicket.id,
+        replyMessage.trim(),
+        user?.id,
+        'support'
+      );
+
+      if (error) throw error;
+
+      // If ticket is still "open", move it to "in_progress"
+      if (selectedTicket.status === 'open') {
+        await AdminQueries.updateTicketStatus(selectedTicket.id, 'in_progress');
+        setSelectedTicket({ ...selectedTicket, status: 'in_progress' });
+        setTickets(tickets.map(t =>
+          t.id === selectedTicket.id ? { ...t, status: 'in_progress' } : t
+        ));
+      }
+
+      setReplyMessage('');
+
+      // Refresh messages
+      const { data: msgs } = await AdminQueries.getTicketMessages(selectedTicket.id);
+      setMessages((msgs as TicketMessage[]) || []);
+
+      toast({ title: 'Sucesso', description: 'Resposta enviada!' });
+    } catch (error) {
+      logger.error('Error sending reply:', error);
+      toast({ title: 'Erro', description: 'Falha ao enviar resposta', variant: 'destructive' });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleReplyKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendReply();
+    }
+  };
+
+  // Auto scroll on new messages
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // ── Knowledge Base ─────────────────────────────────────────────────
+
   const fetchArticles = async () => {
     try {
       setArticlesLoading(true);
       const { data, error } = await AdminQueries.getAllKnowledgeArticles();
-      
+
       if (error) throw error;
-      
+
       const formattedArticles = (data || []).map((article: Record<string, unknown>) => ({
         id: article.id as string,
         title: article.title as string,
@@ -146,7 +237,7 @@ export default function AdminSupport() {
         created_at: article.created_at as string,
         updated_at: article.updated_at as string,
       }));
-      
+
       setArticles(formattedArticles);
     } catch (error) {
       logger.error('Error fetching articles:', error);
@@ -205,9 +296,8 @@ export default function AdminSupport() {
     setSavingArticle(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       if (editingArticle) {
-        // Update existing article
         const { error } = await AdminQueries.updateKnowledgeArticle(editingArticle.id, {
           title: articleForm.title,
           slug: generateSlug(articleForm.title),
@@ -216,12 +306,11 @@ export default function AdminSupport() {
           category: articleForm.category,
           status: articleForm.status,
         });
-        
+
         if (error) throw error;
-        
+
         toast({ title: 'Sucesso', description: 'Artigo atualizado!' });
       } else {
-        // Create new article
         const { error } = await AdminQueries.createKnowledgeArticle({
           title: articleForm.title,
           slug: generateSlug(articleForm.title),
@@ -231,12 +320,12 @@ export default function AdminSupport() {
           status: articleForm.status,
           author_id: user?.id,
         });
-        
+
         if (error) throw error;
-        
+
         toast({ title: 'Sucesso', description: 'Artigo criado!' });
       }
-      
+
       setShowArticleDialog(false);
       fetchArticles();
     } catch (error) {
@@ -253,12 +342,12 @@ export default function AdminSupport() {
 
   const handleDeleteArticle = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este artigo?')) return;
-    
+
     try {
       const { error } = await AdminQueries.deleteKnowledgeArticle(id);
-      
+
       if (error) throw error;
-      
+
       setArticles(articles.filter(a => a.id !== id));
       toast({ title: 'Sucesso', description: 'Artigo excluído!' });
     } catch (error) {
@@ -284,13 +373,18 @@ export default function AdminSupport() {
   const handleUpdateStatus = async (ticketId: string, newStatus: string) => {
     try {
       const { error } = await AdminQueries.updateTicketStatus(ticketId, newStatus);
-      
+
       if (error) throw error;
-      
-      setTickets(tickets.map(ticket => 
+
+      setTickets(tickets.map(ticket =>
         ticket.id === ticketId ? { ...ticket, status: newStatus } : ticket
       ));
-      
+
+      // Also update selectedTicket if the dialog is open for this ticket
+      if (selectedTicket?.id === ticketId) {
+        setSelectedTicket({ ...selectedTicket, status: newStatus });
+      }
+
       toast({
         title: 'Sucesso',
         description: 'Status atualizado com sucesso'
@@ -314,42 +408,46 @@ export default function AdminSupport() {
     return matchesSearch && matchesStatus && matchesPriority;
   });
 
-  const getStatusBadge = (status: string) => {
-    const statusConfig = {
-      open: { text: 'Aberto', color: 'bg-blue-100 text-blue-800', dot: 'bg-blue-500' },
-      in_progress: { text: 'Em Progresso', color: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' },
-      closed: { text: 'Fechado', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' },
-      pending: { text: 'Pendente', color: 'bg-gray-100 text-gray-800', dot: 'bg-gray-500' }
-    };
-    
-    const config = statusConfig[status as keyof typeof statusConfig] || 
-                   statusConfig.open;
-    
+  const statusConfig: Record<string, { text: string; bg: string; textColor: string; dot: string }> = {
+    open: { text: 'Aberto', bg: 'bg-blue-50', textColor: 'text-blue-700', dot: 'bg-blue-500' },
+    in_progress: { text: 'Em Progresso', bg: 'bg-yellow-50', textColor: 'text-yellow-700', dot: 'bg-yellow-500' },
+    closed: { text: 'Fechado', bg: 'bg-green-50', textColor: 'text-green-700', dot: 'bg-green-500' },
+    pending: { text: 'Pendente', bg: 'bg-gray-50', textColor: 'text-gray-700', dot: 'bg-gray-500' },
+  };
+
+  const priorityConfig: Record<string, { text: string; bg: string; textColor: string; dot: string }> = {
+    high: { text: 'Alta', bg: 'bg-red-50', textColor: 'text-red-700', dot: 'bg-red-500' },
+    medium: { text: 'Média', bg: 'bg-yellow-50', textColor: 'text-yellow-700', dot: 'bg-yellow-500' },
+    low: { text: 'Baixa', bg: 'bg-green-50', textColor: 'text-green-700', dot: 'bg-green-500' },
+  };
+
+  const getStatusLabel = (status: string) => (statusConfig[status] || statusConfig.open).text;
+
+  const StatusChip = ({ status }: { status: string }) => {
+    const cfg = statusConfig[status] || statusConfig.open;
     return (
-      <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
-        <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
-        {config.text}
-      </div>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.textColor}`}>
+        <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+        {cfg.text}
+      </span>
     );
   };
 
-  const getPriorityBadge = (priority: string) => {
-    const priorityConfig = {
-      high: { text: 'Alta', color: 'bg-red-100 text-red-800', dot: 'bg-red-500' },
-      medium: { text: 'Média', color: 'bg-yellow-100 text-yellow-800', dot: 'bg-yellow-500' },
-      low: { text: 'Baixa', color: 'bg-green-100 text-green-800', dot: 'bg-green-500' }
-    };
-    
-    const config = priorityConfig[priority as keyof typeof priorityConfig] || 
-                   priorityConfig.medium;
-    
+  const PriorityChip = ({ priority }: { priority: string }) => {
+    const cfg = priorityConfig[priority] || priorityConfig.medium;
     return (
-      <div className={`flex items-center gap-2 px-2 py-1 rounded-full text-sm ${config.color}`}>
-        <div className={`h-2 w-2 rounded-full ${config.dot}`}></div>
-        {config.text}
-      </div>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${cfg.bg} ${cfg.textColor}`}>
+        <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+        {cfg.text}
+      </span>
     );
   };
+
+  const formatDate = (dateStr: string) =>
+    new Date(dateStr).toLocaleString('pt-BR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
 
   return (
     <div className="space-y-6">
@@ -388,7 +486,7 @@ export default function AdminSupport() {
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
               </div>
-              
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Status" />
@@ -400,7 +498,7 @@ export default function AdminSupport() {
                   <SelectItem value="closed">Fechados</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
                 <SelectTrigger className="w-[150px]">
                   <SelectValue placeholder="Prioridade" />
@@ -412,7 +510,7 @@ export default function AdminSupport() {
                   <SelectItem value="low">Baixa</SelectItem>
                 </SelectContent>
               </Select>
-              
+
               <Button onClick={fetchTickets}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Atualizar
@@ -447,7 +545,7 @@ export default function AdminSupport() {
                     </TableRow>
                   ) : (
                     filteredTickets.map((ticket) => (
-                      <TableRow key={ticket.id}>
+                      <TableRow key={ticket.id} className="cursor-pointer hover:bg-muted/50" onClick={() => openTicketDetail(ticket)}>
                         <TableCell className="font-mono text-sm">{ticket.ticket_number}</TableCell>
                         <TableCell>
                           <div className="font-medium">{ticket.subject}</div>
@@ -459,13 +557,13 @@ export default function AdminSupport() {
                           <div>{ticket.user_name || 'N/A'}</div>
                           <div className="text-sm text-gray-500">{ticket.user_email}</div>
                         </TableCell>
-                        <TableCell>
+                        <TableCell onClick={(e) => e.stopPropagation()}>
                           <Select
                             value={ticket.status}
                             onValueChange={(value) => handleUpdateStatus(ticket.id, value)}
                           >
-                            <SelectTrigger className="w-[140px]">
-                              {getStatusBadge(ticket.status)}
+                            <SelectTrigger className="w-[150px] h-8">
+                              <SelectValue>{getStatusLabel(ticket.status)}</SelectValue>
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="open">Aberto</SelectItem>
@@ -475,19 +573,21 @@ export default function AdminSupport() {
                             </SelectContent>
                           </Select>
                         </TableCell>
-                        <TableCell>{getPriorityBadge(ticket.priority)}</TableCell>
+                        <TableCell><PriorityChip priority={ticket.priority} /></TableCell>
                         <TableCell>
-                          {new Date(ticket.updated_at).toLocaleString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
+                          {formatDate(ticket.updated_at)}
                         </TableCell>
                         <TableCell>
-                          <Button variant="outline" size="sm" className="mr-2">
-                            <MessageCircle className="h-4 w-4" />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openTicketDetail(ticket);
+                            }}
+                          >
+                            <MessageCircle className="h-4 w-4 mr-1" />
+                            Responder
                           </Button>
                         </TableCell>
                       </TableRow>
@@ -509,7 +609,7 @@ export default function AdminSupport() {
                   <div className="text-2xl font-bold">{tickets.length}</div>
                 </CardContent>
               </Card>
-              
+
               <Card className="flex-1 min-w-[200px]">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Abertos</CardTitle>
@@ -519,7 +619,7 @@ export default function AdminSupport() {
                   <div className="text-2xl font-bold">{tickets.filter(t => t.status === 'open').length}</div>
                 </CardContent>
               </Card>
-              
+
               <Card className="flex-1 min-w-[200px]">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Em Progresso</CardTitle>
@@ -529,7 +629,7 @@ export default function AdminSupport() {
                   <div className="text-2xl font-bold">{tickets.filter(t => t.status === 'in_progress').length}</div>
                 </CardContent>
               </Card>
-              
+
               <Card className="flex-1 min-w-[200px]">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                   <CardTitle className="text-sm font-medium">Fechados</CardTitle>
@@ -570,7 +670,7 @@ export default function AdminSupport() {
                     Novo Artigo
                   </Button>
                 </div>
-                
+
                 {articlesLoading ? (
                   <div className="flex items-center justify-center h-32">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -582,8 +682,8 @@ export default function AdminSupport() {
                 ) : (
                   <div className="space-y-2">
                     {filteredArticles.map((article) => (
-                      <div 
-                        key={article.id} 
+                      <div
+                        key={article.id}
                         className="p-4 border rounded-lg hover:bg-gray-50 transition-colors"
                       >
                         <div className="flex items-start justify-between">
@@ -591,8 +691,8 @@ export default function AdminSupport() {
                             <div className="flex items-center gap-2 mb-1">
                               <h3 className="font-medium">{article.title}</h3>
                               <span className={`text-xs px-2 py-0.5 rounded-full ${
-                                article.status === 'published' 
-                                  ? 'bg-green-100 text-green-800' 
+                                article.status === 'published'
+                                  ? 'bg-green-100 text-green-800'
                                   : article.status === 'draft'
                                   ? 'bg-yellow-100 text-yellow-800'
                                   : 'bg-gray-100 text-gray-800'
@@ -624,7 +724,7 @@ export default function AdminSupport() {
               </div>
             </CardContent>
           </Card>
-          
+
           {/* Article Dialog */}
           <Dialog open={showArticleDialog} onOpenChange={setShowArticleDialog}>
             <DialogContent className="max-w-2xl">
@@ -751,7 +851,7 @@ export default function AdminSupport() {
                         Equipe Novità
                       </div>
                     </div>
-                    
+
                     <div className="border rounded-lg p-4">
                       <div className="flex justify-between items-start mb-2">
                         <h4 className="font-medium">Confirmação de Pedido</h4>
@@ -787,7 +887,7 @@ export default function AdminSupport() {
                     </div>
                   </div>
                 </div>
-                
+
                 <div>
                   <h3 className="font-medium mb-4">Criar Novo Template</h3>
                   <div className="space-y-4">
@@ -827,6 +927,133 @@ export default function AdminSupport() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ── Ticket Detail Dialog ─────────────────────────────────────── */}
+      <Dialog open={showTicketDialog} onOpenChange={(open) => {
+        setShowTicketDialog(open);
+        if (!open) {
+          fetchTickets(); // refresh list when closing
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              <span>Ticket {selectedTicket?.ticket_number}</span>
+              {selectedTicket && <StatusChip status={selectedTicket.status} />}
+            </DialogTitle>
+            {selectedTicket && (
+              <div className="space-y-1 pt-2">
+                <p className="font-medium text-base">{selectedTicket.subject}</p>
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <User className="h-3.5 w-3.5" />
+                    {selectedTicket.user_name || selectedTicket.user_email}
+                  </span>
+                  <span>·</span>
+                  <span>{formatDate(selectedTicket.created_at)}</span>
+                  {selectedTicket.category && (
+                    <>
+                      <span>·</span>
+                      <span className="capitalize">{selectedTicket.category}</span>
+                    </>
+                  )}
+                </div>
+                {/* Status control inside dialog */}
+                <div className="flex items-center gap-2 pt-2">
+                  <span className="text-sm text-muted-foreground">Alterar status:</span>
+                  <Select
+                    value={selectedTicket.status}
+                    onValueChange={(value) => handleUpdateStatus(selectedTicket.id, value)}
+                  >
+                    <SelectTrigger className="w-[160px] h-8">
+                      <SelectValue>{getStatusLabel(selectedTicket.status)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="open">Aberto</SelectItem>
+                      <SelectItem value="in_progress">Em Progresso</SelectItem>
+                      <SelectItem value="pending">Pendente</SelectItem>
+                      <SelectItem value="closed">Fechado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+          </DialogHeader>
+
+          {/* Messages */}
+          <div className="flex-1 overflow-y-auto border rounded-lg bg-muted/30 p-4 space-y-3 min-h-[200px] max-h-[40vh]">
+            {messagesLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="text-center py-8 text-sm text-muted-foreground">
+                {selectedTicket?.description ? (
+                  <div className="text-left">
+                    <p className="font-medium text-foreground mb-1">Descrição do ticket:</p>
+                    <p className="whitespace-pre-wrap">{selectedTicket.description}</p>
+                  </div>
+                ) : (
+                  'Nenhuma mensagem ainda.'
+                )}
+              </div>
+            ) : (
+              messages.map((msg) => {
+                const isSupport = msg.sender_type === 'support';
+                const isSystem = msg.sender_type === 'system';
+                return (
+                  <div key={msg.id} className={`flex ${isSupport ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`rounded-xl px-4 py-2.5 max-w-[85%] ${
+                        isSystem
+                          ? 'bg-muted text-muted-foreground text-center w-full text-xs italic'
+                          : isSupport
+                          ? 'bg-primary text-primary-foreground'
+                          : 'bg-card border shadow-sm'
+                      }`}
+                    >
+                      {!isSystem && (
+                        <p className={`text-[11px] font-medium mb-0.5 ${isSupport ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                          {isSupport ? (msg.profiles?.full_name || 'Suporte') : (selectedTicket?.user_name || 'Cliente')}
+                        </p>
+                      )}
+                      <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      <p className={`text-[10px] mt-1 ${isSupport ? 'text-primary-foreground/50' : 'text-muted-foreground/60'}`}>
+                        {formatDate(msg.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Reply box */}
+          <div className="flex gap-2 pt-2">
+            <Textarea
+              placeholder="Digite sua resposta..."
+              value={replyMessage}
+              onChange={(e) => setReplyMessage(e.target.value)}
+              onKeyDown={handleReplyKeyDown}
+              className="min-h-[44px] max-h-[120px] resize-none"
+              rows={2}
+            />
+            <Button
+              size="icon"
+              onClick={handleSendReply}
+              disabled={sending || !replyMessage.trim()}
+              className="shrink-0 h-[44px] w-[44px]"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

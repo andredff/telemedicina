@@ -235,9 +235,4 @@ INSERT INTO blog_posts (title, slug, content, excerpt, category, status, views, 
   ('Dicas para uma alimentação saudável no inverno', 'alimentacao-saudavel-inverno', 'Durante o inverno, nossa alimentação precisa de atenção especial...', 'Mantenha-se saudável com estas dicas nutricionais', 'Nutrição', 'published', 1563, NOW() - INTERVAL '10 days')
 ON CONFLICT (slug) DO NOTHING;
 
--- Insert sample support tickets
-INSERT INTO support_tickets (subject, description, user_email, user_name, status, priority, category) VALUES
-  ('Problema com login', 'Não consigo acessar minha conta desde ontem', 'joao.silva@email.com', 'João Silva', 'open', 'medium', 'conta'),
-  ('Receita não encontrada', 'Minha receita médica não aparece no sistema', 'maria.oliveira@email.com', 'Maria Oliveira', 'in_progress', 'high', 'receitas'),
-  ('Dúvida sobre plano', 'Gostaria de saber mais sobre os planos disponíveis', 'carlos.santos@email.com', 'Carlos Santos', 'closed', 'low', 'planos')
-ON CONFLICT DO NOTHING;
+-- (No sample support tickets — real tickets are created by patients)
