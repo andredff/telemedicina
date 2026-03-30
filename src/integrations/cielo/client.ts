@@ -1,4 +1,5 @@
 import { getServerUrl } from "./config";
+import { supabase } from "@/integrations/supabase/client";
 import type {
   CreateSaleRequest,
   CreateRecurrentSaleRequest,
@@ -70,11 +71,19 @@ class CieloClient {
       throw new Error("Servidor de pagamento não configurado. Defina VITE_LOCAL_SERVER_URL.");
     }
 
+    // Get current Supabase session token for backend authentication
+    const { data: { session } } = await supabase.auth.getSession();
+    const authHeaders: Record<string, string> = {};
+    if (session?.access_token) {
+      authHeaders["Authorization"] = `Bearer ${session.access_token}`;
+    }
+
     const url = `${this.localServerUrl}${endpoint}`;
     const response = await fetch(url, {
       ...options,
       headers: {
         "Content-Type": "application/json",
+        ...authHeaders,
         ...options.headers,
       },
     });

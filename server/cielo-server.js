@@ -14,14 +14,27 @@ const { createClient } = require("@supabase/supabase-js");
 const app = express();
 const PORT = process.env.PORT || 5174;
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map(s => s.trim())
-  : undefined; // undefined = allow all (dev)
+  : IS_PRODUCTION
+    ? ["https://novita.migrai.com.br", "https://novitahomecare.com.br"]
+    : undefined; // undefined = allow all (dev only)
 
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
 app.use(express.json());
 
-// ─── Rate limiting — proteção contra abuso nos endpoints de pagamento ────────
+// ─── Rate limiting ──────────────────────────────────────────────────────────
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas requisições. Aguarde um momento." },
+});
+app.use(globalLimiter);
+
 const paymentLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minuto
   max: 10,             // máx 10 requests por IP por minuto
@@ -29,6 +42,97 @@ const paymentLimiter = rateLimit({
   legacyHeaders: false,
   message: { success: false, message: "Muitas tentativas de pagamento. Aguarde um momento." },
 });
+
+const emailLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas requisições de e-mail. Aguarde um momento." },
+});
+
+const notificationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas requisições de notificação. Aguarde um momento." },
+});
+
+// ─── Auth middleware — valida JWT do Supabase ─────────────────────────────────
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token de autenticação obrigatório" });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+
+  // Validate the JWT by calling Supabase auth
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // If Supabase is not configured, skip auth in development
+    if (!IS_PRODUCTION) return next();
+    return res.status(500).json({ error: "Servidor não configurado para autenticação" });
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "apikey": supabaseAnonKey,
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(401).json({ error: "Token inválido ou expirado" });
+    }
+
+    const user = await response.json();
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error("[Auth] Erro ao validar token:", err.message);
+    return res.status(401).json({ error: "Erro na validação do token" });
+  }
+}
+
+// Admin-only middleware (requires requireAuth first)
+async function requireAdmin(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
+
+  if (!supabase) {
+    // If Supabase is not configured, skip in development
+    if (!IS_PRODUCTION) return next();
+    return res.status(500).json({ error: "Supabase não configurado" });
+  }
+
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", req.user.id)
+      .single();
+
+    if (data?.role !== "admin") {
+      return res.status(403).json({ error: "Acesso restrito a administradores" });
+    }
+
+    next();
+  } catch (err) {
+    return res.status(500).json({ error: "Erro ao verificar permissões" });
+  }
+}
+
+// Helper: safe error message (never expose internals in production)
+function safeErrorMessage(err) {
+  if (IS_PRODUCTION) return "Erro interno do servidor";
+  return err.message || "Erro interno";
+}
 
 // ─── Webhook secret — proteção contra payloads forjados ──────────────────────
 const WEBHOOK_SECRET = process.env.CIELO_WEBHOOK_SECRET || "";
@@ -207,7 +311,7 @@ function simulatePayment(cardNumber, amountInCents, paymentType) {
 }
 
 // ─── POST /api/cielo/payment ─────────────────────────────────────────────────
-app.post("/api/cielo/payment", paymentLimiter, async (req, res) => {
+app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => {
   try {
     if (!MERCHANT_ID || !MERCHANT_KEY) {
       return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
@@ -392,12 +496,12 @@ app.post("/api/cielo/payment", paymentLimiter, async (req, res) => {
 
   } catch (err) {
     console.error("[Cielo] Internal error:", err);
-    return res.status(500).json({ success: false, message: err.message || "Erro interno" });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── GET /api/cielo/payment/:paymentId ──────────────────────────────────────
-app.get("/api/cielo/payment/:paymentId", async (req, res) => {
+app.get("/api/cielo/payment/:paymentId", requireAuth, async (req, res) => {
   try {
     if (!MERCHANT_ID) return res.status(500).json({ success: false, message: "Cielo not configured" });
 
@@ -417,12 +521,12 @@ app.get("/api/cielo/payment/:paymentId", async (req, res) => {
       message:   result.returnMessage,
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── POST /api/cielo/payment/:paymentId/capture ──────────────────────────────
-app.post("/api/cielo/payment/:paymentId/capture", async (req, res) => {
+app.post("/api/cielo/payment/:paymentId/capture", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { amount } = req.body;
@@ -432,12 +536,12 @@ app.post("/api/cielo/payment/:paymentId/capture", async (req, res) => {
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 2, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── POST /api/cielo/payment/:paymentId/cancel ───────────────────────────────
-app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
+app.post("/api/cielo/payment/:paymentId/cancel", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { amount } = req.body;
@@ -447,41 +551,41 @@ app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 10, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── Recurrence management ───────────────────────────────────────────────────
-app.put("/api/cielo/recurrence/:id/deactivate", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/deactivate", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/deactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/reactivate", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/reactivate", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/reactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/amount", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/amount", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/amount`;
     await callCielo("PUT", url, req.body.amount);
     return res.json({ success: true });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/interval", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/interval", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/interval`;
     await callCielo("PUT", url, req.body.interval);
     return res.json({ success: true });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
 // ─── Webhook ─────────────────────────────────────────────────────────────────
@@ -544,23 +648,104 @@ app.post("/api/cielo/webhook", async (req, res) => {
     return res.json({ received: true });
   } catch (err) {
     console.error("[Cielo] Webhook erro:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
 // ─── Resend Email Proxy ───────────────────────────────────────────────────────
 // Proxy para Resend API. Mantém a chave no servidor (nunca exposta ao frontend).
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const RESEND_FROM    = process.env.RESEND_FROM || "Novità Telemedicina <onboarding@resend.dev>";
+// A chave pode ser atualizada em runtime via /api/integrations/resend.
+let resendApiKey = process.env.RESEND_API_KEY || "";
+let resendFrom   = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
 
-app.post("/api/resend/emails", async (req, res) => {
+// Carrega chave do Resend salva no banco (se existir, sobrescreve a do .env)
+async function loadResendKeyFromDB() {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "integrations")
+      .single();
+
+    if (data?.value?.resendApiKey) {
+      resendApiKey = data.value.resendApiKey;
+      console.log("[Resend] ✓ API key carregada do banco de dados");
+    }
+    if (data?.value?.resendFromEmail) {
+      resendFrom = data.value.resendFromEmail;
+    }
+  } catch (err) {
+    // Não bloqueia inicialização — usa .env como fallback
+    console.log("[Resend] Usando API key do .env (nenhuma salva no banco)");
+  }
+}
+loadResendKeyFromDB();
+
+// ─── Endpoint: testar conexão Resend ────────────────────────────────────────
+app.post("/api/integrations/resend/test", requireAuth, requireAdmin, async (req, res) => {
+  const { apiKey } = req.body;
+  const keyToTest = apiKey || resendApiKey;
+
+  if (!keyToTest) {
+    return res.status(400).json({ success: false, error: "Nenhuma API key fornecida" });
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/domains", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${keyToTest}` },
+    });
+
+    if (response.status === 401) {
+      return res.json({ success: false, error: "API key inválida" });
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      return res.json({ success: false, error: body.message || `Erro HTTP ${response.status}` });
+    }
+
+    const data = await response.json();
+    return res.json({
+      success: true,
+      domains: (data.data || []).map((d) => ({ name: d.name, status: d.status })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Endpoint: status da integração Resend ──────────────────────────────────
+app.get("/api/integrations/resend/status", requireAuth, requireAdmin, (_req, res) => {
+  res.json({
+    configured: Boolean(resendApiKey),
+    from: resendFrom,
+    source: resendApiKey
+      ? (resendApiKey === process.env.RESEND_API_KEY ? "env" : "database")
+      : "none",
+  });
+});
+
+// ─── Callback: atualizar chave em runtime (chamado após save no admin) ──────
+app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_req, res) => {
+  await loadResendKeyFromDB();
+
+  // Reinicializa o dispatcher com a nova chave
+  const mockMode = !resendApiKey || process.env.NODE_ENV === "development";
+  dispatcher.init(resendApiKey, mockMode);
+
+  res.json({ success: true, configured: Boolean(resendApiKey) });
+});
+
+app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
   const { to, subject, html, from } = req.body;
 
   if (!to || !subject || !html) {
     return res.status(400).json({ error: "Campos obrigatórios: to, subject, html" });
   }
 
-  if (!RESEND_API_KEY) {
+  if (!resendApiKey) {
     // Modo simulado: registra no log mas não envia
     console.log("[Resend] ⚠️  RESEND_API_KEY não configurada — simulando envio");
     console.log(`[Resend] → Para: ${Array.isArray(to) ? to.join(", ") : to}`);
@@ -573,10 +758,10 @@ app.post("/api/resend/emails", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Authorization": `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: from || RESEND_FROM,
+        from: from || resendFrom,
         to:   Array.isArray(to) ? to : [to],
         subject,
         html,
@@ -594,7 +779,7 @@ app.post("/api/resend/emails", async (req, res) => {
     return res.json(data);
   } catch (err) {
     console.error("[Resend] Falha na requisição:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -666,7 +851,7 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
   // Envia email com retry (até 3 tentativas)
   for (let tentativa = 1; tentativa <= 3; tentativa++) {
     try {
-      const baseUrl = `http://localhost:${process.env.PORT || 5174}`;
+      const baseUrl = `http://127.0.0.1:${process.env.PORT || 5174}`;
       const resp = await fetch(`${baseUrl}/api/resend/emails`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
@@ -689,7 +874,7 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
   console.error(`[Notificação] ❌ Email não enviado após 3 tentativas — pedido ${pedidoId}`);
 }
 
-app.put("/api/orders/:id/status", async (req, res) => {
+app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) => {
   if (!supabase) {
     return res.status(503).json({ error: "Supabase não configurado no servidor" });
   }
@@ -744,7 +929,7 @@ app.put("/api/orders/:id/status", async (req, res) => {
 
   } catch (err) {
     console.error("[Orders] Erro ao atualizar status:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -759,7 +944,7 @@ app.put("/api/orders/:id/status", async (req, res) => {
  *
  * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | "ConsultaAgendada" | ..., data: { ... } }
  */
-app.post("/api/notifications/events", (req, res) => {
+app.post("/api/notifications/events", notificationLimiter, requireAuth, (req, res) => {
   const { tipo, data } = req.body || {};
 
   if (!tipo || !data) {
@@ -784,7 +969,7 @@ app.post("/api/notifications/events", (req, res) => {
  *   dataHora (ISO 8601), userId (opcional)
  * }
  */
-app.post("/api/notifications/consulta-agendada", async (req, res) => {
+app.post("/api/notifications/consulta-agendada", notificationLimiter, requireAuth, async (req, res) => {
   const { consultaId, email, nome, especialidade, profissional, dataHora, userId } = req.body || {};
 
   if (!consultaId || !email || !nome || !dataHora) {
@@ -837,7 +1022,7 @@ app.post("/api/notifications/consulta-agendada", async (req, res) => {
  * GET /api/notifications/stats
  * Retorna métricas da fila de e-mails.
  */
-app.get("/api/notifications/stats", (_req, res) => {
+app.get("/api/notifications/stats", requireAuth, requireAdmin, (_req, res) => {
   res.json({
     queue:    dispatcher.queueStatus(),
     modo:     RESEND_MOCK_MODE ? "MOCK (sem RESEND_API_KEY)" : "RESEND",
@@ -853,7 +1038,7 @@ app.get("/api/notifications/stats", (_req, res) => {
  * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta | NotificacaoPedido
  * Body:   { email } (opcional — usa padrão se omitido)
  */
-app.post("/api/notifications/test/:tipo", (req, res) => {
+app.post("/api/notifications/test/:tipo", requireAuth, requireAdmin, (req, res) => {
   const { tipo }  = req.params;
   const { email } = req.body || {};
 

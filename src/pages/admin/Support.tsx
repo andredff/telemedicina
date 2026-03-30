@@ -815,113 +815,151 @@ export default function AdminSupport() {
         <TabsContent value="templates">
           <Card>
             <CardHeader>
-              <CardTitle>Templates de Resposta</CardTitle>
+              <CardTitle>Templates de Email Cadastrados</CardTitle>
+              <p className="text-sm text-muted-foreground mt-1">Templates automáticos configurados no sistema de notificações</p>
             </CardHeader>
             <CardContent>
-              <div className="space-y-6">
-                <div>
-                  <h3 className="font-medium mb-4">Templates Padrão</h3>
-                  <div className="space-y-4">
-                    <div className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">Boas-vindas ao Novo Usuário</h4>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm">Editar</Button>
-                          <Button variant="outline" size="sm">Excluir</Button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">Template de email enviado para novos usuários após o cadastro</p>
-                      <div className="bg-gray-50 p-3 rounded text-sm">
-                        Olá {`{nome}`},
-                        <br /><br />
-                        Bem-vindo à Novità Telemedicina! Estamos felizes em tê-lo conosco.
-                        <br /><br />
-                        Aqui estão algumas informações para começar:
-                        <br />
-                        - Acesse sua conta: {`{link_login}`}
-                        <br />
-                        - Agende sua primeira consulta: {`{link_agendamento}`}
-                        <br />
-                        - Explore nossos planos: {`{link_planos}`}
-                        <br /><br />
-                        Se precisar de ajuda, nossa equipe de suporte está disponível 24/7.
-                        <br /><br />
-                        Atenciosamente,
-                        <br />
-                        Equipe Novità
-                      </div>
-                    </div>
+              <div className="space-y-4">
 
-                    <div className="border rounded-lg p-4">
-                      <div className="flex justify-between items-start mb-2">
-                        <h4 className="font-medium">Confirmação de Pedido</h4>
-                        <div className="flex gap-2">
-                          <Button variant="outline" size="sm">Editar</Button>
-                          <Button variant="outline" size="sm">Excluir</Button>
-                        </div>
-                      </div>
-                      <p className="text-sm text-gray-600 mb-4">Template de email enviado após a confirmação de um pedido</p>
-                      <div className="bg-gray-50 p-3 rounded text-sm">
-                        Olá {`{nome}`},
-                        <br /><br />
-                        Seu pedido #{`{pedido_id}`} foi confirmado com sucesso!
-                        <br /><br />
-                        Detalhes do pedido:
-                        <br />
-                        - Medicamento: {`{medicamento}`}
-                        <br />
-                        - Quantidade: {`{quantidade}`}
-                        <br />
-                        - Valor total: {`{valor}`}
-                        <br />
-                        - Previsão de entrega: {`{entrega}`}
-                        <br /><br />
-                        Você pode acompanhar o status do seu pedido em: {`{link_acompanhamento}`}
-                        <br /><br />
-                        Obrigado por escolher a Novità!
-                        <br /><br />
-                        Atenciosamente,
-                        <br />
-                        Equipe Novità
-                      </div>
+                {/* 1 — Bem-vindo */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">👋</span>
+                      <h4 className="font-medium">Bem-vindo à Novità</h4>
                     </div>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Automático</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-3">Enviado automaticamente após o cadastro de um novo usuário</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm leading-relaxed">
+                    <strong>Assunto:</strong> Bem-vindo à Novità Telemedicina! 💛<br /><br />
+                    Olá, {`{nome}`}! 👋<br /><br />
+                    Sua conta na Novità Telemedicina foi criada com sucesso.
+                    Você já pode acessar teleconsultas, receituários digitais e comprar medicamentos — tudo de onde estiver.<br /><br />
+                    <strong>E-mail cadastrado:</strong> {`{email}`}<br />
+                    <strong>Próximo passo:</strong> Acesse o dashboard e complete seu perfil<br /><br />
+                    💡 <em>Dica: Complete seu perfil com CPF e data de nascimento para habilitar todas as funcionalidades.</em><br /><br />
+                    <span className="text-blue-600">[Acessar minha conta →]</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{email}`}</code>
                   </div>
                 </div>
 
-                <div>
-                  <h3 className="font-medium mb-4">Criar Novo Template</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="templateName">Nome do Template</Label>
-                      <Input id="templateName" placeholder="Ex: Recuperação de Senha" />
+                {/* 2 — Senha alterada */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🔐</span>
+                      <h4 className="font-medium">Senha Alterada</h4>
                     </div>
-                    <div>
-                      <Label htmlFor="templateType">Tipo</Label>
-                      <Select defaultValue="email">
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione um tipo" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="email">Email</SelectItem>
-                          <SelectItem value="sms">SMS</SelectItem>
-                          <SelectItem value="push">Push Notification</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="templateContent">Conteúdo</Label>
-                      <Textarea
-                        id="templateContent"
-                        placeholder="Digite o conteúdo do template..."
-                        className="min-h-[200px]"
-                      />
-                    </div>
-                    <Button>
-                      <Save className="h-4 w-4 mr-2" />
-                      Salvar Template
-                    </Button>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Automático</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-3">Alerta de segurança enviado quando a senha do usuário é alterada</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm leading-relaxed">
+                    <strong>Assunto:</strong> Sua senha foi alterada — Novità<br /><br />
+                    Olá, {`{nome}`}. A senha da sua conta foi alterada recentemente.<br /><br />
+                    <strong>Conta:</strong> {`{email}`}<br />
+                    <strong>Data/hora:</strong> {`{dataHora}`}<br />
+                    <strong>Ação:</strong> Alteração de senha<br /><br />
+                    ⚠️ <em>Não foi você? Se você não solicitou esta alteração, redefina sua senha imediatamente.</em><br /><br />
+                    <span className="text-red-600">[Redefinir minha senha →]</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{email}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{dataHora}`}</code>
                   </div>
                 </div>
+
+                {/* 3 — Consulta agendada */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">🩺</span>
+                      <h4 className="font-medium">Consulta Agendada</h4>
+                    </div>
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Automático</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-3">Confirmação enviada quando uma teleconsulta é agendada</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm leading-relaxed">
+                    <strong>Assunto:</strong> Consulta confirmada — {`{especialidade}`} 🩺<br /><br />
+                    Olá, {`{nome}`}. Sua teleconsulta foi confirmada com sucesso.<br /><br />
+                    <strong>Especialidade:</strong> {`{especialidade}`}<br />
+                    <strong>Profissional:</strong> {`{profissional}`}<br />
+                    <strong>Data e hora:</strong> {`{dataHora}`}<br />
+                    <strong>Nº da consulta:</strong> #{`{consultaId}`}<br /><br />
+                    📌 <em>Lembrete automático: Você receberá um aviso 30 minutos antes da consulta.</em><br /><br />
+                    <span className="text-blue-600">[Ver minha consulta →]</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{especialidade}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{profissional}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{dataHora}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{consultaId}`}</code>
+                  </div>
+                </div>
+
+                {/* 4 — Lembrete de consulta */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">⏰</span>
+                      <h4 className="font-medium">Lembrete de Consulta (30 min)</h4>
+                    </div>
+                    <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">Agendado</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-3">Disparado automaticamente pelo scheduler 30 minutos antes da consulta</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm leading-relaxed">
+                    <strong>Assunto:</strong> ⏰ Sua consulta começa em 30 minutos — Novità<br /><br />
+                    Olá, {`{nome}`}! Sua teleconsulta começa em aproximadamente 30 minutos.<br /><br />
+                    <strong>Especialidade:</strong> {`{especialidade}`}<br />
+                    <strong>Profissional:</strong> {`{profissional}`}<br />
+                    <strong>Horário:</strong> {`{dataHora}`}<br />
+                    <strong>Consulta:</strong> #{`{consultaId}`}<br /><br />
+                    ✅ <em>Antes de entrar, verifique: câmera e microfone, conexão com internet, ambiente tranquilo.</em><br /><br />
+                    <span className="text-blue-600">[Entrar na sala de espera →]</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{especialidade}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{profissional}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{dataHora}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{consultaId}`}</code>
+                  </div>
+                </div>
+
+                {/* 5 — Notificação de pedido */}
+                <div className="border rounded-lg p-4">
+                  <div className="flex items-start justify-between mb-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">📦</span>
+                      <h4 className="font-medium">Atualização de Pedido</h4>
+                    </div>
+                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Manual / Automático</span>
+                  </div>
+                  <p className="text-sm text-gray-500 mb-3">Enviado quando o status de um pedido é atualizado (pelo admin ou no checkout)</p>
+                  <div className="bg-gray-50 p-3 rounded text-sm leading-relaxed">
+                    <strong>Assunto:</strong> {`{icone}`} Pedido #{`{pedidoId}`} — {`{statusLabel}`}<br /><br />
+                    Olá, {`{nome}`}. Seu pedido foi atualizado.<br /><br />
+                    <strong>Pedido:</strong> #{`{pedidoId}`}<br />
+                    <strong>Status:</strong> {`{statusLabel}`}<br />
+                    <strong>Código de rastreio:</strong> {`{trackingCode}`} <span className="text-gray-400">(quando enviado)</span><br /><br />
+                    <span className="text-blue-600">[Ver meus pedidos →]</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{pedidoId}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{status}`}</code>
+                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{trackingCode}`}</code>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-500">
+                    <strong>Status disponíveis:</strong> 📦 Pedido recebido · ⚙️ Em preparação · 🚚 Pedido enviado · ✅ Pedido entregue · ❌ Pedido cancelado
+                  </div>
+                </div>
+
               </div>
             </CardContent>
           </Card>

@@ -119,7 +119,7 @@ function buildSenderFn(resendApiKey, mockMode) {
   }
 
   // Modo real: envia via Resend REST API
-  const RESEND_FROM = process.env.RESEND_FROM || "Novità <onboarding@resend.dev>";
+  const RESEND_FROM = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
 
   return async (to, subject, html) => {
     const response = await fetch("https://api.resend.com/emails", {

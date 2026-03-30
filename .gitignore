@@ -11,7 +11,13 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# Environment — NEVER commit secrets
+.env
+.env.production
+.env.staging
 .env.production.server
+.env.local.backup
 
 # Editor directories and files
 .vscode/*

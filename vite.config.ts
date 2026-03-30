@@ -26,6 +26,11 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/assemed/, ""),
         },
+        // Proxy para endpoints de integrações no Express server (dev)
+        "/api/integrations": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
         // Proxy para Resend (email) - injeta API key no header Authorization
         "/api/resend": {
           target: "https://api.resend.com",
