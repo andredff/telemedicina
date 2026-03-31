@@ -10,7 +10,7 @@ import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText, Calendar, ChevronRight, Video, Pill, Crown,
   Stethoscope, ArrowRight, Sparkles, Package, CheckCircle2,
-  ShoppingCart, User,
+  ShoppingCart, User, Download,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -21,6 +21,7 @@ import { ptBR } from "date-fns/locale";
 import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
 import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
+import { extractTextFromUrl } from "@/services/prescriptionParserService";
 import SupportFAB from "@/components/SupportFAB";
 
 interface AssemedReceituario {
@@ -29,6 +30,7 @@ interface AssemedReceituario {
   profissional: string | null;
   data: string;
   urlPdf: string;
+  pedidoExameUrl: string | null;
 }
 
 interface ProfileData {
@@ -160,18 +162,34 @@ const Dashboard = () => {
       for (const result of results) {
         if (result.status !== "fulfilled") continue;
         const { consultation, items } = result.value;
-        for (const item of items) {
-          if (item.urlPdf) {
-            found.push({
-              consultationId: consultation.id,
-              especialidade: consultation.especialidadeNome || "Consulta",
-              profissional: consultation.profissionalNome || null,
-              data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
-              urlPdf: item.urlPdf,
-            });
-            break; // um por consulta no dashboard
-          }
-        }
+        const validItems = items.filter(i => i.urlPdf);
+        if (validItems.length === 0) continue;
+
+        // Classifica PDFs: pedido de exame vs receita
+        const classified = await Promise.all(
+          validItems.map(async (item) => {
+            if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false };
+            try {
+              const text = await extractTextFromUrl(item.urlPdf);
+              return { urlPdf: item.urlPdf, isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text) };
+            } catch {
+              return { urlPdf: item.urlPdf, isPedidoExame: false };
+            }
+          })
+        );
+
+        const receita = classified.find(c => !c.isPedidoExame) ?? classified[0];
+        const pedidoExame = classified.find(c => c.isPedidoExame) ?? null;
+
+        found.push({
+          consultationId: consultation.id,
+          especialidade: consultation.especialidadeNome || "Consulta",
+          profissional: consultation.profissionalNome || null,
+          data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+          urlPdf: receita.urlPdf,
+          pedidoExameUrl: pedidoExame?.urlPdf ?? null,
+        });
+
         if (found.length >= 3) break;
       }
 
@@ -537,7 +555,7 @@ const Dashboard = () => {
                     </div>
 
                     {/* Action */}
-                    <div className="mt-auto">
+                    <div className="mt-auto flex flex-col gap-2">
                       <Button
                         size="sm"
                         className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
@@ -554,6 +572,19 @@ const Dashboard = () => {
                           : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
                         }
                       </Button>
+                      {rec.pedidoExameUrl && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2 h-9 text-sm font-medium border-violet-200 text-violet-700 hover:bg-violet-50"
+                          asChild
+                        >
+                          <a href={rec.pedidoExameUrl} target="_blank" rel="noopener noreferrer" download>
+                            <Download className="h-4 w-4" />
+                            Baixar Pedido de Exame
+                          </a>
+                        </Button>
+                      )}
                     </div>
                   </div>
                 </Card>

@@ -38,7 +38,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
-import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
+import { ConsultaWizardModal } from "@/components/telemedicine/ConsultaWizardModal";
 import PageHeader from "@/components/PageHeader";
 import type { Consultation, Specialty, ConsultationStatus, AnamneseResposta } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
@@ -507,8 +507,9 @@ const Especialistas = () => {
   const [joiningConsultation, setJoiningConsultation] =
     useState<Consultation | null>(null);
   const [joiningLoading, setJoiningLoading] = useState(false);
-  const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
+  const [showWizardModal, setShowWizardModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
+  const pendingAnamneseRef = useRef<{ respostasAnamnese: AnamneseResposta[]; exames: { arquivoBase64: string }[] } | null>(null);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("");
   const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
   const [isUsingPlanConsultation, setIsUsingPlanConsultation] = useState(false);
@@ -566,10 +567,7 @@ const Especialistas = () => {
     [consultations]
   );
 
-  // Tracks the specialty chosen in the modal for the active consultation
-  const [selectedScheduleSpecialty, setSelectedScheduleSpecialty] = useState<Specialty | null>(null);
-
-  const fetchProfile = useCallback(async (userId: string) => {
+const fetchProfile = useCallback(async (userId: string) => {
     try {
       const { data } = await supabase
         .from("profiles")
@@ -1112,8 +1110,7 @@ const Especialistas = () => {
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
-        await startConsultationFlow(cpf, profile);
-        setShowSpecialtyModal(true);
+        setShowWizardModal(true);
         return;
       }
       // Sem créditos, mostra modal para comprar
@@ -1128,12 +1125,11 @@ const Especialistas = () => {
         const firstCredit = effectiveAvailableCredits[0];
         toast({
           title: "Usando crédito disponível",
-          description: "Suas consultas do plano acabaram, mas você tem uma consulta avulsa disponível. Selecione a especialidade para agendar.",
+          description: "Suas consultas do plano acabaram, mas você tem uma consulta avulsa disponível.",
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
-        await startConsultationFlow(cpf, profile);
-        setShowSpecialtyModal(true);
+        setShowWizardModal(true);
         return;
       }
       // Sem créditos, mostra modal para comprar
@@ -1143,10 +1139,7 @@ const Especialistas = () => {
 
     // Tem consultas disponíveis no plano - marca que está usando do plano
     setIsUsingPlanConsultation(true);
-
-    // Abre o modal de seleção de especialidades
-    await startConsultationFlow(cpf, profile);
-    setShowSpecialtyModal(true);
+    setShowWizardModal(true);
   };
 
   // Inicia consulta após pagamento de consulta avulsa
@@ -1175,10 +1168,7 @@ const Especialistas = () => {
 
     // Consulta avulsa - não está usando do plano
     setIsUsingPlanConsultation(false);
-
-    // Inicia o fluxo de consulta com especialista
-    await startConsultationFlow(cpf, profile);
-    setShowSpecialtyModal(true);
+    setShowWizardModal(true);
   };
 
   // Usa um crédito existente para iniciar consulta
@@ -1210,13 +1200,7 @@ const Especialistas = () => {
     
     // Consulta avulsa - não está usando do plano
     setIsUsingPlanConsultation(false);
-    
-    // Agora inicia o fluxo
-    const cpf = profile.cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) return;
-    
-    await startConsultationFlow(cpf, profile);
-    setShowSpecialtyModal(true);
+    setShowWizardModal(true);
   };
 
   // Verifica se veio do checkout de consulta avulsa
@@ -1245,42 +1229,56 @@ const Especialistas = () => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile, pageLoading]);
 
-  // Specialty selected in modal — just track it
-  const handleScheduleSelectSpecialty = (specialty: Specialty) => {
-    setSelectedScheduleSpecialty(specialty);
-    setSelectedSpecialtyName(specialty.nome);
-  };
-
-  // Confirm → create on-demand specialist consultation
-  const handleScheduleConfirm = async (
-    specialty: Specialty,
+  // Wizard confirmado → autentica + cria consulta com primeira especialidade disponível
+  const handleWizardSubmit = async (
     respostasAnamnese: AnamneseResposta[],
     exames: { arquivoBase64: string }[]
   ) => {
-    setShowSpecialtyModal(false);
+    if (!profile) return;
+    pendingAnamneseRef.current = { respostasAnamnese, exames };
+    setShowWizardModal(false);
 
-    const success = await createSpecialistConsultation(
-      specialty,
-      respostasAnamnese,
-      exames
-    );
+    const cpf = profile.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) return;
 
-    if (success) {
-      if (isUsingPlanConsultation) {
-        await incrementSpecialistConsultations();
-        logger.info("[Especialistas] Consulta do plano incrementada após criação");
-      }
+    await startConsultationFlow(cpf, profile);
+  };
 
-      if (accessToken) {
-        await loadConsultations();
-      }
+  // Quando especialidades são carregadas após o wizard, cria a consulta automaticamente
+  const isAutoCreatingRef = useRef(false);
+  useEffect(() => {
+    if (step !== "selecting_specialty" || !pendingAnamneseRef.current || isAutoCreatingRef.current) return;
+    if (specialties.length === 0) return;
+
+    const pending = pendingAnamneseRef.current;
+    pendingAnamneseRef.current = null;
+    isAutoCreatingRef.current = true;
+
+    const filteredSpecialties = specialties.filter((s) => {
+      const nome = s.nome.toLowerCase();
+      return !((nome.includes("clínico") || nome.includes("clinico")) && nome.includes("geral"));
+    });
+    const specialty = filteredSpecialties[0] || specialties[0];
+    if (!specialty) {
+      isAutoCreatingRef.current = false;
+      return;
     }
-  };
 
-  const handleCloseSpecialtyModal = () => {
-    setShowSpecialtyModal(false);
-    // Não chama resetFlow() para preservar o estado de autenticação
-  };
+    setSelectedSpecialtyName(specialty.nome);
+
+    createSpecialistConsultation(specialty, pending.respostasAnamnese, pending.exames).then(async (success) => {
+      isAutoCreatingRef.current = false;
+      if (success) {
+        if (isUsingPlanConsultation) {
+          await incrementSpecialistConsultations();
+        }
+        if (accessToken) {
+          await loadConsultations();
+        }
+      }
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, specialties]);
 
   // ── Join existing consultation ────────────────────────────────────────────
 
@@ -1629,8 +1627,8 @@ const Especialistas = () => {
           </Card>
         )}
 
-        {/* Error alert (outside modal, e.g. after modal is closed) */}
-        {step === "error" && error && !showSpecialtyModal && (
+        {/* Error alert */}
+        {step === "error" && error && !showWizardModal && (
           <Alert variant="destructive" className="mb-6">
             <AlertCircle className="h-4 w-4" />
             <AlertTitle>Não foi possível continuar</AlertTitle>
@@ -1638,19 +1636,33 @@ const Especialistas = () => {
           </Alert>
         )}
 
-        {/* Specialist consultation modal (anamnese + on-demand) */}
-        <ScheduleSpecialistModal
-          open={showSpecialtyModal}
-          onOpenChange={(open) => {
-            if (!open) handleCloseSpecialtyModal();
-          }}
-          specialties={specialties}
-          flowStep={step}
-          error={error}
-          onSelectSpecialty={handleScheduleSelectSpecialty}
-          onConfirm={handleScheduleConfirm}
-          onClose={handleCloseSpecialtyModal}
-        />
+        {/* Loading overlay após o wizard (autenticando/criando consulta) */}
+        {(step === "authenticating" || step === "registering" || step === "loading_specialties" || step === "creating_consultation") && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+              <p className="font-medium text-foreground">
+                {step === "registering" ? "Cadastrando paciente..." :
+                 step === "authenticating" ? "Autenticando..." :
+                 step === "loading_specialties" ? "Carregando especialidades..." :
+                 "Iniciando consulta..."}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Wizard de consulta com especialista */}
+        {showWizardModal && (
+          <ConsultaWizardModal
+            onClose={() => setShowWizardModal(false)}
+            onSubmit={handleWizardSubmit}
+            titulo="Iniciar Atendimento"
+            subtitulo="Atendimento · Telemedicina Novità"
+            infoTexto="Você será conectado a um atendente disponível agora. Certifique-se de ter câmera e microfone funcionando antes de iniciar."
+          />
+        )}
 
         {/* Modal de consulta avulsa (usuários sem plano ou sem consultas disponíveis) */}
         <Dialog

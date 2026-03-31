@@ -8,19 +8,18 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   Search, FileText, ShoppingCart, Pill, User, Calendar,
-  ChevronRight, Loader2, Package,
+  ChevronRight, Loader2, Package, ExternalLink, XCircle,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useCart } from "@/hooks/useCart";
 import { supabase } from "@/integrations/supabase/client";
 import { SearchClient } from "@/integrations/supabase/searchClient";
 import { logger } from "@/lib/logger";
-import { getMedicationCatalog } from "@/services/inventoryService";
-import { MedicationCatalog } from "@/types/inventory";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
+import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
+import { extractTextFromUrl } from "@/services/prescriptionParserService";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -51,6 +50,12 @@ const Farmacia = () => {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [recentPrescriptions, setRecentPrescriptions] = useState<Prescription[]>([]);
   const [loadingPrescriptions, setLoadingPrescriptions] = useState(false);
+  const [receituarios, setReceituarios] = useState<{ urlPdf: string; isPedidoExame: boolean }[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [selectedReceituario, setSelectedReceituario] = useState<{ urlPdf: string; index: number } | null>(null);
+
+  // Pedidos rejeitados (por consulta_id) para cruzar com receituários
+  const [rejectedOrders, setRejectedOrders] = useState<Record<string, { notes: string | null; payment_status: string | null }>>({});
 
   // Cart
   const cart = useCart();
@@ -68,8 +73,11 @@ const Farmacia = () => {
   }, [navigate]);
 
   useEffect(() => {
-    if (user) loadRecentPrescriptions();
-  }, [user]);
+    if (user) {
+      loadRecentPrescriptions();
+      loadRejectedOrders();
+    }
+  }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Prescription ID autocomplete (busca por consultation_id) ───────────────────────
 
@@ -104,6 +112,28 @@ const Farmacia = () => {
     }
   };
 
+  const loadRejectedOrders = async () => {
+    if (!user) return;
+    try {
+      const { data } = await supabase
+        .from("orders")
+        .select("consulta_id, receita_review_notes, payment_status")
+        .eq("user_id", user.id)
+        .eq("status", "cancelled")
+        .eq("receita_review_status", "rejected")
+        .not("consulta_id", "is", null);
+      if (data) {
+        const map: Record<string, { notes: string | null; payment_status: string | null }> = {};
+        for (const o of data) {
+          if (o.consulta_id) map[String(o.consulta_id)] = { notes: o.receita_review_notes, payment_status: o.payment_status };
+        }
+        setRejectedOrders(map);
+      }
+    } catch (err) {
+      logger.error("Erro ao carregar pedidos rejeitados:", err);
+    }
+  };
+
   // ── Handlers ──────────────────────────────────────────────────────────────
 
   const handleLogout = async () => {
@@ -117,11 +147,31 @@ const Farmacia = () => {
       return;
     }
     setIsSearching(true);
+    setReceituarios([]);
     try {
-      const prescription = await SearchClient.getPrescriptionByConsultationId(consultationId.trim());
+      const { assemedClient } = await import("@/integrations/assemed/client");
+      if (assemedAccessToken) assemedClient.setAccessToken(assemedAccessToken);
+      const items = await assemedClient.getReceituarios(Number(consultationId.trim()));
       setIsSearching(false);
-      if (prescription) {
-        navigate(`/prescription/${prescription.id}`);
+      if (items && items.length > 0) {
+        // Se vier mais de 1 PDF, tenta detectar "PEDIDO DE EXAME" no texto de cada um
+        let classified: { urlPdf: string; isPedidoExame: boolean }[];
+        if (items.length > 1) {
+          classified = await Promise.all(
+            items.map(async (item) => {
+              try {
+                const text = await extractTextFromUrl(item.urlPdf);
+                const isPedidoExame = !!text && /pedido\s*de\s*exame/i.test(text);
+                return { urlPdf: item.urlPdf, isPedidoExame };
+              } catch {
+                return { urlPdf: item.urlPdf, isPedidoExame: false };
+              }
+            })
+          );
+        } else {
+          classified = items.map((item) => ({ urlPdf: item.urlPdf, isPedidoExame: false }));
+        }
+        setReceituarios(classified);
       } else {
         toast({ title: "Receita não encontrada", description: "Nenhuma receita encontrada para este ID de consulta." });
       }
@@ -182,7 +232,7 @@ const Farmacia = () => {
             Farmácia Online
           </h1>
           <p className="text-muted-foreground">
-            Busque medicamentos ou localize sua receita médica
+            Localize sua receita médica
           </p>
         </div>
 
@@ -232,6 +282,91 @@ const Farmacia = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* ── Resultados do Receituário ─────────────────────────────────── */}
+        {receituarios.length > 0 && (
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                  <FileText className="h-4 w-4 text-primary" />
+                </div>
+                Receituários encontrados
+              </CardTitle>
+              <CardDescription>Consulta #{consultationId}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {receituarios.map((item, i) => {
+                  const rejected = rejectedOrders[consultationId.trim()];
+                  const isExame = item.isPedidoExame;
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div className={`flex flex-col sm:flex-row sm:items-center gap-3 p-4 rounded-xl border bg-muted/20 ${isExame ? "border-blue-200 bg-blue-50/40" : "border-border/50"}`}>
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${isExame ? "bg-blue-100" : "bg-primary/10"}`}>
+                            <FileText className={`h-4 w-4 ${isExame ? "text-blue-600" : "text-primary"}`} />
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-sm font-medium text-foreground">
+                              {isExame ? "Pedido de Exame" : `Receituário${receituarios.length > 1 ? ` #${i + 1}` : ""}`}
+                            </span>
+                            {isExame && (
+                              <p className="text-xs text-blue-600 mt-0.5">Documento de solicitação de exames</p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex gap-2 sm:shrink-0">
+                          {isExame ? (
+                            <Button size="sm" className="gap-1.5 text-xs bg-blue-600 hover:bg-blue-700" asChild>
+                              <a href={item.urlPdf} target="_blank" rel="noopener noreferrer" download>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                Baixar Pedido de Exame
+                              </a>
+                            </Button>
+                          ) : (
+                            <>
+                              <Button size="sm" variant="outline" className="gap-1.5 text-xs" asChild>
+                                <a href={item.urlPdf} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  Abrir PDF
+                                </a>
+                              </Button>
+                              {!rejected && (
+                                <Button
+                                  size="sm"
+                                  className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700"
+                                  onClick={() => { setSelectedReceituario({ urlPdf: item.urlPdf, index: i }); setModalOpen(true); }}
+                                >
+                                  <Pill className="h-3.5 w-3.5" />
+                                  Adquirir medicamentos
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {rejected && !isExame && (
+                        <div className="flex items-start gap-3 px-4 py-3 rounded-xl bg-red-50 border border-red-200">
+                          <XCircle className="h-4 w-4 text-red-600 mt-0.5 shrink-0" />
+                          <div>
+                            <p className="text-sm font-semibold text-red-700">Pedido rejeitado pela farmácia</p>
+                            {rejected.notes && <p className="text-sm text-red-600">{rejected.notes}</p>}
+                            <p className="text-xs text-red-500 mt-0.5">
+                              {rejected.payment_status === 'refunded'
+                                ? 'Estorno realizado — valor creditado em até 5 dias úteis.'
+                                : 'O reembolso será processado em breve.'}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Quick Actions ─────────────────────────────────────────────── */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -292,7 +427,7 @@ const Farmacia = () => {
         </div>
 
         {/* ── Receitas Recentes ─────────────────────────────────────────── */}
-        <Card>
+        {/* <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -358,8 +493,28 @@ const Farmacia = () => {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
       </main>
+
+      {selectedReceituario && (
+        <PrescriptionMedicationsModal
+          open={modalOpen}
+          onOpenChange={(open) => {
+            setModalOpen(open);
+            if (!open) setSelectedReceituario(null);
+          }}
+          prescriptionPdfUrl={selectedReceituario.urlPdf}
+          prescriptionTitle={
+            receituarios.length > 1
+              ? `Receituário #${selectedReceituario.index + 1} — Consulta #${consultationId}`
+              : `Receituário — Consulta #${consultationId}`
+          }
+          consultationId={Number(consultationId)}
+          onCartUpdated={(count) => {
+            if (count > 0) toast({ title: "Carrinho atualizado", description: `${count} item${count !== 1 ? "s" : ""} no carrinho.` });
+          }}
+        />
+      )}
 
       <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>

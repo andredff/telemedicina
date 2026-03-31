@@ -126,6 +126,44 @@ function invalidateCache() {
   catalogCache = null;
 }
 
+// ─── Normalização de dosagem ──────────────────────────────────────────────────
+
+/**
+ * Extrai e normaliza a dosagem de uma string.
+ * Suporta: "500mg", "500mg/mL", "500mg/ml", "1g", "20mg/mL", "10ml"
+ * Sempre retorna a parte numerador normalizada para comparação.
+ * Ex: "500mg/mL" → "500mg", "1g" → "1000mg", "500 mg" → "500mg"
+ */
+function normalizeDosagem(text) {
+  if (!text) return null;
+  const t = text.toLowerCase().replace(/\s+/g, "");
+
+  // Converte g/mL ou g puro → mg
+  const gMatch = t.match(/^(\d+(?:[.,]\d+)?)g(?:\/.*)?$/);
+  if (gMatch) {
+    const mg = parseFloat(gMatch[1].replace(",", ".")) * 1000;
+    return `${mg}mg`;
+  }
+
+  // mg/mL, mg/ml, mg puro, mcg, ml, ui, % — pega o numerador
+  const mgMatch = t.match(/^(\d+(?:[.,]\d+)?)(mg|mcg|ml|ui|%)(?:\/.*)?$/);
+  if (mgMatch) return `${parseFloat(mgMatch[1].replace(",", "."))}${mgMatch[2]}`;
+
+  return null;
+}
+
+/**
+ * Extrai a primeira dosagem encontrada no nome normalizado.
+ * Ex: "dipirona sodica 500mg ml solucao" → "500mg"
+ *     "dipirona 1g comprimido"           → "1000mg"
+ */
+function extractDosagemFromName(normName) {
+  // Captura padrão "número unidade" ou "número unidade/unidade"
+  const m = normName.match(/(\d+(?:[.,]?\d+)?)\s*(mg|mcg|g|ml|ui|%)(?:\/\w+)?/);
+  if (!m) return null;
+  return normalizeDosagem(m[1] + m[2]);
+}
+
 // ─── Match de um medicamento ──────────────────────────────────────────────────
 
 /**
@@ -141,24 +179,35 @@ function findBestMatch(aiMed, catalog) {
   const tokNome = tokens(aiMed.nome || "");
   const tokActive = tokens(aiMed.principio_ativo || aiMed.nome || "");
 
-  let best = null;
-  let bestScore = 0;
+  // Dosagem prescrita: tenta campo dedicado primeiro, depois extrai do nome
+  // (remove dosagem do nome antes de extrair para não confundir o matching)
+  const normNomeSemDosagem = normNome.replace(/\d+(?:[.,]?\d+)?\s*(?:mg|mcg|g|ml|ui|%)(?:\/\w+)?/g, "").trim();
+  const dosagemPrescrita =
+    normalizeDosagem(aiMed.dosagem) ||
+    extractDosagemFromName(normNome);
+
+  console.log(`[Matcher] "${aiMed.nome}" | dosagem bruta="${aiMed.dosagem}" → normalizada="${dosagemPrescrita}" | nomeSemDosagem="${normNomeSemDosagem}"`);
+
+  // Coleta todos os candidatos que batem no nome, separando por dosagem
+  const candidatosDosagemCerta = [];
+  const candidatosDosagemNula  = []; // catálogo sem dosagem definida
+  const candidatosDosagemErrada = [];
 
   for (const cat of catalog) {
-    let score = 0;
+    let nameScore = 0;
     let confidence = "low";
 
     // ── Teste 1: match exato de nome normalizado
-    if (cat._normName === normNome) {
-      score = 1.0;
+    if (cat._normName === normNome || cat._normName === normNomeSemDosagem) {
+      nameScore = 1.0;
       confidence = "high";
     }
-    // ── Teste 2: nome do catálogo começa com nome extraído (ou vice-versa)
+    // ── Teste 2: primeiro token do nome bate (ex: "dipirona" em ambos)
     else if (
-      cat._normName.startsWith(normNome.split(" ")[0]) ||
-      normNome.startsWith(cat._normName.split(" ")[0])
+      cat._normName.startsWith(normNomeSemDosagem.split(" ")[0]) ||
+      normNomeSemDosagem.startsWith(cat._normName.split(" ")[0])
     ) {
-      score = 0.9;
+      nameScore = 0.9;
       confidence = "high";
     }
     // ── Teste 3: match por princípio ativo
@@ -166,7 +215,7 @@ function findBestMatch(aiMed, catalog) {
       cat._normActive.includes(normActive.split(" ")[0]) ||
       normActive.includes(cat._normActive.split(" ")[0])
     )) {
-      score = 0.85;
+      nameScore = 0.85;
       confidence = "high";
     }
     // ── Teste 4: token overlap (qualquer token significativo em comum)
@@ -179,31 +228,70 @@ function findBestMatch(aiMed, catalog) {
       );
 
       if (sharedTokens.length > 0) {
-        score = 0.6 + sharedTokens.length * 0.05;
+        nameScore = 0.6 + sharedTokens.length * 0.05;
         confidence = "medium";
       }
       // ── Teste 5: similaridade Levenshtein no primeiro token do nome
       else {
-        const firstAiToken = tokNome[0] || normNome.split(" ")[0];
+        const firstAiToken = tokNome[0] || normNomeSemDosagem.split(" ")[0];
         const firstCatToken = cat._tokensName[0] || cat._normName.split(" ")[0];
         if (firstAiToken && firstCatToken && firstAiToken.length >= 5) {
           const sim = similarity(firstAiToken, firstCatToken);
           if (sim >= 0.8) {
-            score = sim * 0.55;
+            nameScore = sim * 0.55;
             confidence = "low";
           }
         }
       }
     }
 
-    if (score > bestScore) {
-      bestScore = score;
-      best = { med: cat, confidence, score };
+    if (nameScore === 0) continue;
+
+    // ── Classifica o candidato por dosagem
+    if (dosagemPrescrita) {
+      const dosagemCat =
+        normalizeDosagem(cat.dosage) ||
+        extractDosagemFromName(cat._normName);
+
+      if (!dosagemCat) {
+        // Catálogo não tem dosagem — aceita mas com menor prioridade
+        candidatosDosagemNula.push({ med: cat, confidence, score: nameScore });
+      } else if (dosagemCat === dosagemPrescrita) {
+        // Dosagem exata → bônus
+        candidatosDosagemCerta.push({ med: cat, confidence, score: nameScore + 0.1 });
+      } else {
+        // Nome bateu mas dosagem errada
+        candidatosDosagemErrada.push({ med: cat, confidence, nameScore, dosagemCat: cat.dosage || dosagemCat });
+      }
+    } else {
+      // Sem dosagem prescrita → qualquer candidato de nome serve
+      candidatosDosagemCerta.push({ med: cat, confidence, score: nameScore });
     }
   }
 
-  // Threshold mínimo para aceitar um match
-  return bestScore >= 0.5 ? best : null;
+  // Ordena cada lista por score decrescente
+  const sortByScore = (a, b) => b.score - a.score;
+
+  // Prioridade: dosagem certa > sem dosagem no catálogo > dosagem errada
+  console.log(`[Matcher] "${aiMed.nome}" → certa=${candidatosDosagemCerta.map(c=>`${c.med.name}(${c.med.dosage})`)} nula=${candidatosDosagemNula.map(c=>c.med.name)} errada=${candidatosDosagemErrada.map(c=>`${c.med.name}(${c.dosagemCat})`)}`);
+
+  if (candidatosDosagemCerta.length > 0) {
+    const best = candidatosDosagemCerta.sort(sortByScore)[0];
+    if (best.score >= 0.5) return { match: best, dosagemMismatch: null };
+  }
+
+  if (candidatosDosagemNula.length > 0) {
+    const best = candidatosDosagemNula.sort(sortByScore)[0];
+    if (best.score >= 0.5) return { match: best, dosagemMismatch: null };
+  }
+
+  // Nenhum match válido na dosagem certa — informa o mismatch
+  if (candidatosDosagemErrada.length > 0) {
+    const best = candidatosDosagemErrada.sort((a, b) => b.nameScore - a.nameScore)[0];
+    return { match: null, dosagemMismatch: { med: best.med, nameScore: best.nameScore, dosagemCat: best.dosagemCat } };
+  }
+
+  return { match: null, dosagemMismatch: null };
 }
 
 // ─── API pública ──────────────────────────────────────────────────────────────
@@ -227,7 +315,7 @@ async function matchMedications(aiMeds, supabase) {
   for (const aiMed of aiMeds) {
     if (!aiMed.nome || aiMed.nome.trim().length < 3) continue;
 
-    const match = findBestMatch(aiMed, catalog);
+    const { match, dosagemMismatch } = findBestMatch(aiMed, catalog);
 
     if (match && !seenCatalogIds.has(match.med.id)) {
       seenCatalogIds.add(match.med.id);
@@ -259,7 +347,13 @@ async function matchMedications(aiMeds, supabase) {
         forma: aiMed.forma || null,
         quantidade: aiMed.quantidade || null,
         posologia: aiMed.posologia || null,
-        motivo: catalog.length === 0 ? "catálogo vazio" : "não encontrado no catálogo",
+        motivo: catalog.length === 0
+          ? "catálogo vazio"
+          : dosagemMismatch
+            ? "dosagem-diferente"
+            : "não encontrado no catálogo",
+        // Presente só quando motivo = "dosagem-diferente"
+        dosagemDisponivel: dosagemMismatch?.dosagemCat ?? null,
       });
     }
   }

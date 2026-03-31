@@ -63,6 +63,7 @@ interface ServerNaoEncontrado {
   dosagem: string | null;
   posologia: string | null;
   motivo: string;
+  dosagemDisponivel: string | null;
 }
 
 interface AnaliseResponse {
@@ -282,7 +283,7 @@ export function PrescriptionMedicationsModal({
       estoque: m.medication.stock,
       farmaciaId: m.medication.pharmacy_id,
       confidence: m.confidence,
-      score: m.confidence === "high" ? 90 : 65,
+      score: m.score,
     })));
     setNaoEncontrados([]);
     setStep("cep");
@@ -843,13 +844,26 @@ export function PrescriptionMedicationsModal({
                 </p>
                 <div className="space-y-1.5">
                   {naoEncontrados.map((med, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2.5 rounded-lg border border-dashed bg-muted/30">
+                    <div key={i} className={`flex items-start gap-3 p-2.5 rounded-lg border border-dashed ${med.motivo === "dosagem-diferente" ? "bg-amber-50/50 border-amber-200" : "bg-muted/30"}`}>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm text-muted-foreground">{med.nome}</p>
-                        {med.dosagem && <p className="text-xs text-muted-foreground/70">{med.dosagem}</p>}
+                        {med.motivo === "dosagem-diferente" ? (
+                          <div className="mt-0.5 space-y-0.5">
+                            <p className="text-xs text-amber-700">
+                              Receita: <span className="font-medium">{med.dosagem}</span>
+                            </p>
+                            {med.dosagemDisponivel && (
+                              <p className="text-xs text-muted-foreground/70">
+                                Disponível: {med.dosagemDisponivel}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          med.dosagem && <p className="text-xs text-muted-foreground/70">{med.dosagem}</p>
+                        )}
                       </div>
-                      <Badge variant="outline" className="text-[10px] shrink-0 text-amber-600 border-amber-300">
-                        Indisponível
+                      <Badge variant="outline" className={`text-[10px] shrink-0 ${med.motivo === "dosagem-diferente" ? "text-amber-700 border-amber-400" : "text-amber-600 border-amber-300"}`}>
+                        {med.motivo === "dosagem-diferente" ? "Dosagem diferente" : "Indisponível"}
                       </Badge>
                     </div>
                   ))}

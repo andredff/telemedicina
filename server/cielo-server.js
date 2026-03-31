@@ -1171,6 +1171,55 @@ app.post("/api/receitas/extrair", uploadLegacy.single("file"), async (req, res) 
   }
 });
 
+// ─── PDF Proxy ────────────────────────────────────────────────────────────────
+// Busca um PDF externo (ex: receituário Assemed) e serve como blob,
+// evitando bloqueio de CORS/X-Frame-Options no iframe do frontend.
+//
+// GET /api/proxy/pdf?url=<encoded_url>
+app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Parâmetro 'url' obrigatório." });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: "URL inválida." });
+  }
+
+  // Permite apenas HTTPS para evitar SSRF em redes internas
+  if (parsed.protocol !== "https:") {
+    return res.status(400).json({ error: "Apenas URLs HTTPS são permitidas." });
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/pdf,*/*" },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `Origem retornou ${response.status}` });
+    }
+
+    const contentType = response.headers.get("content-type") || "application/pdf";
+    const buffer = await response.arrayBuffer();
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.byteLength);
+    // Permite embedding no iframe do mesmo domínio
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error("[proxy/pdf] Erro ao buscar PDF:", err.message);
+    res.status(502).json({ error: "Não foi possível buscar o PDF.", detail: err.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
 app.listen(PORT, () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";

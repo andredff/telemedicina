@@ -47,9 +47,8 @@ async function extractNativeTextFromPdf(pdfBuffer) {
   try {
     const pdfjs = await getPdfJs();
 
-    // Desabilita worker no Node
-    pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
-    pdfjs.GlobalWorkerOptions.workerSrc = "";
+    // Desabilita worker no Node (GlobalWorkerOptions é read-only no ESM, usa Object.assign)
+    try { Object.assign(pdfjs.GlobalWorkerOptions, { workerSrc: "" }); } catch { /* ignora */ }
 
     const loadingTask = pdfjs.getDocument({
       data: new Uint8Array(pdfBuffer),
@@ -139,8 +138,7 @@ async function pdfToImagesViaCanvas(pdfBuffer) {
     const { createCanvas } = require("canvas");
     const pdfjs = await getPdfJs();
 
-    pdfjs.GlobalWorkerOptions = pdfjs.GlobalWorkerOptions || {};
-    pdfjs.GlobalWorkerOptions.workerSrc = "";
+    try { Object.assign(pdfjs.GlobalWorkerOptions, { workerSrc: "" }); } catch { /* ignora */ }
 
     const pdf = await pdfjs.getDocument({
       data: new Uint8Array(pdfBuffer),
@@ -191,10 +189,9 @@ async function getTesseractWorker() {
   if (tesseractWorker) return tesseractWorker;
 
   // Tenta português primeiro, fallback para eng
+  // Tesseract.js v5+ baixa os dados de idioma automaticamente via CDN
   const worker = await createWorker("por+eng", 1, {
     logger: () => {}, // silencia logs de progresso
-    langPath: path.join(__dirname, "..", "tessdata"),
-    gzip: false,
   });
 
   tesseractWorker = worker;

@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Search, FileText, Loader2,
-  Stethoscope, ShoppingCart, Pill, CheckCircle2, Calendar, User,
+  Stethoscope, ShoppingCart, CheckCircle2, Calendar, User, Download,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -18,6 +18,7 @@ import { normalizeConsultationStatus } from "@/integrations/assemed/types";
 import { AssemedApiError } from "@/integrations/assemed/client";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
 import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
+import { extractTextFromUrl } from "@/services/prescriptionParserService";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,8 @@ interface AssemedReceituario {
   profissional: string | null;
   data: string;
   status: string;
-  urlPdf: string;
+  urlPdf: string;           // PDF da receita
+  pedidoExameUrl: string | null; // PDF do pedido de exame (se existir)
 }
 
 // ─── Cart helpers ─────────────────────────────────────────────────────────────
@@ -116,18 +118,35 @@ const Prescriptions = () => {
             continue;
           }
           const { consultation, items } = result.value;
-          for (const item of items) {
-            if (item.urlPdf) {
-              receituarios.push({
-                consultationId: consultation.id,
-                especialidade: consultation.especialidadeNome || "Consulta",
-                profissional: consultation.profissionalNome || null,
-                data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
-                status: normalizeConsultationStatus(consultation),
-                urlPdf: item.urlPdf,
-              });
-            }
-          }
+          const validItems = items.filter(i => i.urlPdf);
+          if (validItems.length === 0) continue;
+
+          // Classifica cada PDF — pedido de exame vs receita
+          const classified = await Promise.all(
+            validItems.map(async (item) => {
+              if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false };
+              try {
+                const text = await extractTextFromUrl(item.urlPdf);
+                return { urlPdf: item.urlPdf, isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text) };
+              } catch {
+                return { urlPdf: item.urlPdf, isPedidoExame: false };
+              }
+            })
+          );
+
+          // Agrupa: primeira receita + primeiro pedido de exame → um card por consulta
+          const receita = classified.find(c => !c.isPedidoExame) ?? classified[0];
+          const pedidoExame = classified.find(c => c.isPedidoExame) ?? null;
+
+          receituarios.push({
+            consultationId: consultation.id,
+            especialidade: consultation.especialidadeNome || "Consulta",
+            profissional: consultation.profissionalNome || null,
+            data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+            status: normalizeConsultationStatus(consultation),
+            urlPdf: receita.urlPdf,
+            pedidoExameUrl: pedidoExame?.urlPdf ?? null,
+          });
         }
 
         if (cancelled) return;
@@ -277,16 +296,13 @@ const Prescriptions = () => {
                     : "border-border/60 bg-card hover:border-primary/30"
                 }`}
               >
-                {/* Status bar */}
                 <div className={`h-1 w-full ${pago ? "bg-blue-400" : "bg-emerald-500"}`} />
 
                 <div className="p-5 flex flex-col flex-1 gap-4">
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        pago ? "bg-blue-100" : "bg-primary/10"
-                      }`}>
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${pago ? "bg-blue-100" : "bg-primary/10"}`}>
                         <FileText className={`h-5 w-5 ${pago ? "text-blue-600" : "text-primary"}`} />
                       </div>
                       <div className="min-w-0">
@@ -325,8 +341,8 @@ const Prescriptions = () => {
                     </div>
                   </div>
 
-                  {/* Action */}
-                  <div className="mt-auto pt-1">
+                  {/* Actions */}
+                  <div className="mt-auto pt-1 flex flex-col gap-2">
                     <Button
                       size="sm"
                       className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
@@ -344,6 +360,19 @@ const Prescriptions = () => {
                         <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
                       )}
                     </Button>
+                    {rec.pedidoExameUrl && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="w-full gap-2 h-9 text-sm font-medium border-violet-200 text-violet-700 hover:bg-violet-50"
+                        asChild
+                      >
+                        <a href={rec.pedidoExameUrl} target="_blank" rel="noopener noreferrer" download>
+                          <Download className="h-4 w-4" />
+                          Baixar Pedido de Exame
+                        </a>
+                      </Button>
+                    )}
                   </div>
                 </div>
               </Card>

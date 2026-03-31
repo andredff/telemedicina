@@ -684,7 +684,7 @@ class AssemedClient {
 
   /**
    * Obtém receituários/documentos de uma consulta
-   * GET /api/Atendimentos/{id}/receituario
+   * GET /api/Atendimentos/v2/{id}/receituario
    * Retorna array de {urlPdf: string}
    */
   async getReceituarios(consultationId: number): Promise<{urlPdf: string}[]> {

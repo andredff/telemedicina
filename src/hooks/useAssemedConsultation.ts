@@ -404,13 +404,6 @@ export function useAssemedConsultation() {
           assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
         }
 
-        // Notifica consulta imediata criada (fire-and-forget)
-        notifyConsultaAgendada({
-          consultaId: consultation.id,
-          especialidade: "Clínico Geral",
-          dataHora: new Date().toISOString(),
-        });
-
         setState((prev) => ({
           ...prev,
           step: "in_consultation",
@@ -470,12 +463,6 @@ export function useAssemedConsultation() {
         if (consultation.pacienteToken) {
           assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
         }
-
-        notifyConsultaAgendada({
-          consultaId: consultation.id,
-          especialidade: specialty.nome,
-          dataHora: new Date().toISOString(),
-        });
 
         setState((prev) => ({
           ...prev,

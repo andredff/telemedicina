@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Package, Calendar, MapPin, CreditCard, ChevronRight, Truck, CheckCircle, Clock, FileText, Stethoscope } from "lucide-react";
+import { Package, Calendar, MapPin, CreditCard, ChevronRight, Truck, CheckCircle, Clock, FileText, Stethoscope, XCircle, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
@@ -31,6 +31,9 @@ interface Order {
   receita_id: string | null;
   receita_url_pdf: string | null;
   consulta_id: string | null;
+  receita_review_status: string | null;
+  receita_review_notes: string | null;
+  payment_status: string | null;
 }
 
 
@@ -245,6 +248,7 @@ const Orders = () => {
             <TabsTrigger value="processing">Processando</TabsTrigger>
             <TabsTrigger value="shipped">Em Trânsito</TabsTrigger>
             <TabsTrigger value="delivered">Entregues</TabsTrigger>
+            <TabsTrigger value="cancelled">Cancelados</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -302,6 +306,29 @@ const Orders = () => {
                         ))}
                       </div>
                     </div>
+
+                    {/* Rejeição farmacêutica */}
+                    {order.status === 'cancelled' && order.receita_review_status === 'rejected' && (
+                      <div className="pt-3 border-t">
+                        <div className="flex items-start gap-3 p-3.5 rounded-xl bg-red-50 border border-red-200">
+                          <div className="w-9 h-9 rounded-lg bg-red-100 flex items-center justify-center shrink-0 mt-0.5">
+                            <XCircle className="h-4 w-4 text-red-600" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-red-700">Pedido rejeitado pela farmácia</p>
+                            {order.receita_review_notes && (
+                              <p className="text-sm text-red-600 mt-0.5">{order.receita_review_notes}</p>
+                            )}
+                            <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                              <AlertCircle className="h-3 w-3" />
+                              {order.payment_status === 'refunded'
+                                ? 'Estorno realizado — o valor será creditado em até 5 dias úteis.'
+                                : 'O reembolso será processado em breve.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Consulta / Receita */}
                     {(order.receita_id || order.consulta_id) && (

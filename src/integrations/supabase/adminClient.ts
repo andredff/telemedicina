@@ -1,15 +1,27 @@
 // Admin client for Supabase with additional admin functionalities
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { logger } from "@/lib/logger";
+import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+const SUPABASE_SERVICE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
-// Use the same supabase client to share auth session
-export const supabaseAdmin = supabase;
+// Cliente com service role bypassa RLS — usado apenas em contexto admin
+// A chave é segura pois o Supabase é local (self-hosted em dev)
+export const supabaseAdmin = SUPABASE_SERVICE_KEY
+  ? createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+  : supabase;
+
 if (import.meta.env.DEV) {
-  logger.info("[AdminClient] init - using shared supabase client", { isSupabaseConfigured });
+  logger.info("[AdminClient] init", {
+    isSupabaseConfigured,
+    usingServiceRole: Boolean(SUPABASE_SERVICE_KEY),
+  });
 }
 
 // RBAC (Role-Based Access Control) utility functions
@@ -157,27 +169,29 @@ export const AdminQueries = {
   // Get all orders
   async getAllOrders() {
     try {
-      // Join orders with profiles to get customer name and email
+      // Left join para não perder pedidos sem perfil correspondente
       const result = await supabaseAdmin
         .from('orders')
         .select(`
           *,
-          profiles!inner (
+          profiles (
             full_name,
             email
           )
         `)
         .order('created_at', { ascending: false });
-      
+
+      logger.info("[AdminQueries] getAllOrders result", { count: result.data?.length, error: result.error });
+
       if (result.error) return { data: [], error: result.error };
-      
+
       // Transform the data to include customer and customer_email from profiles
       const ordersWithCustomer = (result.data || []).map((order: Record<string, unknown>) => ({
         ...order,
-        customer: (order as { profiles?: { full_name?: string } }).profiles?.full_name || 'Cliente Desconhecido',
-        customer_email: (order as { profiles?: { email?: string } }).profiles?.email || null,
+        customer: (order as { profiles?: { full_name?: string } }).profiles?.full_name || (order.customer_name as string) || 'Cliente Desconhecido',
+        customer_email: (order as { profiles?: { email?: string } }).profiles?.email || (order.customer_email as string) || null,
       }));
-      
+
       return { data: ordersWithCustomer, error: null };
     } catch (error) {
       logger.error("[AdminQueries] Error fetching orders", error);
@@ -258,6 +272,42 @@ export const AdminQueries = {
     }
   },
   
+  // Save pharmacist review decision on an order
+  async reviewOrder(orderId: string, decision: 'approved' | 'rejected', notes: string) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('orders')
+        .update({
+          receita_review_status: decision,
+          receita_review_notes: notes,
+          receita_reviewed_at: new Date().toISOString(),
+          status: decision === 'approved' ? 'processing' : 'cancelled',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', orderId);
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error saving order review", error);
+      return { error };
+    }
+  },
+
+  // Update payment_status after refund
+  async updateOrderPaymentStatus(orderId: string, paymentStatus: string) {
+    try {
+      const { error } = await supabaseAdmin
+        .from('orders')
+        .update({ payment_status: paymentStatus, updated_at: new Date().toISOString() })
+        .eq('id', orderId);
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      logger.error("[AdminQueries] Error updating payment status", error);
+      return { error };
+    }
+  },
+
   // Get orders by user ID
   async getOrdersByUserId(userId: string) {
     try {
