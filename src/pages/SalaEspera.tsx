@@ -35,14 +35,14 @@ export default function SalaEspera() {
   const autoEnteredRef = useRef(false);
 
   const q = new URLSearchParams(location.search);
-  const especialidade = q.get("especialidade") || "Clínico Geral";
+  const especialidade = q.get("especialidade") || "";
   const atendimentoId = Number(id || q.get("sala") || 0);
-  // Detecta origem para redirecionar corretamente ao finalizar
-  // Se a especialidade não for Clínico Geral/Clinico Geral, considera especialista
-  const isEspecialista = (() => {
-    const nome = especialidade.toLowerCase();
-    return !(nome.includes("cl") && nome.includes("geral"));
-  })();
+  // Detecta origem: parâmetro explícito "origem" tem prioridade,
+  // senão infere pela especialidade (sem especialidade = vem de /especialistas)
+  const origemParam = q.get("origem");
+  const isEspecialista = origemParam
+    ? origemParam === "especialistas"
+    : !especialidade || !(especialidade.toLowerCase().includes("cl") && especialidade.toLowerCase().includes("geral"));
   const retornoPath = isEspecialista ? "/especialistas" : "/teleconsultas";
 
   // Token da URL — guardado em ref para uso no polling
@@ -151,7 +151,7 @@ export default function SalaEspera() {
             logger.error("[SalaEspera] Erro ao validar /obter pós-conclusão:", err);
           }
           setTimeout(() => {
-            navigate(retornoPath);
+            navigate("/dashboard");
           }, 3000);
         } else if (normalizedStatus === "CANCELADO") {
           setIframeSrc(null);
@@ -202,7 +202,7 @@ export default function SalaEspera() {
           }
 
           setTimeout(() => {
-            navigate(retornoPath);
+            navigate("/dashboard");
           }, 3000);
         }
       } catch (err) {
@@ -383,11 +383,13 @@ export default function SalaEspera() {
                   <span className="status-value">{profissionalNome}</span>
                 </div>
               )}
-              <div className="status-row">
-                <span />
-                <span className="status-text">Especialidade</span>
-                <span className="status-value" id="specialtyText">{especialidade}</span>
-              </div>
+              {!!q.get("especialidade") && (
+                <div className="status-row">
+                  <span />
+                  <span className="status-text">Especialidade</span>
+                  <span className="status-value" id="specialtyText">{especialidade}</span>
+                </div>
+              )}
               <div className="status-row">
                 <span />
                 <span className="status-text">ID Atendimento</span>

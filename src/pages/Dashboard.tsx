@@ -31,6 +31,7 @@ interface AssemedReceituario {
   data: string;
   urlPdf: string;
   pedidoExameUrl: string | null;
+  atestadoUrl: string | null;
 }
 
 interface ProfileData {
@@ -165,21 +166,26 @@ const Dashboard = () => {
         const validItems = items.filter(i => i.urlPdf);
         if (validItems.length === 0) continue;
 
-        // Classifica PDFs: pedido de exame vs receita
+        // Classifica PDFs: pedido de exame vs atestado vs receita
         const classified = await Promise.all(
           validItems.map(async (item) => {
-            if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false };
+            if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false, isAtestado: false };
             try {
               const text = await extractTextFromUrl(item.urlPdf);
-              return { urlPdf: item.urlPdf, isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text) };
+              return {
+                urlPdf: item.urlPdf,
+                isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text),
+                isAtestado: !!text && /atestado/i.test(text),
+              };
             } catch {
-              return { urlPdf: item.urlPdf, isPedidoExame: false };
+              return { urlPdf: item.urlPdf, isPedidoExame: false, isAtestado: false };
             }
           })
         );
 
-        const receita = classified.find(c => !c.isPedidoExame) ?? classified[0];
+        const receita = classified.find(c => !c.isPedidoExame && !c.isAtestado) ?? classified[0];
         const pedidoExame = classified.find(c => c.isPedidoExame) ?? null;
+        const atestado = classified.find(c => c.isAtestado) ?? null;
 
         found.push({
           consultationId: consultation.id,
@@ -188,6 +194,7 @@ const Dashboard = () => {
           data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
           urlPdf: receita.urlPdf,
           pedidoExameUrl: pedidoExame?.urlPdf ?? null,
+          atestadoUrl: atestado?.urlPdf ?? null,
         });
 
         if (found.length >= 3) break;
@@ -593,6 +600,19 @@ const Dashboard = () => {
                           : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
                         }
                       </Button>
+                      {pago && rec.urlPdf && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2 h-9 text-sm font-medium border-slate-200 text-slate-600 hover:bg-slate-50"
+                          asChild
+                        >
+                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer">
+                            <FileText className="h-4 w-4" />
+                            Ver receita
+                          </a>
+                        </Button>
+                      )}
                       {rec.pedidoExameUrl && (
                         <Button
                           size="sm"
@@ -603,6 +623,19 @@ const Dashboard = () => {
                           <a href={rec.pedidoExameUrl} target="_blank" rel="noopener noreferrer" download>
                             <Download className="h-4 w-4" />
                             Baixar Pedido de Exame
+                          </a>
+                        </Button>
+                      )}
+                      {rec.atestadoUrl && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="w-full gap-2 h-9 text-sm font-medium border-teal-200 text-teal-700 hover:bg-teal-50"
+                          asChild
+                        >
+                          <a href={rec.atestadoUrl} target="_blank" rel="noopener noreferrer" download>
+                            <Download className="h-4 w-4" />
+                            Baixar Atestado
                           </a>
                         </Button>
                       )}

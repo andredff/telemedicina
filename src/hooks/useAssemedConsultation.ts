@@ -450,10 +450,12 @@ export function useAssemedConsultation() {
 
         const pacienteId = parseInt(decoded.pacienteId, 10);
 
+        // Sempre usa especialidadeId=1 (atendente/triagem) — o especialista de fato
+        // é definido após a triagem, que retorna o agendamento com dataAgendamento
         const consultation = await assemedClient.createConsultation({
           formatoAtendimento: 0,
           tipoProfissional: specialty.tipoProfissionalId,
-          especialidadeId: specialty.id,
+          especialidadeId: 1,
           pacienteId,
           respostasAnamnese: respostasAnamnese || [],
           exames: exames || [],

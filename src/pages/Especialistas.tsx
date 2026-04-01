@@ -928,11 +928,8 @@ const fetchProfile = useCallback(async (userId: string) => {
         setPendingCreditId(null);
       }
 
-      // Navega para sala de espera (mesmo fluxo da teleconsulta imediata)
-      const especialidadeNomeFinal = selectedSpecialtyName || activeConsultation.especialidadeNome || "Especialista";
-      navigate(
-        `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`
-      );
+      // Navega para sala de espera — sem especialidade (será definida pelo atendente)
+      navigate(`/sala-espera/${activeConsultation.id}?origem=especialistas`);
     };
     handleConsultationCreated();
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -983,16 +980,13 @@ const fetchProfile = useCallback(async (userId: string) => {
               try {
                 const fullConsultation = await assemedClient.getConsultation(consultationId);
                 const token = fullConsultation?.pacienteToken;
-                const especialidadeNomeFinal = currentConsultation.especialidadeNome || "Especialista";
-                const especialidade = encodeURIComponent(especialidadeNomeFinal);
                 if (token) {
-                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}&token=${encodeURIComponent(token)}`);
+                  navigate(`/sala-espera/${consultationId}?origem=especialistas&token=${encodeURIComponent(token)}`);
                 } else {
-                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}`);
+                  navigate(`/sala-espera/${consultationId}?origem=especialistas`);
                 }
               } catch {
-                const especialidadeNomeFinal = currentConsultation.especialidadeNome || "Especialista";
-                navigate(`/sala-espera/${consultationId}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`);
+                navigate(`/sala-espera/${consultationId}?origem=especialistas`);
               }
             }
 
@@ -1416,9 +1410,9 @@ const fetchProfile = useCallback(async (userId: string) => {
           });
         }
 
-        // Navega para sala de espera com token (mesmo fluxo que teleconsulta imediata)
+        // Navega para sala de espera com token — sem especialidade pois ainda será definida pelo atendente
         navigate(
-          `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}&token=${encodeURIComponent(result.pacienteToken)}`
+          `/sala-espera/${consultation.id}?origem=especialistas&token=${encodeURIComponent(result.pacienteToken)}`
         );
         return;
       }
@@ -1426,10 +1420,10 @@ const fetchProfile = useCallback(async (userId: string) => {
       // Consulta imediata ou em atendimento: resolve token pelos caches/API
       const token = await resolvePatientToken(consultation);
 
-      // Navega para sala de espera — mesmo sem token (SalaEspera faz o fallback)
+      // Navega para sala de espera — sem especialidade (será definida pelo atendente)
       const url = token
-        ? `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}&token=${encodeURIComponent(token)}`
-        : `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`;
+        ? `/sala-espera/${consultation.id}?origem=especialistas&token=${encodeURIComponent(token)}`
+        : `/sala-espera/${consultation.id}?origem=especialistas`;
       navigate(url);
     } catch {
       toast({

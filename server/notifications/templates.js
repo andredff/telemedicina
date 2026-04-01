@@ -1,4 +1,4 @@
-// ─── Email Templates — Novità Telemedicina ───────────────────────────────────
+// ─── Email Templates — Novità health Group ───────────────────────────────────
 // Templates HTML responsivos, compatíveis com Gmail, Outlook, Apple Mail.
 // Layout baseado em tabelas com CSS inline.
 
@@ -30,7 +30,7 @@ function base({ preheader = "", body, footerExtra = "" }) {
   <meta name="viewport" content="width=device-width,initial-scale=1.0">
   <meta name="x-apple-disable-message-reformatting">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
-  <title>Novità Telemedicina</title>
+  <title>Novità health Group</title>
   <!--[if mso]>
   <noscript>
     <xml>
@@ -97,10 +97,10 @@ function base({ preheader = "", body, footerExtra = "" }) {
                     </p>
                     <p style="margin:0 0 8px;font-size:12px;color:${BRAND.muted};line-height:1.5;">
                       Precisa de ajuda? &nbsp;
-                      <a href="mailto:suporte@novita.com.br" style="color:${BRAND.primary};text-decoration:none;font-weight:500;">suporte@novita.com.br</a>
+                      <a href="mailto:suporte@novita.com" style="color:${BRAND.primary};text-decoration:none;font-weight:500;">suporte@novita.com</a>
                     </p>
                     <p style="margin:0;font-size:11px;color:#94A3B8;line-height:1.5;">
-                      Este e-mail foi enviado automaticamente pela Novità Telemedicina.<br>
+                      Este e-mail foi enviado automaticamente pela Novità health Group.<br>
                       Por favor, não responda diretamente a esta mensagem.
                     </p>
                   </td>
@@ -211,7 +211,7 @@ function usuarioCadastrado({ nome, email }) {
   const body = `
     ${badge("Bem-vindo!", BRAND.accent)}
     ${heading(`Olá, ${nome}! 👋`)}
-    ${paragraph(`Sua conta na <strong style="color:${BRAND.text};">Novità Telemedicina</strong> foi criada com sucesso.
+    ${paragraph(`Sua conta na <strong style="color:${BRAND.text};">Novità health Group</strong> foi criada com sucesso.
       Você já pode acessar teleconsultas, receituários digitais e comprar medicamentos — tudo de onde estiver.`)}
 
     ${infoCard([
@@ -224,10 +224,10 @@ function usuarioCadastrado({ nome, email }) {
     ${cta("Acessar minha conta", `${SITE_URL}/dashboard`, BRAND.accent)}
 
     ${securityNote(`Se você não criou esta conta, ignore este e-mail ou
-      <a href="mailto:suporte@novita.com.br" style="color:${BRAND.primary};font-weight:500;">entre em contato</a>.`)}`;
+      <a href="mailto:suporte@novita.com" style="color:${BRAND.primary};font-weight:500;">entre em contato</a>.`)}`;
 
   return {
-    subject: "Bem-vindo à Novità Telemedicina! 💛",
+    subject: "Bem-vindo à Novità health Group! 💛",
     html: base({ preheader: `${nome}, sua conta está pronta!`, body }),
   };
 }
@@ -246,7 +246,7 @@ function senhaAlterada({ nome, email, dataHora }) {
     ])}
 
     ${alertBox(`<strong>Não foi você?</strong> Se você não solicitou esta alteração, redefina sua senha imediatamente e entre em contato com
-      <a href="mailto:suporte@novita.com.br" style="color:${BRAND.danger};font-weight:600;">suporte@novita.com.br</a>.`, BRAND.danger)}
+      <a href="mailto:suporte@novita.com" style="color:${BRAND.danger};font-weight:600;">suporte@novita.com</a>.`, BRAND.danger)}
 
     ${cta("Redefinir minha senha", `${SITE_URL}/auth?tab=forgot`, BRAND.danger)}
 
