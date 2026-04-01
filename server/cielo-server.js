@@ -848,30 +848,16 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     }).catch(err => console.error("[Notificação] Erro ao registrar log:", err.message));
   }
 
-  // Envia email com retry (até 3 tentativas)
-  for (let tentativa = 1; tentativa <= 3; tentativa++) {
-    try {
-      const baseUrl = `http://127.0.0.1:${process.env.PORT || 5174}`;
-      const resp = await fetch(`${baseUrl}/api/resend/emails`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ to: [email], subject, html }),
-      });
-
-      if (resp.ok) {
-        console.log(`[Notificação] 📧 Email enviado (tentativa ${tentativa}) → ${email}`);
-        return;
-      }
-
-      console.warn(`[Notificação] Tentativa ${tentativa} falhou — status ${resp.status}`);
-    } catch (err) {
-      console.warn(`[Notificação] Tentativa ${tentativa} — erro: ${err.message}`);
-    }
-
-    if (tentativa < 3) await new Promise(r => setTimeout(r, 1000 * tentativa));
-  }
-
-  console.error(`[Notificação] ❌ Email não enviado após 3 tentativas — pedido ${pedidoId}`);
+  // Envia via dispatcher (suporta Mailpit em dev e Resend em prod)
+  dispatcher.dispatch("NotificacaoPedido", {
+    nome:         nomeUsuario,
+    email,
+    pedidoId,
+    status:       novoStatus,
+    mensagem:     mensagemOpcional,
+    trackingCode: trackingCode || undefined,
+  });
+  console.log(`[Notificação] 📧 Email enfileirado → ${email} (pedido ${pedidoId})`);
 }
 
 app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) => {

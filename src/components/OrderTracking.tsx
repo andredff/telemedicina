@@ -15,10 +15,10 @@ interface OrderTrackingProps {
 }
 
 const statusSteps: { status: OrderStatus; label: string; icon: typeof Clock }[] = [
-  { status: 'pending', label: 'Pedido Recebido', icon: CheckCircle },
-  { status: 'processing', label: 'Em Separação', icon: Clock },
-  { status: 'shipped', label: 'Em Trânsito', icon: Truck },
-  { status: 'delivered', label: 'Entregue', icon: Home },
+  { status: 'pending', label: 'Pedido Pago', icon: CheckCircle },
+  { status: 'processing', label: 'Pedido em Separação', icon: Clock },
+  { status: 'shipped', label: 'Pedido Enviado', icon: Truck },
+  { status: 'delivered', label: 'Pedido Entregue', icon: Home },
 ];
 
 export function OrderTracking({ orderId, trackingCode, status, onStatusChange }: OrderTrackingProps) {

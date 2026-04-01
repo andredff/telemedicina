@@ -43,11 +43,11 @@ export function useOrderSubscription({
 
   const showNotification = useCallback((update: OrderUpdate) => {
     const statusLabels: Record<OrderStatus, string> = {
-      pending: 'Pendente',
-      processing: 'Em processamento',
-      shipped: 'Em trânsito',
-      delivered: 'Entregue',
-      cancelled: 'Cancelado',
+      pending: 'Pedido Pago',
+      processing: 'Pedido em Separação',
+      shipped: 'Pedido Enviado',
+      delivered: 'Pedido Entregue',
+      cancelled: 'Pedido Cancelado',
     };
 
     toast({
@@ -220,11 +220,11 @@ export function getTrackingLink(carrier: string, trackingCode: string): string {
 // Utility para formatar status
 export function formatOrderStatus(status: OrderStatus): string {
   const labels: Record<OrderStatus, string> = {
-    pending: 'Pendente',
-    processing: 'Em processamento',
-    shipped: 'Em trânsito',
-    delivered: 'Entregue',
-    cancelled: 'Cancelado',
+    pending: 'Pedido Pago',
+    processing: 'Pedido em Separação',
+    shipped: 'Pedido Enviado',
+    delivered: 'Pedido Entregue',
+    cancelled: 'Pedido Cancelado',
   };
   return labels[status] || status;
 }

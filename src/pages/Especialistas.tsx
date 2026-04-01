@@ -504,8 +504,6 @@ const Especialistas = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [pageLoading, setPageLoading] = useState(true);
   const [hasLoadedConsultations, setHasLoadedConsultations] = useState(false);
-  const [joiningConsultation, setJoiningConsultation] =
-    useState<Consultation | null>(null);
   const [joiningLoading, setJoiningLoading] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
@@ -553,14 +551,16 @@ const Especialistas = () => {
     loadConsultations,
     joinScheduledConsultation,
     cancelConsultation,
-    closeConsultation,
     resetFlow,
   } = useAssemedConsultation();
 
-  // Filter consultations to exclude "Clínico Geral" (only show specialist consultations)
+  // Filter consultations:
+  //  1. dataAgendamento must be non-null (regra de negócio: só exibir consultas agendadas)
+  //  2. Exclude "Clínico Geral" (only show specialist consultations)
   // Memoized to keep a stable reference — used as dependency of loadCreditsInUse / restoreOrphanCredits.
   const specialistConsultations = useMemo(() =>
     consultations.filter((c) => {
+      if (!c.dataAgendamento) return false;
       const nome = (c.especialidadeNome || "").toLowerCase();
       return !(nome.includes("clínico") || nome.includes("clinico")) || !nome.includes("geral");
     }),
@@ -646,11 +646,19 @@ const fetchProfile = useCallback(async (userId: string) => {
   // ── Polling para atualizar status de consultas ativas usando endpoint simplificado ──
   // Usa refs para evitar re-execução do effect quando consultations muda
   const consultationsRef = useRef(specialistConsultations);
-  
-  // Mantém ref atualizado
+  // Rastreia consultas para as quais já navegamos (evita navegar mais de uma vez)
+  const navigatedToConsultationRef = useRef<Set<number>>(new Set());
+  // Ref para sempre ter o accessToken mais recente dentro do polling (evita closure stale)
+  const accessTokenRef = useRef<string | null>(accessToken);
+
+  // Mantém refs atualizados
   useEffect(() => {
     consultationsRef.current = specialistConsultations;
   }, [specialistConsultations]);
+
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   // Carrega créditos disponíveis ao carregar a página
   const loadAvailableCredits = useCallback(async () => {
@@ -897,12 +905,14 @@ const fetchProfile = useCallback(async (userId: string) => {
     return filtered;
   }, [availableCredits, pendingCreditId, activeConsultationCreditId, usedCreditIds]);
 
-  // Associa o consultation_id ao crédito quando a consulta for criada
-  // (o crédito já foi marcado como "used" antes de criar a consulta)
+  // Associa o consultation_id ao crédito e navega para sala de espera
+  // (comportamento idêntico ao Teleconsultas.tsx)
   useEffect(() => {
-    const associateCreditToConsultation = async () => {
-      if (activeConsultation && activeConsultation.id && pendingCreditId) {
-        // Associa o consultation_id ao crédito
+    const handleConsultationCreated = async () => {
+      if (!activeConsultation || !activeConsultation.id) return;
+
+      // Se tem crédito pendente, associa PRIMEIRO antes de navegar
+      if (pendingCreditId) {
         const { error } = await (supabase as any)
           .from("consultation_credits")
           .update({
@@ -912,12 +922,21 @@ const fetchProfile = useCallback(async (userId: string) => {
 
         if (error) {
           logger.error("Error associating credit to consultation:", error);
+        } else {
+          logger.info(`Crédito ${pendingCreditId} associado à consulta ${activeConsultation.id}`);
         }
         setPendingCreditId(null);
       }
+
+      // Navega para sala de espera (mesmo fluxo da teleconsulta imediata)
+      const especialidadeNomeFinal = selectedSpecialtyName || activeConsultation.especialidadeNome || "Especialista";
+      navigate(
+        `/sala-espera/${activeConsultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`
+      );
     };
-    associateCreditToConsultation();
-  }, [activeConsultation, pendingCreditId]);
+    handleConsultationCreated();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConsultation]);
 
   // ── Polling para atualizar status de consultas ativas ──
   useEffect(() => {
@@ -953,11 +972,42 @@ const fetchProfile = useCallback(async (userId: string) => {
             
             const currentStatus = normalizeConsultationStatus(currentConsultation);
             
-            // Verifica se houve mudança
-            if (normalizedStatus !== currentStatus || 
+            // Navega para sala de espera quando EM_ATENDIMENTO (igual ao fluxo de teleconsulta imediata)
+            if (normalizedStatus === "EM_ATENDIMENTO" && !navigatedToConsultationRef.current.has(consultationId)) {
+              navigatedToConsultationRef.current.add(consultationId);
+              toast({
+                title: "Médico Disponível",
+                description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo. Entrando na consulta...`,
+              });
+              // Busca dados completos (incluindo pacienteToken) antes de navegar
+              try {
+                const fullConsultation = await assemedClient.getConsultation(consultationId);
+                const token = fullConsultation?.pacienteToken;
+                const especialidadeNomeFinal = currentConsultation.especialidadeNome || "Especialista";
+                const especialidade = encodeURIComponent(especialidadeNomeFinal);
+                if (token) {
+                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}&token=${encodeURIComponent(token)}`);
+                } else {
+                  navigate(`/sala-espera/${consultationId}?especialidade=${especialidade}`);
+                }
+              } catch {
+                const especialidadeNomeFinal = currentConsultation.especialidadeNome || "Especialista";
+                navigate(`/sala-espera/${consultationId}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`);
+              }
+            }
+
+            // Verifica se houve mudança de status
+            if (normalizedStatus !== currentStatus ||
                 response.profissionalNome !== currentConsultation.profissionalNome) {
-              
-              // Notifica o usuário
+
+              // Atualiza a consulta localmente sem chamar /obter novamente
+              const updatedConsultations = consultationsRef.current.map(c =>
+                c.id === consultationId
+                  ? { ...c, status: normalizedStatus, situacao: normalizedStatus, profissionalNome: response.profissionalNome }
+                  : c
+              );
+              consultationsRef.current = updatedConsultations;
+
               if (normalizedStatus === "CONCLUIDO") {
                 // Limpa o crédito da consulta ativa (foi consumido)
                 setActiveConsultationCreditId(null);
@@ -980,25 +1030,25 @@ const fetchProfile = useCallback(async (userId: string) => {
                     .eq("consultation_id", consultationId)
                     .eq("status", "used")
                     .select();
-                  
+
                   if (!error && restoredCredits && restoredCredits.length > 0) {
                     logger.info(`Crédito restaurado para consulta especialista cancelada ${consultationId}`);
-                    setActiveConsultationCreditId(null); // Limpa o crédito da consulta ativa
+                    setActiveConsultationCreditId(null);
                     loadAvailableCredits();
                     creditRestored = true;
                   }
-                  
+
                   // Se não restaurou crédito avulso, restaura a consulta do plano
                   if (!creditRestored) {
-                    setActiveConsultationCreditId(null); // Limpa mesmo sem crédito
+                    setActiveConsultationCreditId(null);
                     await decrementSpecialistConsultations();
                     logger.info(`Consulta do plano restaurada para consulta cancelada ${consultationId}`);
                   }
-                  
+
                   toast({
                     title: "Consulta Cancelada",
                     description: response.motivoCancelamento === 4
-                      ? creditRestored 
+                      ? creditRestored
                         ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
                         : "Sua consulta expirou por tempo de espera."
                       : creditRestored
@@ -1013,11 +1063,6 @@ const fetchProfile = useCallback(async (userId: string) => {
                   });
                 }
                 loadConsultations();
-              } else if (normalizedStatus === "EM_ATENDIMENTO" && currentStatus === "AGUARDANDO") {
-                toast({
-                  title: "Médico Disponível",
-                  description: `${response.profissionalNome || "O médico"} está pronto para atendê-lo.`,
-                });
               }
             }
           } catch (err) {
@@ -1041,7 +1086,7 @@ const fetchProfile = useCallback(async (userId: string) => {
       clearTimeout(initialDelay);
       clearInterval(interval);
     };
-  }, [accessToken, toast, loadConsultations, loadAvailableCredits, decrementSpecialistConsultations]);
+  }, [accessToken, toast, loadConsultations, loadAvailableCredits, decrementSpecialistConsultations, navigate]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -1335,6 +1380,7 @@ const fetchProfile = useCallback(async (userId: string) => {
     try {
       const isAgendada = !!consultation.dataAgendamento;
       const normalizedStatus = normalizeConsultationStatus(consultation);
+      const especialidadeNomeFinal = consultation.especialidadeNome || "Especialista";
 
       // Consulta agendada em espera: inclui na fila via API
       if (isAgendada && normalizedStatus === "AGUARDANDO") {
@@ -1370,23 +1416,21 @@ const fetchProfile = useCallback(async (userId: string) => {
           });
         }
 
-        setJoiningConsultation({ ...consultation, pacienteToken: result.pacienteToken });
+        // Navega para sala de espera com token (mesmo fluxo que teleconsulta imediata)
+        navigate(
+          `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}&token=${encodeURIComponent(result.pacienteToken)}`
+        );
         return;
       }
 
       // Consulta imediata ou em atendimento: resolve token pelos caches/API
       const token = await resolvePatientToken(consultation);
 
-      if (!token) {
-        toast({
-          title: "Sessão expirada",
-          description: "Não foi possível recuperar o acesso à consulta. Tente novamente ou entre em contato com o suporte.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setJoiningConsultation({ ...consultation, pacienteToken: token });
+      // Navega para sala de espera — mesmo sem token (SalaEspera faz o fallback)
+      const url = token
+        ? `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}&token=${encodeURIComponent(token)}`
+        : `/sala-espera/${consultation.id}?especialidade=${encodeURIComponent(especialidadeNomeFinal)}`;
+      navigate(url);
     } catch {
       toast({
         title: "Erro ao iniciar consulta",
@@ -1464,28 +1508,6 @@ const fetchProfile = useCallback(async (userId: string) => {
 
   // ── Close iframe ──────────────────────────────────────────────────────────
 
-  const handleCloseIframe = useCallback(() => {
-    setJoiningConsultation(null);
-    closeConsultation();
-    // Reload consultations to reflect updated status
-    if (accessToken) {
-      loadConsultations();
-    }
-  }, [closeConsultation, loadConsultations, accessToken]);
-
-  // ── Render: new consultation - show iframe inline ────────────────────────────
-
-  if (activeConsultation && activeConsultation.pacienteToken) {
-    return (
-      <ConsultationIframe
-        atendimentoId={activeConsultation.id}
-        pacienteToken={activeConsultation.pacienteToken}
-        especialidade={selectedSpecialtyName}
-        onClose={handleCloseIframe}
-      />
-    );
-  }
-
   // ── Render: loading ao entrar em consulta existente ─────────────────────────
 
   if (joiningLoading) {
@@ -1494,20 +1516,6 @@ const fetchProfile = useCallback(async (userId: string) => {
         <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-sm text-muted-foreground">Estamos conectando você ao especialista…</p>
       </div>
-    );
-  }
-
-  // ── Render: full-screen iframe for joining existing consultation ───────────
-  // Só renderiza se o token foi resolvido — handleJoinConsultation garante isso.
-
-  if (joiningConsultation && joiningConsultation.pacienteToken) {
-    return (
-      <ConsultationIframe
-        atendimentoId={joiningConsultation.id}
-        pacienteToken={joiningConsultation.pacienteToken}
-        especialidade={joiningConsultation.especialidadeNome || "Consulta"}
-        onClose={() => setJoiningConsultation(null)}
-      />
     );
   }
 

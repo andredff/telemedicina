@@ -31,7 +31,12 @@ export default defineConfig(({ mode }) => {
           target: "http://localhost:5174",
           changeOrigin: true,
         },
-        // Proxy para Resend (email) - injeta API key no header Authorization
+        // /api/resend/emails → Express local (que decide entre Mailpit e Resend real)
+        "/api/resend/emails": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
+        // Outros subpaths /api/resend/* → Resend API diretamente (com chave injetada)
         "/api/resend": {
           target: "https://api.resend.com",
           changeOrigin: true,

@@ -52,6 +52,7 @@ export interface MedicationImportRow {
   batch: string;              // Lote
   expiry_date: string;        // ISO date string or '' if invalid
   stock: number;
+  price: number;              // Preço unitário (R$)
   supplier: string;           // Fornecedor
   /** Validation errors found during parsing */
   errors: string[];

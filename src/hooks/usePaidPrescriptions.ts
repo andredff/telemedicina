@@ -38,10 +38,17 @@ export function usePaidPrescriptions() {
     setPaidIds(new Set(current));
   }, []);
 
+  const markAsUnpaid = useCallback((receitaIds: string[]) => {
+    const current = readPaid();
+    for (const id of receitaIds) current.delete(id);
+    writePaid(current);
+    setPaidIds(new Set(current));
+  }, []);
+
   const isPaid = useCallback(
     (receitaId: string | number) => paidIds.has(String(receitaId)),
     [paidIds]
   );
 
-  return { isPaid, markAsPaid };
+  return { isPaid, markAsPaid, markAsUnpaid };
 }

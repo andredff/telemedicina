@@ -76,7 +76,7 @@ const Dashboard = () => {
   const [selectedRec, setSelectedRec] = useState<AssemedReceituario | null>(null);
 
   const { accessToken: assemedAccessToken } = useAssemedToken();
-  const { isPaid } = usePaidPrescriptions();
+  const { isPaid, markAsUnpaid } = usePaidPrescriptions();
 
   const openMedicModal = (rec: AssemedReceituario) => {
     setSelectedRec(rec);
@@ -276,6 +276,27 @@ const Dashboard = () => {
       setLoadingReceituarios(false);
     }
   }, [assemedAccessToken]);
+
+  // Verifica pedidos rejeitados e libera o botão "Adquirir medicamentos"
+  useEffect(() => {
+    if (receituarios.length === 0) return;
+
+    const checkRejectedOrders = async () => {
+      const consultationIds = receituarios.map(r => String(r.consultationId));
+      const { data } = await supabase
+        .from("orders")
+        .select("receita_id, receita_review_status")
+        .in("receita_id", consultationIds)
+        .eq("receita_review_status", "rejected");
+
+      if (data && data.length > 0) {
+        const rejectedIds = data.map(o => String(o.receita_id));
+        markAsUnpaid(rejectedIds);
+      }
+    };
+
+    checkRejectedOrders();
+  }, [receituarios, markAsUnpaid]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

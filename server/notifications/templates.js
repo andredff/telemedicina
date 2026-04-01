@@ -17,7 +17,7 @@ const BRAND = {
   cardBg:     "#FAFAF7", // off-white (fundo de cards internos)
 };
 
-const LOGO_URL = "https://novita.migrai.com.br/assets/logo-novita-mq9-dijz.png";
+const LOGO_URL = "https://novita.migrai.com.br/novita_logo.png";
 const SITE_URL = "https://novita.migrai.com.br";
 
 // ─── Layout base ─────────────────────────────────────────────────────────────
@@ -71,20 +71,10 @@ function base({ preheader = "", body, footerExtra = "" }) {
 
           <!-- ═══ HEADER ═══ -->
           <tr>
-            <td class="email-header" style="padding:28px 32px;background:linear-gradient(135deg,${BRAND.primary},${BRAND.primaryDark});text-align:center;">
-              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
-                <tr>
-                  <td align="center">
-                    <a href="${SITE_URL}" style="text-decoration:none;">
-                      <img src="${LOGO_URL}" alt="Novità" width="44" height="44" style="display:inline-block;vertical-align:middle;border-radius:10px;margin-right:12px;" />
-                      <span style="display:inline-block;vertical-align:middle;">
-                        <span style="font-size:26px;font-weight:800;color:${BRAND.white};letter-spacing:-0.5px;font-family:'Segoe UI',Roboto,Arial,sans-serif;">Novità</span>
-                        <span style="display:block;font-size:11px;color:rgba(255,255,255,0.7);font-weight:400;letter-spacing:1px;text-transform:uppercase;margin-top:-2px;">Telemedicina</span>
-                      </span>
-                    </a>
-                  </td>
-                </tr>
-              </table>
+            <td class="email-header" style="padding:28px 32px;background:${BRAND.white};text-align:center;border-bottom:1px solid ${BRAND.border};">
+              <a href="${SITE_URL}" style="text-decoration:none;display:inline-block;">
+                <img src="${LOGO_URL}" alt="Novità Health Group" width="240" height="auto" style="display:block;border:0;outline:none;" />
+              </a>
             </td>
           </tr>
 

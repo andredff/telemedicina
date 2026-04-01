@@ -195,11 +195,11 @@ export default function AdminOrders() {
       // sem receita, badge normal
     }
     const statusConfig = {
-      pending: { text: 'Pendente', color: 'bg-slate-100 text-slate-800', icon: <Clock className="h-4 w-4" /> },
-      processing: { text: 'Processando', color: 'bg-yellow-100 text-yellow-800', icon: <Package className="h-4 w-4" /> },
-      shipped: { text: 'Em Trânsito', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
-      delivered: { text: 'Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
-      cancelled: { text: 'Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
+      pending: { text: 'Pedido Pago', color: 'bg-slate-100 text-slate-800', icon: <Clock className="h-4 w-4" /> },
+      processing: { text: 'Pedido em Separação', color: 'bg-yellow-100 text-yellow-800', icon: <Package className="h-4 w-4" /> },
+      shipped: { text: 'Pedido Enviado', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
+      delivered: { text: 'Pedido Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
+      cancelled: { text: 'Pedido Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] ||
@@ -443,11 +443,11 @@ export default function AdminOrders() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="processing">Processando</SelectItem>
-            <SelectItem value="shipped">Em Trânsito</SelectItem>
-            <SelectItem value="delivered">Entregue</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value="pending">Pedido Pago</SelectItem>
+            <SelectItem value="processing">Pedido em Separação</SelectItem>
+            <SelectItem value="shipped">Pedido Enviado</SelectItem>
+            <SelectItem value="delivered">Pedido Entregue</SelectItem>
+            <SelectItem value="cancelled">Pedido Cancelado</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -552,11 +552,11 @@ export default function AdminOrders() {
                           <SelectValue placeholder="Alterar status" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="pending">Pendente</SelectItem>
-                          <SelectItem value="processing">Processando</SelectItem>
-                          <SelectItem value="shipped">Em Trânsito</SelectItem>
-                          <SelectItem value="delivered">Entregue</SelectItem>
-                          <SelectItem value="cancelled">Cancelado</SelectItem>
+                          <SelectItem value="pending">Pedido Pago</SelectItem>
+                          <SelectItem value="processing">Pedido em Separação</SelectItem>
+                          <SelectItem value="shipped">Pedido Enviado</SelectItem>
+                          <SelectItem value="delivered">Pedido Entregue</SelectItem>
+                          <SelectItem value="cancelled">Pedido Cancelado</SelectItem>
                         </SelectContent>
                       </Select>
                       {order.receita_url_pdf && !order.receita_review_status && (
@@ -605,7 +605,7 @@ export default function AdminOrders() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Processando</CardTitle>
+            <CardTitle className="text-sm font-medium">Em Separação</CardTitle>
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
@@ -617,7 +617,7 @@ export default function AdminOrders() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Em Trânsito</CardTitle>
+            <CardTitle className="text-sm font-medium">Enviados</CardTitle>
             <Truck className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>

@@ -21,13 +21,13 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; bg: string; label: str
   pending: {
     color: "#EDAF00",
     bg: "#FFF8E1",
-    label: "Pedido Recebido",
+    label: "Pedido Pago",
     icon: "&#128230;", // 📦
   },
   processing: {
     color: "#3B82F6",
     bg: "#EFF6FF",
-    label: "Em Preparação",
+    label: "Pedido em Separação",
     icon: "&#9881;&#65039;", // ⚙️
   },
   shipped: {
@@ -399,16 +399,16 @@ function cancelledBody(data: OrderNotification): string {
 // ==========================================
 
 const EMAIL_SUBJECTS: Record<OrderStatus, string> = {
-  pending: "Pedido Recebido - Novità Telemedicina",
-  processing: "Pedido em Preparação - Novità Telemedicina",
+  pending: "Pedido Pago - Novità Telemedicina",
+  processing: "Pedido em Separação - Novità Telemedicina",
   shipped: "Pedido Enviado - Novità Telemedicina",
   delivered: "Pedido Entregue - Novità Telemedicina",
   cancelled: "Pedido Cancelado - Novità Telemedicina",
 };
 
 const PREHEADERS: Record<OrderStatus, (data: OrderNotification) => string> = {
-  pending: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi recebido com sucesso!`,
-  processing: (d) => `Seu pedido #${d.orderId.substring(0, 8)} está sendo preparado.`,
+  pending: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi confirmado e está pago!`,
+  processing: (d) => `Seu pedido #${d.orderId.substring(0, 8)} está sendo separado.`,
   shipped: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi enviado! ${d.trackingCode ? `Rastreio: ${d.trackingCode}` : ""}`,
   delivered: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi entregue com sucesso!`,
   cancelled: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi cancelado.`,

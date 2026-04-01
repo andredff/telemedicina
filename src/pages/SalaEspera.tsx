@@ -37,6 +37,13 @@ export default function SalaEspera() {
   const q = new URLSearchParams(location.search);
   const especialidade = q.get("especialidade") || "Clínico Geral";
   const atendimentoId = Number(id || q.get("sala") || 0);
+  // Detecta origem para redirecionar corretamente ao finalizar
+  // Se a especialidade não for Clínico Geral/Clinico Geral, considera especialista
+  const isEspecialista = (() => {
+    const nome = especialidade.toLowerCase();
+    return !(nome.includes("cl") && nome.includes("geral"));
+  })();
+  const retornoPath = isEspecialista ? "/especialistas" : "/teleconsultas";
 
   // Token da URL — guardado em ref para uso no polling
   const urlTokenRef = useRef<string | null>(q.get("token"));
@@ -134,14 +141,22 @@ export default function SalaEspera() {
             title: "Consulta Finalizada",
             description: "Sua teleconsulta foi concluída. Obrigado por usar nossos serviços!",
           });
-          // Navega de volta para teleconsultas após 3 segundos
+          // Valida via /obter antes de redirecionar para garantir estado correto
+          try {
+            const { assemedClient } = await import("@/integrations/assemed/client");
+            const consultations = await assemedClient.getConsultations(10, 0);
+            const found = consultations.items?.find((c) => c.id === atendimentoId);
+            logger.info(`[SalaEspera] /obter pós-conclusão: consulta ${atendimentoId} status=${found?.situacao ?? found?.status ?? 'não encontrada'}`);
+          } catch (err) {
+            logger.error("[SalaEspera] Erro ao validar /obter pós-conclusão:", err);
+          }
           setTimeout(() => {
-            navigate('/teleconsultas');
+            navigate(retornoPath);
           }, 3000);
         } else if (normalizedStatus === "CANCELADO") {
           setIframeSrc(null);
           setShowEnter(false);
-          
+
           // Tenta restaurar crédito avulso (se existir)
           try {
             const { data: restoredCredits, error } = await (supabase as any)
@@ -154,14 +169,14 @@ export default function SalaEspera() {
               .eq("consultation_id", atendimentoId)
               .eq("status", "used")
               .select();
-            
+
             const hadCredit = restoredCredits && restoredCredits.length > 0;
-            
+
             if (hadCredit) {
               logger.info(`Crédito restaurado para consulta cancelada ${atendimentoId}`);
               toast({
                 title: "Consulta Cancelada",
-                description: response.motivoCancelamento === 4 
+                description: response.motivoCancelamento === 4
                   ? "Sua consulta expirou por tempo de espera. Seu crédito foi restaurado."
                   : "A consulta foi cancelada. Seu crédito foi restaurado.",
               });
@@ -169,12 +184,12 @@ export default function SalaEspera() {
               // Consulta do plano (sem crédito avulso)
               toast({
                 title: "Consulta Cancelada",
-                description: response.motivoCancelamento === 4 
+                description: response.motivoCancelamento === 4
                   ? "Sua consulta expirou por tempo de espera."
                   : "A consulta foi cancelada.",
               });
             }
-            
+
             if (error) {
               logger.error("Erro ao verificar crédito:", error);
             }
@@ -185,9 +200,9 @@ export default function SalaEspera() {
               description: "Esta consulta foi cancelada.",
             });
           }
-          
+
           setTimeout(() => {
-            navigate('/teleconsultas');
+            navigate(retornoPath);
           }, 3000);
         }
       } catch (err) {
@@ -201,7 +216,7 @@ export default function SalaEspera() {
     const interval = setInterval(checkConsultationStatus, 10000);
 
     return () => clearInterval(interval);
-  }, [atendimentoId, toast, navigate, tokenReady]);
+  }, [atendimentoId, toast, navigate, tokenReady, retornoPath]);
 
   const buildConsultationUrl = (consultationId: number, token: string) => {
     const isSandbox = getIsSandbox();
@@ -338,7 +353,7 @@ export default function SalaEspera() {
       />
 
       <div className="mx-auto max-w-4xl px-4 py-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate('/teleconsultas')}>
+        <Button variant="ghost" size="sm" onClick={() => navigate(retornoPath)}>
           <ChevronLeft className="mr-2 h-4 w-4" />
           Voltar
         </Button>

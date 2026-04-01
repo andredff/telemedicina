@@ -133,15 +133,15 @@ const Orders = () => {
   const getStatusText = (status: string) => {
     switch (status) {
       case "pending":
-        return "Pendente";
+        return "Pedido Pago";
       case "delivered":
-        return "Entregue";
+        return "Pedido Entregue";
       case "shipped":
-        return "Em Trânsito";
+        return "Pedido Enviado";
       case "processing":
-        return "Processando";
+        return "Pedido em Separação";
       case "cancelled":
-        return "Cancelado";
+        return "Pedido Cancelado";
       default:
         return status;
     }
@@ -244,9 +244,9 @@ const Orders = () => {
         <Tabs value={selectedTab} onValueChange={setSelectedTab} className="mb-6">
           <TabsList>
             <TabsTrigger value="all">Todos</TabsTrigger>
-            <TabsTrigger value="pending">Pendentes</TabsTrigger>
-            <TabsTrigger value="processing">Processando</TabsTrigger>
-            <TabsTrigger value="shipped">Em Trânsito</TabsTrigger>
+            <TabsTrigger value="pending">Pagos</TabsTrigger>
+            <TabsTrigger value="processing">Em Separação</TabsTrigger>
+            <TabsTrigger value="shipped">Enviados</TabsTrigger>
             <TabsTrigger value="delivered">Entregues</TabsTrigger>
             <TabsTrigger value="cancelled">Cancelados</TabsTrigger>
           </TabsList>

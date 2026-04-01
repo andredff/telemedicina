@@ -19,6 +19,7 @@ import { AssemedApiError } from "@/integrations/assemed/client";
 import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
 import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 import { extractTextFromUrl } from "@/services/prescriptionParserService";
+import { supabase } from "@/integrations/supabase/client";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -51,7 +52,7 @@ const Prescriptions = () => {
 
   // Carrinho
   const [cartCount, setCartCount] = useState(() => loadCart().length);
-  const { isPaid } = usePaidPrescriptions();
+  const { isPaid, markAsUnpaid } = usePaidPrescriptions();
 
   // Modal de medicamentos
   const [medicModalOpen, setMedicModalOpen] = useState(false);
@@ -184,6 +185,27 @@ const Prescriptions = () => {
       toast({ title: "Erro", description: receituariosError, variant: "destructive" });
     }
   }, [receituariosError, toast]);
+
+  // Verifica pedidos rejeitados e libera o botão "Adquirir medicamentos"
+  useEffect(() => {
+    if (assemedReceituarios.length === 0) return;
+
+    const checkRejectedOrders = async () => {
+      const consultationIds = assemedReceituarios.map(r => String(r.consultationId));
+      const { data } = await supabase
+        .from("orders")
+        .select("receita_id, receita_review_status, status")
+        .in("receita_id", consultationIds)
+        .eq("receita_review_status", "rejected");
+
+      if (data && data.length > 0) {
+        const rejectedIds = data.map(o => String(o.receita_id));
+        markAsUnpaid(rejectedIds);
+      }
+    };
+
+    checkRejectedOrders();
+  }, [assemedReceituarios, markAsUnpaid]);
 
   const filteredReceituarios = useMemo(() => {
     if (!searchTerm.trim()) return assemedReceituarios;

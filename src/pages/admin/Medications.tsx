@@ -13,7 +13,7 @@ import {
 import {
   Pill, Plus, Pencil, Trash2, Search, Upload, FileSpreadsheet,
   AlertCircle, CheckCircle2, X, RefreshCw, Download,
-  ChevronLeft, ChevronRight,
+  ChevronLeft, ChevronRight, Percent,
 } from 'lucide-react';
 import { MedicationCatalog, MedicationImportRow, PharmacyFull } from '@/types/inventory';
 import {
@@ -41,6 +41,8 @@ const EXCEL_COL_MAP: Record<string, keyof MedicationImportRow> = {
   'validade':              'expiry_date',
   'estoque atual':         'stock',
   'estoque':               'stock',
+  'preco':                 'price',
+  'preço':                 'price',
   'fornecedor':            'supplier',
 };
 
@@ -96,11 +98,13 @@ function parseExpiry(raw: string | number): { iso: string; error: boolean } {
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
     ['ID', 'Nome do Medicamento', 'Princípio Ativo', 'Categoria', 'Dosagem',
-     'Forma Farmacêutica', 'Lote', 'Validade', 'Estoque Atual', 'Fornecedor'],
-    ['MED001', 'Paracetamol 500mg', 'Paracetamol', 'Analgésico', '500mg',
-     'Comprimido', 'L2024A', '12/2026', 100, 'EMS'],
-    ['MED002', 'Amoxicilina 500mg', 'Amoxicilina', 'Antibiótico', '500mg',
-     'Cápsula', 'L2024B', '06/2026', 50, 'Medley'],
+     'Forma Farmacêutica', 'Lote', 'Validade', 'Estoque Atual', 'Preço', 'Fornecedor'],
+    [163, 'LEVOMEPROMAZINA GTS 4% FR 20ML', 'Levomepromazina', 'Antipsicótico', '4% Gotas',
+     'Gotas', '', '', 0, 0, ''],
+    [164, 'LEVOTIROXINA - 125 MCG CRP', 'Levotiroxina Sódica', 'Hormônio tireoidiano', '125 MCG',
+     'Comprimido', '', '', 0, 0, ''],
+    [165, 'LEVOTIROXINA 25MCG CPR', 'Levotiroxina Sódica', 'Hormônio tireoidiano', '25MCG',
+     'Comprimido', '', '', 0, 0, ''],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Medicamentos');
@@ -204,6 +208,10 @@ export default function AdminMedications() {
           const stock = isNaN(stockNum) || stockNum < 0 ? 0 : stockNum;
           if (isNaN(stockNum) || stockNum < 0) errors.push('Estoque inválido → definido como 0');
 
+          const priceRaw = get(rawRow, 'price');
+          const priceNum = parseFloat(String(priceRaw).replace(',', '.'));
+          const price = isNaN(priceNum) || priceNum < 0 ? 0 : priceNum;
+
           const expiryRaw = getRaw(rawRow, 'expiry_date');
           const { iso: expiryIso, error: expiryError } = parseExpiry(expiryRaw);
           if (expiryRaw !== '' && expiryError) errors.push('Data de validade inválida');
@@ -219,6 +227,7 @@ export default function AdminMedications() {
             batch: get(rawRow, 'batch'),
             expiry_date: expiryIso,
             stock,
+            price,
             supplier: get(rawRow, 'supplier'),
             errors,
           });
@@ -276,21 +285,36 @@ export default function AdminMedications() {
       }
       const deduped = Array.from(seen.values());
 
-      const payload = deduped.map((r) => ({
-        external_id: r.external_id || null,
-        name: r.name,
-        active_ingredient: r.active_ingredient || null,
-        category: r.category || null,
-        dosage: r.dosage || null,
-        form: r.form || null,
-        batch: r.batch || null,
-        expiry_date: r.expiry_date || null,
-        stock: r.stock,
-        supplier: r.supplier || null,
-        manufacturer: null,
-        price: 0,
-        pharmacy_id: defaultPharmacyId,
-      }));
+      // Build lookup of current prices by (name, dosage)
+      const currentPriceMap = new Map<string, number>();
+      for (const m of medications) {
+        const key = `${m.name.toLowerCase()}||${(m.dosage || '').toLowerCase()}`;
+        currentPriceMap.set(key, m.price);
+      }
+
+      let priceChanges = 0;
+      const payload = deduped.map((r) => {
+        const key = `${r.name.toLowerCase()}||${(r.dosage || '').toLowerCase()}`;
+        const currentPrice = currentPriceMap.get(key) ?? 0;
+        // Only update price if spreadsheet has a value > 0 AND it differs from current
+        const newPrice = r.price > 0 && r.price !== currentPrice ? r.price : currentPrice;
+        if (newPrice !== currentPrice) priceChanges++;
+        return {
+          external_id: r.external_id || null,
+          name: r.name,
+          active_ingredient: r.active_ingredient || null,
+          category: r.category || null,
+          dosage: r.dosage || null,
+          form: r.form || null,
+          batch: r.batch || null,
+          expiry_date: r.expiry_date || null,
+          stock: r.stock,
+          supplier: r.supplier || null,
+          manufacturer: null,
+          price: newPrice,
+          pharmacy_id: defaultPharmacyId,
+        };
+      });
 
       const chunkSize = 50;
       for (let i = 0; i < payload.length; i += chunkSize) {
@@ -299,11 +323,13 @@ export default function AdminMedications() {
       }
 
       const n = deduped.length;
+      const dupCount = importable.length - deduped.length;
+      const descParts: string[] = [];
+      if (dupCount > 0) descParts.push(`${dupCount} duplicado${dupCount !== 1 ? 's' : ''} consolidado${dupCount !== 1 ? 's' : ''}.`);
+      if (priceChanges > 0) descParts.push(`${priceChanges} preço${priceChanges !== 1 ? 's' : ''} atualizado${priceChanges !== 1 ? 's' : ''}.`);
       toast({
         title: `${n} medicamento${n !== 1 ? 's' : ''} importado${n !== 1 ? 's' : ''} com sucesso!`,
-        description: deduped.length < importable.length
-          ? `${importable.length - deduped.length} duplicado${importable.length - deduped.length !== 1 ? 's' : ''} consolidado${importable.length - deduped.length !== 1 ? 's' : ''}.`
-          : undefined,
+        description: descParts.length > 0 ? descParts.join(' ') : undefined,
       });
       setShowImportPreview(false);
       setImportRows([]);
@@ -410,6 +436,39 @@ export default function AdminMedications() {
   const setFilterPharmacy = (v: string) => { _setFilterPharmacy(v); setCurrentPage(1); };
   const setFilterCategory = (v: string) => { _setFilterCategory(v); setCurrentPage(1); };
 
+  // ── Fator K ────────────────────────────────────────────────────────────────
+
+  const [factorK, setFactorK] = useState('');
+  const [applyingFactor, setApplyingFactor] = useState(false);
+
+  async function applyFactorK() {
+    const k = parseFloat(factorK.replace(',', '.'));
+    if (isNaN(k) || k <= 0) {
+      toast({ title: 'Fator K inválido', description: 'Informe um número positivo.', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Multiplicar o preço de TODOS os ${filtered.length} medicamento${filtered.length !== 1 ? 's' : ''} filtrados por ${k}?`)) return;
+
+    setApplyingFactor(true);
+    try {
+      const updates = filtered.map((m) => ({
+        ...m,
+        price: Math.round(m.price * k * 100) / 100,
+      }));
+      const chunkSize = 50;
+      for (let i = 0; i < updates.length; i += chunkSize) {
+        await Promise.all(updates.slice(i, i + chunkSize).map((m) => updateMedication(m.id, { price: m.price })));
+      }
+      toast({ title: `Preços atualizados com fator ${k}`, description: `${updates.length} medicamento${updates.length !== 1 ? 's' : ''} atualizado${updates.length !== 1 ? 's' : ''}.` });
+      setFactorK('');
+      loadAll();
+    } catch (err) {
+      toast({ title: 'Erro ao aplicar fator K', description: String(err), variant: 'destructive' });
+    } finally {
+      setApplyingFactor(false);
+    }
+  }
+
   const validCount = importRows.filter((r) => r.errors.length === 0).length;
   const errorCount = importRows.filter((r) => r.errors.length > 0).length;
 
@@ -459,11 +518,52 @@ export default function AdminMedications() {
           {isDragging ? 'Solte o arquivo aqui' : 'Arraste um .xlsx aqui ou clique para selecionar'}
         </p>
         <p className="text-xs text-gray-400 mt-1">
-          Colunas esperadas: ID · Nome do Medicamento · Princípio Ativo · Categoria · Dosagem · Forma Farmacêutica · Lote · Validade · Estoque Atual · Fornecedor
+          Colunas esperadas: ID · Nome do Medicamento · Princípio Ativo · Categoria · Dosagem · Forma Farmacêutica · Lote · Validade · Estoque Atual · Preço · Fornecedor
         </p>
         <p className="text-xs text-gray-400">Use o botão "Modelo Excel" para baixar o template correto.</p>
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileInput} />
       </div>
+
+      {/* Fator K */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2">
+              <Percent className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-medium">Ajuste de Preço por Fator K</span>
+            </div>
+            <div className="flex items-end gap-2 flex-1 min-w-[260px]">
+              <div className="flex-1 max-w-[200px]">
+                <Label className="text-xs text-gray-500 mb-1 block">Fator multiplicador</Label>
+                <Input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  placeholder="Ex: 1.10 (+10%)"
+                  value={factorK}
+                  onChange={(e) => setFactorK(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <Button
+                onClick={applyFactorK}
+                disabled={applyingFactor || !factorK || medications.length === 0}
+                className="gap-2 h-9"
+                variant="outline"
+              >
+                {applyingFactor ? (
+                  <><RefreshCw className="h-4 w-4 animate-spin" />Aplicando...</>
+                ) : (
+                  <>Aplicar aos {filtered.length} filtrados</>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400 self-center">
+              Aplica somente aos medicamentos com preço diferente de zero. Aplica sobre os resultados do filtro atual.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -520,6 +620,7 @@ export default function AdminMedications() {
                   <TableHead>Categoria</TableHead>
                   <TableHead>Validade</TableHead>
                   <TableHead>Fornecedor</TableHead>
+                  <TableHead>Preço</TableHead>
                   <TableHead>Estoque</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
@@ -547,6 +648,11 @@ export default function AdminMedications() {
                         : '—'}
                     </TableCell>
                     <TableCell className="text-sm">{med.supplier ?? med.pharmacy_name ?? '—'}</TableCell>
+                    <TableCell className="text-sm font-medium">
+                      {med.price > 0
+                        ? med.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : <span className="text-gray-400">—</span>}
+                    </TableCell>
                     <TableCell>
                       <Badge className={med.stock > 0 ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}>
                         {med.stock > 0 ? `${med.stock} un.` : 'Sem estoque'}
@@ -684,6 +790,7 @@ export default function AdminMedications() {
                   <TableHead>Lote</TableHead>
                   <TableHead>Validade</TableHead>
                   <TableHead>Estoque</TableHead>
+                  <TableHead>Preço</TableHead>
                   <TableHead>Fornecedor</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
@@ -704,6 +811,11 @@ export default function AdminMedications() {
                         : '—'}
                     </TableCell>
                     <TableCell className="text-sm">{row.stock}</TableCell>
+                    <TableCell className="text-sm">
+                      {row.price > 0
+                        ? row.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : '—'}
+                    </TableCell>
                     <TableCell className="text-sm">{row.supplier || '—'}</TableCell>
                     <TableCell>
                       {row.errors.length === 0 ? (

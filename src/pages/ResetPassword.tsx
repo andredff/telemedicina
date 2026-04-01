@@ -39,10 +39,15 @@ function getServerUrl() {
 
 async function notifyPasswordChanged(email: string, name: string) {
   try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
     const baseUrl = getServerUrl();
     await fetch(`${baseUrl}/api/notifications/events`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
       body: JSON.stringify({
         tipo: "SenhaAlterada",
         data: {
