@@ -1,27 +1,18 @@
 // Admin client for Supabase with additional admin functionalities
-import { createClient } from '@supabase/supabase-js';
 import { supabase } from './client';
 import { logger } from "@/lib/logger";
-import type { Database } from './types';
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-const SUPABASE_SERVICE_KEY = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY;
 const isSupabaseConfigured = Boolean(SUPABASE_URL && SUPABASE_KEY);
 
-// Cliente com service role bypassa RLS — usado apenas em contexto admin
-// A chave é segura pois o Supabase é local (self-hosted em dev)
-export const supabaseAdmin = SUPABASE_SERVICE_KEY
-  ? createClient<Database>(SUPABASE_URL, SUPABASE_SERVICE_KEY, {
-      auth: { persistSession: false, autoRefreshToken: false },
-    })
-  : supabase;
+// IMPORTANTE: service role key NUNCA deve usar prefixo VITE_ (não pode ir para o bundle).
+// O adminClient usa o supabase normal com RLS — operações admin são protegidas
+// pelo middleware requireAdmin no backend (cielo-server.js).
+export const supabaseAdmin = supabase;
 
 if (import.meta.env.DEV) {
-  logger.info("[AdminClient] init", {
-    isSupabaseConfigured,
-    usingServiceRole: Boolean(SUPABASE_SERVICE_KEY),
-  });
+  logger.info("[AdminClient] init", { isSupabaseConfigured });
 }
 
 // RBAC (Role-Based Access Control) utility functions

@@ -57,16 +57,16 @@ export default function SalaEspera() {
       try {
         const { assemedClient } = await import("@/integrations/assemed/client");
         if (assemedClient.hasValidToken()) {
-          console.log("[SalaEspera] Token válido encontrado no client");
+          if (import.meta.env.DEV) console.log("[SalaEspera] Token válido encontrado no client");
           if (!cancelled) setTokenReady(true);
           return;
         }
         // Sem token válido — tenta re-autenticar usando CPF do perfil
-        console.log("[SalaEspera] Sem token válido, tentando re-autenticar...");
+        if (import.meta.env.DEV) console.log("[SalaEspera] Sem token válido, tentando re-autenticar...");
         const cpf = assemedClient.getCpfPaciente();
         if (cpf) {
           await assemedClient.login(cpf);
-          console.log("[SalaEspera] Re-autenticação com CPF em cache OK");
+          if (import.meta.env.DEV) console.log("[SalaEspera] Re-autenticação com CPF em cache OK");
           if (!cancelled) setTokenReady(true);
           return;
         }
@@ -83,7 +83,7 @@ export default function SalaEspera() {
             if (cleanCpf.length === 11) {
               assemedClient.setCpfPaciente(cleanCpf);
               await assemedClient.login(cleanCpf);
-              console.log("[SalaEspera] Re-autenticação via Supabase profile OK");
+              if (import.meta.env.DEV) console.log("[SalaEspera] Re-autenticação via Supabase profile OK");
             }
           }
         }
@@ -108,7 +108,7 @@ export default function SalaEspera() {
         // Normaliza o status (API pode retornar em diferentes formatos)
         const normalizedStatus = normalizeSimplifiedStatus(response);
         
-        console.log(`[SalaEspera] Status consulta ${atendimentoId}:`, response.situacao, '-> normalizado:', normalizedStatus, 'profissional:', response.profissionalNome);
+        if (import.meta.env.DEV) console.log(`[SalaEspera] Status consulta ${atendimentoId}:`, response.situacao, '-> normalizado:', normalizedStatus);
         
         // Atualiza status e profissional
         setConsultationStatus(normalizedStatus);

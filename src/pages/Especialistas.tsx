@@ -1334,29 +1334,29 @@ const fetchProfile = useCallback(async (userId: string) => {
 
     // 1. Token já presente
     if (consultation.pacienteToken) {
-      console.info("[Especialistas] token disponível na consulta:", consultation.id);
+      if (import.meta.env.DEV) console.info("[Especialistas] token disponível na consulta:", consultation.id);
       return consultation.pacienteToken;
     }
 
     // 2. localStorage (consultas agendadas podem ser de sessões anteriores)
     const cached = assemedClient.getPatientToken(consultation.id);
     if (cached) {
-      console.info("[Especialistas] token recuperado do localStorage:", consultation.id);
+      if (import.meta.env.DEV) console.info("[Especialistas] token recuperado do localStorage:", consultation.id);
       return cached;
     }
 
     // 3. Mesma sessão — activeConsultation pode ter o token do POST de criação
     if (activeConsultation?.id === consultation.id && activeConsultation.pacienteToken) {
-      console.info("[Especialistas] token recuperado do activeConsultation:", consultation.id);
+      if (import.meta.env.DEV) console.info("[Especialistas] token recuperado do activeConsultation:", consultation.id);
       assemedClient.storePatientToken(consultation.id, activeConsultation.pacienteToken);
       return activeConsultation.pacienteToken;
     }
 
     // 4. Último recurso: GET /api/Atendimentos/{id}
     try {
-      console.info("[Especialistas] buscando token via GET /api/Atendimentos/", consultation.id);
+      if (import.meta.env.DEV) console.info("[Especialistas] buscando token via GET /api/Atendimentos/", consultation.id);
       const fresh = await assemedClient.getConsultation(consultation.id);
-      console.info("[Especialistas] getConsultation →", fresh?.id, "pacienteToken:", fresh?.pacienteToken ?? "null");
+      if (import.meta.env.DEV) console.info("[Especialistas] getConsultation →", fresh?.id, "pacienteToken:", fresh?.pacienteToken ? "presente" : "null");
       if (fresh?.pacienteToken) {
         assemedClient.storePatientToken(fresh.id, fresh.pacienteToken);
         return fresh.pacienteToken;

@@ -24,27 +24,30 @@ export default function AdminLayout() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          navigate('/auth');
+          return;
+        }
+
+        setUser(user);
+
+        const adminCheck = await RBAC.isAdmin(user.id);
+        setIsAdmin(adminCheck);
+
+        if (!adminCheck) {
+          navigate('/dashboard');
+          return;
+        }
+      } catch {
         navigate('/auth');
-        return;
+      } finally {
+        setLoading(false);
       }
-      
-      setUser(user);
-      
-      // Check if user is admin
-      const adminCheck = await RBAC.isAdmin(user.id);
-      setIsAdmin(adminCheck);
-      
-      if (!adminCheck) {
-        navigate('/dashboard');
-        return;
-      }
-      
-      setLoading(false);
     };
-    
+
     checkAuth();
   }, [navigate]);
 

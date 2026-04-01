@@ -235,7 +235,8 @@ export default function AdminSettings() {
   const fetchResendStatus = async () => {
     try {
       const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
-      const response = await fetch(`${baseUrl}/api/integrations/resend/status`);
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${baseUrl}/api/integrations/resend/status`, { headers: authHeaders });
       if (response.ok) {
         const data = await response.json();
         setResendStatus(data);

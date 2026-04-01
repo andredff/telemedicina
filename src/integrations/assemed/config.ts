@@ -30,12 +30,26 @@ const TELEMEDICINA_WL_SALA_ID =
   import.meta.env.VITE_TELEMEDICINA_WL_SALA_ID || "1773";
 
 /**
- * Obtém as credenciais da API Assemed das variáveis de ambiente
+ * Obtém as credenciais da API Assemed das variáveis de ambiente.
+ *
+ * ATENÇÃO: VITE_ASSEMED_CLIENT_ID/SECRET ficam no bundle do frontend.
+ * Em produção, deixe estas variáveis vazias e roteie a autenticação
+ * pelo backend (cielo-server.js) para não expor as credenciais.
  */
 export function getAssemedCredentials(): AssemedConfig {
+  const clientId     = import.meta.env.VITE_ASSEMED_CLIENT_ID     || "";
+  const clientSecret = import.meta.env.VITE_ASSEMED_CLIENT_SECRET || "";
+
+  if (import.meta.env.PROD && (clientId || clientSecret)) {
+    console.warn(
+      "[Assemed] ATENÇÃO: VITE_ASSEMED_CLIENT_ID/SECRET estão definidas em produção e serão expostas no bundle. " +
+      "Considere mover a autenticação Assemed para o backend."
+    );
+  }
+
   return {
-    clientId: import.meta.env.VITE_ASSEMED_CLIENT_ID || "",
-    clientSecret: import.meta.env.VITE_ASSEMED_CLIENT_SECRET || "",
+    clientId,
+    clientSecret,
     cnpj: import.meta.env.VITE_ASSEMED_CNPJ_CLIENT || "",
     isSandbox: import.meta.env.VITE_ASSEMED_SANDBOX === "true",
   };

@@ -8,7 +8,7 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env"), override: false });
 
 const express = require("express");
 const cors = require("cors");
-const rateLimit = require("express-rate-limit");
+const { default: rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
@@ -45,9 +45,21 @@ const paymentLimiter = rateLimit({
 
 const emailLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 5,
+  max: 3,
   standardHeaders: true,
   legacyHeaders: false,
+  // Limita por usuário autenticado (sub do JWT) ou por IP como fallback
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization || "";
+    const token = auth.replace("Bearer ", "");
+    if (token) {
+      try {
+        const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+        if (payload?.sub) return `email:user:${payload.sub}`;
+      } catch { /* fallback para IP */ }
+    }
+    return `email:ip:${ipKeyGenerator(req)}`;
+  },
   message: { success: false, message: "Muitas requisições de e-mail. Aguarde um momento." },
 });
 
@@ -330,6 +342,21 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
     if (!orderId || !customer || !amountInCents) {
       return res.status(400).json({ success: false, message: "Missing required fields: orderId, customer, amountInCents" });
     }
+    if (typeof amountInCents !== "number" || amountInCents <= 0 || !Number.isInteger(amountInCents)) {
+      return res.status(400).json({ success: false, message: "amountInCents deve ser um inteiro positivo" });
+    }
+    if (!customer.name || typeof customer.name !== "string" || customer.name.trim().length < 2) {
+      return res.status(400).json({ success: false, message: "Nome do cliente inválido" });
+    }
+    if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
+      return res.status(400).json({ success: false, message: "E-mail do cliente inválido" });
+    }
+    if (customer.cpf) {
+      const cpfDigits = String(customer.cpf).replace(/\D/g, "");
+      if (cpfDigits.length !== 11) {
+        return res.status(400).json({ success: false, message: "CPF deve ter 11 dígitos" });
+      }
+    }
 
     // ── Idempotência: verifica se já existe pagamento bem-sucedido para este orderId ──
     if (supabase) {
@@ -341,7 +368,7 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
         .limit(1);
 
       if (existing && existing.length > 0) {
-        console.log(`[Cielo] Pagamento duplicado bloqueado — orderId=${orderId} paymentId=${existing[0].payment_id}`);
+        if (!IS_PRODUCTION) console.log(`[Cielo] Pagamento duplicado bloqueado — orderId=${orderId} paymentId=${existing[0].payment_id}`);
         return res.json({
           success:   true,
           paymentId: existing[0].payment_id,
@@ -420,19 +447,19 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
       }
     }
 
-    console.log("[Cielo] Request →", JSON.stringify(redact(cieloReq), null, 2));
+    if (!IS_PRODUCTION) console.log("[Cielo] Request →", JSON.stringify(redact(cieloReq), null, 2));
 
     // ── Envia para Cielo ─────────────────────────────────────────────────────
     let { httpStatus, parsed } = await callCielo("POST", "", cieloReq);
-    console.log("[Cielo] Response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
+    if (!IS_PRODUCTION) console.log("[Cielo] Response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
 
     // Se erro 319 (Smart Recurrency não habilitada), re-tenta sem recorrência
     if (Array.isArray(parsed) && parsed.some(e => e.Code === 319)) {
-      console.log("[Cielo] Smart Recurrency not enabled — retrying as regular credit card");
+      if (!IS_PRODUCTION) console.log("[Cielo] Smart Recurrency not enabled — retrying as regular credit card");
       delete cieloReq.Payment.RecurrentPayment;
       cieloReq.Payment.CreditCard.SaveCard = false;
       ({ httpStatus, parsed } = await callCielo("POST", "", cieloReq));
-      console.log("[Cielo] Retry response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
+      if (!IS_PRODUCTION) console.log("[Cielo] Retry response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
     }
 
     if (!parsed) {
@@ -594,7 +621,12 @@ app.put("/api/cielo/recurrence/:id/interval", requireAuth, async (req, res) => {
 // P7: Mapeamento completo de status (inclui 12, 13, 20)
 app.post("/api/cielo/webhook", async (req, res) => {
   try {
-    // P5 — Validação de autenticação do webhook
+    // Em produção o WEBHOOK_SECRET é obrigatório — rejeita se não configurado
+    if (IS_PRODUCTION && !WEBHOOK_SECRET) {
+      console.error("[Cielo] Webhook bloqueado — CIELO_WEBHOOK_SECRET não configurado em produção");
+      return res.status(500).json({ error: "Webhook não configurado" });
+    }
+    // Valida secret quando definido
     if (WEBHOOK_SECRET) {
       const providedSecret = req.query.secret || req.headers["x-webhook-secret"];
       if (providedSecret !== WEBHOOK_SECRET) {
@@ -604,7 +636,7 @@ app.post("/api/cielo/webhook", async (req, res) => {
     }
 
     const payload = req.body;
-    console.log("[Cielo] Webhook recebido:", JSON.stringify(payload));
+    if (!IS_PRODUCTION) console.log("[Cielo] Webhook recebido:", JSON.stringify(payload));
 
     if (!supabase || !payload.PaymentId) {
       return res.json({ received: true });
@@ -644,7 +676,7 @@ app.post("/api/cielo/webhook", async (req, res) => {
       .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
       .eq("payment_id", payload.PaymentId);
 
-    console.log(`[Cielo] Webhook processado — PaymentId=${payload.PaymentId} status=${confirmedStatus} → ${newStatus}`);
+    if (!IS_PRODUCTION) console.log(`[Cielo] Webhook processado — PaymentId=${payload.PaymentId} status=${confirmedStatus} → ${newStatus}`);
     return res.json({ received: true });
   } catch (err) {
     console.error("[Cielo] Webhook erro:", err.message);
@@ -775,7 +807,7 @@ app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
       return res.status(response.status).json({ error: data });
     }
 
-    console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
+    if (!IS_PRODUCTION) console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
     return res.json(data);
   } catch (err) {
     console.error("[Resend] Falha na requisição:", err.message);
@@ -859,6 +891,68 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
   });
   console.log(`[Notificação] 📧 Email enfileirado → ${email} (pedido ${pedidoId})`);
 }
+
+// ─── Admin: reset de senha ────────────────────────────────────────────────────
+// Envia e-mail de recuperação de senha para o usuário via Supabase Auth Admin API
+app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const { id } = req.params;
+
+  try {
+    // Busca o email do usuário pelo profile
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", id)
+      .single();
+
+    if (profileError || !profile?.email) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
+    // Usa o cliente Supabase com service role para chamar a Auth Admin API
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: "Credenciais Supabase não configuradas" });
+    }
+
+    // Gera link de recuperação de senha via Admin API
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": serviceKey,
+        "Authorization": `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ email: profile.email, email_confirm: true }),
+    });
+
+    // Envia o e-mail de recuperação via resetPasswordForEmail
+    const resetResponse = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email: profile.email }),
+    });
+
+    if (!resetResponse.ok) {
+      const err = await resetResponse.json().catch(() => ({}));
+      return res.status(500).json({ error: err.msg || "Falha ao enviar e-mail de recuperação" });
+    }
+
+    if (!IS_PRODUCTION) console.log(`[Admin] Reset de senha enviado para ${profile.email} (userId=${id})`);
+    return res.json({ success: true, email: profile.email });
+  } catch (err) {
+    console.error("[Admin] Erro ao resetar senha:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
 
 app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) => {
   if (!supabase) {
