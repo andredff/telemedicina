@@ -46,6 +46,7 @@ app.all("/api/assemed/*", async (req, res) => {
     let body;
     if (req.method !== "GET" && req.method !== "HEAD") {
       const merged = { ...req.body };
+      console.log("[Assemed Proxy] ENV clientId presente:", !!ASSEMED_CLIENT_ID, "| body keys:", Object.keys(merged));
       if ("clientId"     in merged) merged.clientId     = ASSEMED_CLIENT_ID;
       if ("clientSecret" in merged) merged.clientSecret = ASSEMED_CLIENT_SECRET;
       if ("cnpj"         in merged && !merged.cnpj) merged.cnpj = ASSEMED_CNPJ;
