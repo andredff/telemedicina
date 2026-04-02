@@ -23,6 +23,31 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
     : undefined; // undefined = allow all (dev only)
 
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
+
+// ─── Proxy Assemed — deve vir ANTES do express.json() para não consumir o body ──
+const { createProxyMiddleware } = require("http-proxy-middleware");
+
+const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "false"
+  ? "https://api.assemedtelemedicina.com"
+  : "https://dev-api-assemed.azurewebsites.net";
+
+app.options("/api/assemed/*", cors());
+app.use("/api/assemed", cors(), createProxyMiddleware({
+  target: ASSEMED_TARGET,
+  changeOrigin: true,
+  pathRewrite: { "^/api/assemed": "" },
+  on: {
+    proxyRes: (proxyRes) => {
+      proxyRes.headers["Access-Control-Allow-Origin"] = "*";
+      proxyRes.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
+    },
+    error: (err, _req, res) => {
+      console.error("[Assemed Proxy] Erro:", err.message);
+      res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
+    },
+  },
+}));
+
 app.use(express.json());
 
 // ─── Rate limiting ──────────────────────────────────────────────────────────
@@ -157,27 +182,6 @@ if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.log("✓ Supabase client initialized");
 }
 
-// ─── Proxy Assemed — evita CORS no frontend em produção ──────────────────────
-const { createProxyMiddleware } = require("http-proxy-middleware");
-
-const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "false"
-  ? "https://api.assemedtelemedicina.com"
-  : "https://dev-api-assemed.azurewebsites.net";
-
-app.use("/api/assemed", createProxyMiddleware({
-  target: ASSEMED_TARGET,
-  changeOrigin: true,
-  pathRewrite: { "^/api/assemed": "" },
-  on: {
-    proxyRes: (proxyRes) => {
-      proxyRes.headers["Access-Control-Allow-Origin"] = "*";
-    },
-    error: (err, req, res) => {
-      console.error("[Assemed Proxy] Erro:", err.message);
-      res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
-    },
-  },
-}));
 
 // ─── Receitas — OCR + IA + Matching ─────────────────────────────────────────
 // Disponibiliza supabase para os handlers de receita via app.locals
