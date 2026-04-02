@@ -23,32 +23,59 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
     : undefined; // undefined = allow all (dev only)
 
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
+app.use(express.json());
 
-// ─── Proxy Assemed — deve vir ANTES do express.json() para não consumir o body ──
-const { createProxyMiddleware } = require("http-proxy-middleware");
-
+// ─── Proxy Assemed — injeta credenciais server-side ──────────────────────────
 const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "false"
   ? "https://api.assemedtelemedicina.com"
   : "https://dev-api-assemed.azurewebsites.net";
 
-app.options("/api/assemed/*", cors());
-app.use("/api/assemed", cors(), createProxyMiddleware({
-  target: ASSEMED_TARGET,
-  changeOrigin: true,
-  pathRewrite: { "^/api/assemed": "" },
-  on: {
-    proxyRes: (proxyRes) => {
-      proxyRes.headers["Access-Control-Allow-Origin"] = "*";
-      proxyRes.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
-    },
-    error: (err, _req, res) => {
-      console.error("[Assemed Proxy] Erro:", err.message);
-      res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
-    },
-  },
-}));
+const ASSEMED_CLIENT_ID     = process.env.ASSEMED_CLIENT_ID     || "";
+const ASSEMED_CLIENT_SECRET = process.env.ASSEMED_CLIENT_SECRET || "";
+const ASSEMED_CNPJ          = process.env.ASSEMED_CNPJ          || "";
 
-app.use(express.json());
+app.all("/api/assemed/*", async (req, res) => {
+  const assemedPath = req.path.replace(/^\/api\/assemed/, "");
+  const url = `${ASSEMED_TARGET}${assemedPath}`;
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (req.headers.authorization) headers["Authorization"] = req.headers.authorization;
+
+    // Injeta credenciais no body para rotas que as exigem
+    let body;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      const merged = { ...req.body };
+      if ("clientId"     in merged) merged.clientId     = ASSEMED_CLIENT_ID;
+      if ("clientSecret" in merged) merged.clientSecret = ASSEMED_CLIENT_SECRET;
+      if ("cnpj"         in merged && !merged.cnpj) merged.cnpj = ASSEMED_CNPJ;
+      // cadastro-externo usa identificacao.clientId / identificacao.clientSecret
+      if (merged.identificacao) {
+        merged.identificacao = {
+          ...merged.identificacao,
+          clientId:     ASSEMED_CLIENT_ID,
+          clientSecret: ASSEMED_CLIENT_SECRET,
+        };
+      }
+      body = JSON.stringify(merged);
+    }
+
+    const upstream = await fetch(url, { method: req.method, headers, body });
+    const contentType = upstream.headers.get("content-type") || "";
+
+    res.status(upstream.status);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (contentType) res.setHeader("Content-Type", contentType);
+
+    if (contentType.includes("application/json")) {
+      return res.json(await upstream.json());
+    }
+    return res.send(await upstream.text());
+  } catch (err) {
+    console.error("[Assemed Proxy] Erro:", err.message);
+    res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
+  }
+});
 
 // ─── Rate limiting ──────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
