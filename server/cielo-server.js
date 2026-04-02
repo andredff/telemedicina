@@ -1301,7 +1301,7 @@ app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
   const groqStatus  = process.env.GROQ_API_KEY        ? "configurado" : "não configurado";
   const ollamaInfo  = "ver /api/receitas/status";

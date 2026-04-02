@@ -54,6 +54,27 @@ export function useCart() {
     return () => window.removeEventListener("storage", onStorage);
   }, []);
 
+  // ── Refresh catalog item prices from Supabase ─────────────────────────────
+  useEffect(() => {
+    const local = readCatalogLocal();
+    if (local.length === 0) return;
+
+    const ids = local.map((i) => i.cartItemId);
+    supabase
+      .from("medications")
+      .select("id, price")
+      .in("id", ids)
+      .then(({ data }) => {
+        if (!data || data.length === 0) return;
+        const priceMap = new Map(data.map((m: any) => [m.id, Number(m.price)]));
+        const refreshed = local.map((i) =>
+          priceMap.has(i.cartItemId) ? { ...i, price: priceMap.get(i.cartItemId)! } : i
+        );
+        writeCatalogLocal(refreshed);
+        setCatalogItems(refreshed);
+      });
+  }, []);
+
   // ── Auth listener ──────────────────────────────────────────────────────────
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
