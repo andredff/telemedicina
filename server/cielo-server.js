@@ -158,43 +158,26 @@ if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
 }
 
 // ─── Proxy Assemed — evita CORS no frontend em produção ──────────────────────
+const { createProxyMiddleware } = require("http-proxy-middleware");
+
 const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "false"
   ? "https://api.assemedtelemedicina.com"
   : "https://dev-api-assemed.azurewebsites.net";
 
-app.all("/api/assemed/*", async (req, res) => {
-  const path = req.path.replace(/^\/api\/assemed/, "");
-  const url = `${ASSEMED_TARGET}${path}`;
-
-  try {
-    const headers = { "Content-Type": "application/json" };
-    if (req.headers.authorization) headers["Authorization"] = req.headers.authorization;
-
-    const fetchOptions = {
-      method: req.method,
-      headers,
-    };
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      fetchOptions.body = JSON.stringify(req.body);
-    }
-
-    const upstream = await fetch(url, fetchOptions);
-    const contentType = upstream.headers.get("content-type") || "";
-
-    res.status(upstream.status);
-    if (contentType) res.setHeader("Content-Type", contentType);
-
-    if (contentType.includes("application/json")) {
-      const data = await upstream.json();
-      return res.json(data);
-    }
-    const text = await upstream.text();
-    return res.send(text);
-  } catch (err) {
-    console.error("[Assemed Proxy] Erro:", err.message);
-    res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
-  }
-});
+app.use("/api/assemed", createProxyMiddleware({
+  target: ASSEMED_TARGET,
+  changeOrigin: true,
+  pathRewrite: { "^/api/assemed": "" },
+  on: {
+    proxyRes: (proxyRes) => {
+      proxyRes.headers["Access-Control-Allow-Origin"] = "*";
+    },
+    error: (err, req, res) => {
+      console.error("[Assemed Proxy] Erro:", err.message);
+      res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
+    },
+  },
+}));
 
 // ─── Receitas — OCR + IA + Matching ─────────────────────────────────────────
 // Disponibiliza supabase para os handlers de receita via app.locals
