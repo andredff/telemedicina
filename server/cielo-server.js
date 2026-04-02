@@ -59,6 +59,7 @@ app.all("/api/assemed/*", async (req, res) => {
         };
       }
       body = JSON.stringify(merged);
+      console.log("[Assemed Proxy] Body enviado para Assemed:", body.substring(0, 300));
     }
 
     const upstream = await fetch(url, { method: req.method, headers, body });
@@ -69,9 +70,13 @@ app.all("/api/assemed/*", async (req, res) => {
     if (contentType) res.setHeader("Content-Type", contentType);
 
     if (contentType.includes("application/json")) {
-      return res.json(await upstream.json());
+      const data = await upstream.json();
+      console.log("[Assemed Proxy] Resposta", upstream.status, url, JSON.stringify(data).substring(0, 200));
+      return res.json(data);
     }
-    return res.send(await upstream.text());
+    const text = await upstream.text();
+    console.log("[Assemed Proxy] Resposta", upstream.status, url, text.substring(0, 200));
+    return res.send(text);
   } catch (err) {
     console.error("[Assemed Proxy] Erro:", err.message);
     res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
