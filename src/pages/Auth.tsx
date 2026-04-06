@@ -91,6 +91,7 @@ const Auth = () => {
   const [cpfValue, setCpfValue] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
   const [birthDateValue, setBirthDateValue] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
 
   const selectedPlan = searchParams.get("plan");
   const consultationType = searchParams.get("type");
@@ -640,10 +641,12 @@ const Auth = () => {
                             id="signup-password"
                             name="password"
                             type={showPassword ? "text" : "password"}
-                            placeholder="Mínimo 8 caracteres (A-z, 0-9)"
+                            placeholder="Crie uma senha segura"
                             required
                             autoComplete="new-password"
                             minLength={8}
+                            value={signupPassword}
+                            onChange={(e) => setSignupPassword(e.target.value)}
                           />
                           <button
                             type="button"
@@ -652,6 +655,24 @@ const Auth = () => {
                           >
                             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
+                        </div>
+                        <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">A senha deve conter:</p>
+                          {[
+                            { label: "Mínimo 8 caracteres", valid: signupPassword.length >= 8 },
+                            { label: "Pelo menos uma letra maiúscula (A–Z)", valid: /[A-Z]/.test(signupPassword) },
+                            { label: "Pelo menos uma letra minúscula (a–z)", valid: /[a-z]/.test(signupPassword) },
+                            { label: "Pelo menos um número (0–9)", valid: /\d/.test(signupPassword) },
+                          ].map(({ label, valid }) => (
+                            <div key={label} className="flex items-center gap-2">
+                              <span className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${valid ? "bg-green-500 text-white" : "bg-muted-foreground/20 text-muted-foreground"}`}>
+                                {valid ? "✓" : "·"}
+                              </span>
+                              <span className={`text-xs ${valid ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
+                                {label}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                       <Button 

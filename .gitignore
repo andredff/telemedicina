@@ -40,3 +40,6 @@ test-results/
 playwright-report/
 output/
 novita.migrai.com.br
+
+*.agents
+*.claude

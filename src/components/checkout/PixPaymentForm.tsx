@@ -113,7 +113,7 @@ export function PixPaymentForm({
   const handleCopyCode = () => {
     if (pixCode) {
       navigator.clipboard.writeText(pixCode);
-      toast.success("Codigo PIX copiado!");
+      toast.success("Código PIX copiado!");
     }
   };
 
@@ -151,7 +151,7 @@ export function PixPaymentForm({
             <div className="bg-muted/50 p-6 rounded-lg text-center space-y-3">
               <QrCode className="h-12 w-12 text-muted-foreground mx-auto" />
               <p className="text-sm text-muted-foreground">
-                Pague instantaneamente com PIX. O QR Code sera gerado apos clicar no botao abaixo.
+                Pague instantaneamente com PIX. O QR Code será gerado após clicar no botão abaixo.
               </p>
               <p className="text-lg font-bold">R$ {total.toFixed(2)}</p>
             </div>
@@ -176,7 +176,7 @@ export function PixPaymentForm({
                 <img
                   src={qrCodeUrl}
                   alt="QR Code PIX"
-                  className="w-60 h-60 mx-auto"
+                  className="w-40 h-40 sm:w-60 sm:h-60 mx-auto"
                 />
               )}
             </div>
@@ -201,7 +201,7 @@ export function PixPaymentForm({
                 className="w-full"
               >
                 <Copy className="h-4 w-4 mr-2" />
-                Copiar codigo PIX
+                Copiar código PIX
               </Button>
             )}
 
@@ -209,7 +209,7 @@ export function PixPaymentForm({
             <div className="bg-amber-50 border border-amber-200 p-3 rounded-lg w-full">
               <div className="flex items-center gap-2 text-sm text-amber-800">
                 <div className="h-3 w-3 animate-pulse rounded-full bg-amber-500" />
-                Aguardando confirmacao do pagamento...
+                Aguardando confirmação do pagamento...
               </div>
             </div>
 
@@ -222,7 +222,7 @@ export function PixPaymentForm({
                 size="sm"
               >
                 <CheckCircle className="h-3 w-3 mr-1" />
-                Simular confirmacao do pagamento (dev)
+                Simular confirmação do pagamento (dev)
               </Button>
             )}
           </div>
@@ -263,7 +263,7 @@ export function PixPaymentForm({
             </div>
             <h3 className="text-lg font-bold text-red-600">Erro</h3>
             <p className="text-sm text-muted-foreground">
-              Nao foi possivel gerar o QR Code PIX. Tente novamente.
+              Não foi possível gerar o QR Code PIX. Tente novamente.
             </p>
             <Button onClick={generatePix} className="w-full">
               <RefreshCw className="h-4 w-4 mr-2" />
@@ -274,7 +274,7 @@ export function PixPaymentForm({
 
         <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
           <QrCode className="h-4 w-4 flex-shrink-0" />
-          <span>Abra o app do seu banco, escaneie o QR Code ou cole o codigo PIX para pagar.</span>
+          <span>Abra o app do seu banco, escaneie o QR Code ou cole o código PIX para pagar.</span>
         </div>
       </CardContent>
     </Card>

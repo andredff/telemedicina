@@ -177,7 +177,7 @@ export function CreditCardForm({
                     <FormControl>
                       <Input
                         {...field}
-                        placeholder="Como esta impresso no cartao"
+                        placeholder="JOAO SILVA (sem acentos, como no cartão)"
                         className="pl-10 uppercase"
                         maxLength={25}
                         onChange={(e) => {

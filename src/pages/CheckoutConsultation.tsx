@@ -58,7 +58,9 @@ const CheckoutConsultation = () => {
     success: boolean;
     paymentId?: string;
     message: string;
+    redirectPath?: string;
   } | null>(null);
+  const [redirectCountdown, setRedirectCountdown] = useState<number | null>(null);
 
   // Determina o tipo de consulta baseado no parâmetro da URL
   const consultationType = typeParam && CONSULTATION_TYPES[typeParam] 
@@ -120,6 +122,17 @@ const CheckoutConsultation = () => {
     }
   }, [loading, typeParam, navigate]);
 
+  // Countdown de redirecionamento após pagamento bem-sucedido
+  useEffect(() => {
+    if (redirectCountdown === null) return;
+    if (redirectCountdown <= 0) {
+      if (paymentResult?.redirectPath) navigate(paymentResult.redirectPath);
+      return;
+    }
+    const timer = setTimeout(() => setRedirectCountdown((c) => (c !== null ? c - 1 : null)), 1000);
+    return () => clearTimeout(timer);
+  }, [redirectCountdown, paymentResult, navigate]);
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
@@ -177,19 +190,17 @@ const CheckoutConsultation = () => {
         }
 
         const creditsCreated = creditData?.length || quantity;
+        const redirectPath = consultationType.id === "especialista"
+          ? "/especialistas"
+          : "/teleconsultas";
+
         setPaymentResult({
           success: true,
           paymentId: result.paymentId,
           message: `Pagamento aprovado! ${creditsCreated} consulta${creditsCreated > 1 ? 's' : ''} adicionada${creditsCreated > 1 ? 's' : ''} à sua conta.`,
+          redirectPath,
         });
-
-        // Redireciona para a página de teleconsultas após 3 segundos
-        const redirectPath = consultationType.id === "especialista" 
-          ? "/especialistas" 
-          : "/teleconsultas";
-        setTimeout(() => {
-          navigate(redirectPath);
-        }, 3000);
+        setRedirectCountdown(5);
       } else {
         setPaymentResult({
           success: false,
@@ -237,7 +248,21 @@ const CheckoutConsultation = () => {
                   <p className="text-muted-foreground mb-6">
                     {paymentResult.message}
                   </p>
-                  {!paymentResult.success && (
+                  {paymentResult.success && paymentResult.redirectPath ? (
+                    <div className="space-y-3">
+                      <Button
+                        className="w-full"
+                        onClick={() => navigate(paymentResult.redirectPath!)}
+                      >
+                        Ir para Teleconsultas
+                      </Button>
+                      {redirectCountdown !== null && redirectCountdown > 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          Redirecionando em {redirectCountdown}s...
+                        </p>
+                      )}
+                    </div>
+                  ) : !paymentResult.success && (
                     <Button onClick={() => setPaymentResult(null)} className="w-full">
                       Tentar novamente
                     </Button>
@@ -301,7 +326,7 @@ const CheckoutConsultation = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-10 w-10"
                       onClick={() => setQuantity(Math.max(1, quantity - 1))}
                       disabled={quantity <= 1}
                     >
@@ -311,7 +336,7 @@ const CheckoutConsultation = () => {
                     <Button
                       variant="outline"
                       size="icon"
-                      className="h-8 w-8"
+                      className="h-10 w-10"
                       onClick={() => setQuantity(Math.min(10, quantity + 1))}
                       disabled={quantity >= 10}
                     >
