@@ -155,6 +155,7 @@ export interface Consultation {
   especialidadeNome: string;
   tipoProfissionalId: number;
   profissionalNome: string | null;
+  profissionalAgendamentoNome?: string | null; // Nome do médico agendado (consultas tipoAtendimento = 3)
   status: ConsultationStatus;
   situacao?: ConsultationStatus; // Alias para compatibilidade com API
   situacaoAtendimentoDescricao?: string; // Descrição textual do status vinda da API

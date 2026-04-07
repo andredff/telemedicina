@@ -40,8 +40,9 @@ import { logger } from "@/lib/logger";
 import { useAssemedConsultation } from "@/hooks/useAssemedConsultation";
 import { useSubscription } from "@/hooks/useSubscription";
 import { ConsultaWizardModal } from "@/components/telemedicine/ConsultaWizardModal";
+import { ScheduleSpecialistModal } from "@/components/telemedicine/ScheduleSpecialistModal";
 import PageHeader from "@/components/PageHeader";
-import type { Consultation, Specialty, ConsultationStatus, AnamneseResposta } from "@/integrations/assemed/types";
+import type { Consultation, Specialty, ConsultationStatus, AnamneseResposta, AvailableProfessional, ScheduleSlot } from "@/integrations/assemed/types";
 import { normalizeConsultationStatus, normalizeSimplifiedStatus } from "@/integrations/assemed/types";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -160,9 +161,10 @@ function ConsultationHistoryCard({
     : null;
 
   const especialidade = consultation.especialidadeNome || "—";
+  const resolvedProfissionalNome = consultation.profissionalNome || consultation.profissionalAgendamentoNome || null;
   const doctorLabel = normalizedStatus === "CANCELADO"
     ? "Consulta cancelada"
-    : consultation.profissionalNome || (normalizedStatus === "AGUARDANDO" ? "Buscando médico..." : "—");
+    : resolvedProfissionalNome || (normalizedStatus === "AGUARDANDO" ? "Buscando médico..." : "—");
 
   // ── Top bar config per state ────────────────────────────────────────────────
   let barBg: string;
@@ -253,12 +255,12 @@ function ConsultationHistoryCard({
         )}
 
         {/* Link info — shown when patient scheduled the appointment and is still waiting */}
-        {isAgendada && normalizedStatus === "AGUARDANDO" && !canEnterAgendada && (
+        {/* {isAgendada && normalizedStatus === "AGUARDANDO" && !canEnterAgendada && (
           <div className="flex items-start gap-2 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
             <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
             <span>Se você marcou o agendamento, receberá um link para entrar na consulta no dia e hora agendado.</span>
           </div>
-        )}
+        )} */}
 
         {/* Scheduled released — amber info pill */}
         {isAgendada && agendamentoDate && normalizedStatus === "AGUARDANDO" && canEnterAgendada && scheduledTimeStr && (
@@ -516,7 +518,11 @@ const Especialistas = () => {
   const [joiningLoading, setJoiningLoading] = useState(false);
   const [showWizardModal, setShowWizardModal] = useState(false);
   const [showStandaloneModal, setShowStandaloneModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [selectedScheduleSpecialty, setSelectedScheduleSpecialty] = useState<Specialty | null>(null);
   const pendingAnamneseRef = useRef<{ respostasAnamnese: AnamneseResposta[]; exames: { arquivoBase64: string }[] } | null>(null);
+  // Quando true, a consulta criada é um agendamento futuro — não navegar para sala de espera
+  const isScheduledAppointmentRef = useRef(false);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("");
   const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
   const [isUsingPlanConsultation, setIsUsingPlanConsultation] = useState(false);
@@ -554,10 +560,15 @@ const Especialistas = () => {
     consultations,
     isLoadingConsultations,
     error,
+    availableProfessionals,
+    availableSchedules,
     silentAuthenticate,
     startConsultationFlow,
     createSpecialistConsultation,
+    createScheduledConsultation,
     loadConsultations,
+    loadAvailableProfessionals,
+    loadAvailableSchedules,
     joinScheduledConsultation,
     cancelConsultation,
     resetFlow,
@@ -939,6 +950,12 @@ const fetchProfile = useCallback(async (userId: string) => {
         setPendingCreditId(null);
       }
 
+      // Consulta agendada para o futuro — permanecer em /especialistas
+      if (isScheduledAppointmentRef.current) {
+        isScheduledAppointmentRef.current = false;
+        return;
+      }
+
       // Navega para sala de espera — sem especialidade (será definida pelo atendente)
       navigate(`/sala-espera/${activeConsultation.id}?origem=especialistas`);
     };
@@ -1160,7 +1177,8 @@ const fetchProfile = useCallback(async (userId: string) => {
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
-        setShowWizardModal(true);
+        await startConsultationFlow(cpf, profile);
+        setShowScheduleModal(true);
         return;
       }
       // Sem créditos, mostra modal para comprar
@@ -1179,7 +1197,8 @@ const fetchProfile = useCallback(async (userId: string) => {
         });
         setPendingCreditId(firstCredit.id);
         setIsUsingPlanConsultation(false);
-        setShowWizardModal(true);
+        await startConsultationFlow(cpf, profile);
+        setShowScheduleModal(true);
         return;
       }
       // Sem créditos, mostra modal para comprar
@@ -1189,7 +1208,8 @@ const fetchProfile = useCallback(async (userId: string) => {
 
     // Tem consultas disponíveis no plano - marca que está usando do plano
     setIsUsingPlanConsultation(true);
-    setShowWizardModal(true);
+    await startConsultationFlow(cpf, profile);
+    setShowScheduleModal(true);
   };
 
   // Inicia consulta após pagamento de consulta avulsa
@@ -1218,15 +1238,18 @@ const fetchProfile = useCallback(async (userId: string) => {
 
     // Consulta avulsa - não está usando do plano
     setIsUsingPlanConsultation(false);
-    setShowWizardModal(true);
+    await startConsultationFlow(cpf, profile);
+    setShowScheduleModal(true);
   };
 
   // Usa um crédito existente para iniciar consulta
   const handleUseExistingCredit = async (creditId: string) => {
     if (!profile) return;
-    
+    const cpf = profile.cpf.replace(/\D/g, "");
+    if (cpf.length !== 11) return;
+
     setShowStandaloneModal(false);
-    
+
     toast({
       title: "Usando crédito disponível",
       description: "Selecione a especialidade para agendar.",
@@ -1235,7 +1258,7 @@ const fetchProfile = useCallback(async (userId: string) => {
     // Marca o crédito como usado IMEDIATAMENTE (antes de criar consulta)
     setPendingCreditId(creditId);
     setActiveConsultationCreditId(creditId);
-    
+
     // Atualiza no banco agora (consultation_id será associado depois)
     await (supabase as any)
       .from("consultation_credits")
@@ -1244,13 +1267,14 @@ const fetchProfile = useCallback(async (userId: string) => {
         used_at: new Date().toISOString(),
       })
       .eq("id", creditId);
-    
+
     // Remove da lista local imediatamente
     setAvailableCredits(prev => prev.filter(c => c.id !== creditId));
-    
+
     // Consulta avulsa - não está usando do plano
     setIsUsingPlanConsultation(false);
-    setShowWizardModal(true);
+    await startConsultationFlow(cpf, profile);
+    setShowScheduleModal(true);
   };
 
   // Verifica se veio do checkout de consulta avulsa
@@ -1280,6 +1304,46 @@ const fetchProfile = useCallback(async (userId: string) => {
   }, [profile, pageLoading]);
 
   // Wizard confirmado → autentica + cria consulta com primeira especialidade disponível
+  // ── Scheduling flow handlers ─────────────────────────────────────────────
+
+  const handleScheduleSelectSpecialty = async (specialty: Specialty) => {
+    setSelectedScheduleSpecialty(specialty);
+    await loadAvailableProfessionals(specialty.id);
+  };
+
+  const handleScheduleSelectProfessional = async (professional: AvailableProfessional) => {
+    if (!selectedScheduleSpecialty) return;
+    await loadAvailableSchedules(professional.profissionalId, selectedScheduleSpecialty.id);
+  };
+
+  const handleScheduleConfirm = async (
+    specialty: Specialty,
+    _professional: AvailableProfessional,
+    slot: ScheduleSlot
+  ) => {
+    isScheduledAppointmentRef.current = true;
+    const success = await createScheduledConsultation(specialty, slot);
+    if (success) {
+      setShowScheduleModal(false);
+      setSelectedScheduleSpecialty(null);
+      if (isUsingPlanConsultation) {
+        await incrementSpecialistConsultations();
+      }
+      if (accessToken) {
+        await loadConsultations();
+      }
+      toast({ title: "Consulta agendada com sucesso!" });
+    } else {
+      isScheduledAppointmentRef.current = false;
+    }
+  };
+
+  const handleCloseScheduleModal = () => {
+    setShowScheduleModal(false);
+    setSelectedScheduleSpecialty(null);
+    resetFlow();
+  };
+
   const handleWizardSubmit = async (
     respostasAnamnese: AnamneseResposta[],
     exames: { arquivoBase64: string }[]
@@ -1666,7 +1730,22 @@ const fetchProfile = useCallback(async (userId: string) => {
           </div>
         )}
 
-        {/* Wizard de consulta com especialista */}
+        {/* Modal de agendamento com especialista (especialidade → profissional → data/hora) */}
+        <ScheduleSpecialistModal
+          open={showScheduleModal}
+          onOpenChange={(open) => { if (!open) handleCloseScheduleModal(); }}
+          specialties={specialties}
+          availableProfessionals={availableProfessionals}
+          availableSchedules={availableSchedules}
+          flowStep={step}
+          error={error}
+          onSelectSpecialty={handleScheduleSelectSpecialty}
+          onSelectProfessional={handleScheduleSelectProfessional}
+          onConfirmSchedule={handleScheduleConfirm}
+          onClose={handleCloseScheduleModal}
+        />
+
+        {/* Wizard de consulta com especialista (mantido para uso via créditos/plano em modo legado) */}
         {showWizardModal && (
           <ConsultaWizardModal
             onClose={() => setShowWizardModal(false)}
