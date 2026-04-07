@@ -17,6 +17,7 @@ import {
   Calendar,
   Ban,
   ChevronRight,
+  Info,
 } from "lucide-react";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
@@ -248,6 +249,14 @@ function ConsultationHistoryCard({
                 </div>
               </>
             )}
+          </div>
+        )}
+
+        {/* Link info — shown when patient scheduled the appointment and is still waiting */}
+        {isAgendada && normalizedStatus === "AGUARDANDO" && !canEnterAgendada && (
+          <div className="flex items-start gap-2 text-xs text-blue-600 bg-blue-50 border border-blue-100 rounded-lg px-3 py-2">
+            <Info className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+            <span>Se você marcou o agendamento, receberá um link para entrar na consulta no dia e hora agendado.</span>
           </div>
         )}
 
@@ -555,12 +564,14 @@ const Especialistas = () => {
   } = useAssemedConsultation();
 
   // Filter consultations:
-  //  1. dataAgendamento must be non-null (regra de negócio: só exibir consultas agendadas)
+  //  1. dataAgendamento must be non-null — EXCEPT when motivoCancelamentoDescricao === "Concluído"
+  //     (cancelamentos com esse motivo são atendimentos realizados que devem aparecer no histórico)
   //  2. Exclude "Clínico Geral" (only show specialist consultations)
   // Memoized to keep a stable reference — used as dependency of loadCreditsInUse / restoreOrphanCredits.
   const specialistConsultations = useMemo(() =>
     consultations.filter((c) => {
-      if (!c.dataAgendamento) return false;
+      const isConcluido = c.motivoCancelamentoDescricao === "Concluído";
+      if (!c.dataAgendamento && !isConcluido) return false;
       const nome = (c.especialidadeNome || "").toLowerCase();
       return !(nome.includes("clínico") || nome.includes("clinico")) || !nome.includes("geral");
     }),

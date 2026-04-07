@@ -158,6 +158,7 @@ export interface Consultation {
   status: ConsultationStatus;
   situacao?: ConsultationStatus; // Alias para compatibilidade com API
   situacaoAtendimentoDescricao?: string; // Descrição textual do status vinda da API
+  motivoCancelamentoDescricao?: string;  // Descrição do motivo de cancelamento (ex: "Concluído")
   dataHoraCriacao?: string;
   dataCriacao?: string; // Alias alternativo da API
   dataHoraInicio: string | null;
@@ -172,6 +173,10 @@ export interface Consultation {
  * A API pode retornar em diferentes formatos
  */
 export function normalizeConsultationStatus(consultation: Consultation): ConsultationStatus {
+  // Override: cancelamento com motivo "Concluído" é tratado como consulta concluída
+  const motivoConcluido = consultation.motivoCancelamentoDescricao === "Concluído";
+  if (motivoConcluido) return 'CONCLUIDO';
+
   const validStatuses: ConsultationStatus[] = ['AGUARDANDO', 'EM_ATENDIMENTO', 'CONCLUIDO', 'CANCELADO'];
 
   // Tenta campos diretos, mas só aceita se for um valor enum válido
