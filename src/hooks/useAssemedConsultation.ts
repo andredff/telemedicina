@@ -277,6 +277,7 @@ export function useAssemedConsultation() {
             const errMsg = loginError instanceof Error ? loginError.message.toLowerCase() : String(loginError).toLowerCase();
             const errStatus = (loginError as AssemedApiError)?.statusCode ?? 0;
             const isNotRegistered =
+              errStatus === 400 ||
               errStatus === 404 ||
               errMsg.includes("não cadastrado") ||
               errMsg.includes("nao cadastrado") ||
@@ -508,7 +509,10 @@ export function useAssemedConsultation() {
             const errMsg = loginError instanceof Error ? loginError.message.toLowerCase() : String(loginError).toLowerCase();
             const errStatus = (loginError as AssemedApiError)?.statusCode ?? 0;
 
+            console.log("[startImmediateConsultation] login falhou:", { errStatus, errMsg: errMsg.substring(0, 100) });
+
             const isNotRegistered =
+              errStatus === 400 ||
               errStatus === 404 ||
               errMsg.includes("não cadastrado") ||
               errMsg.includes("nao cadastrado") ||
@@ -516,8 +520,11 @@ export function useAssemedConsultation() {
               errMsg.includes("not found") ||
               errMsg.includes("404");
 
+            console.log("[startImmediateConsultation] isNotRegistered:", isNotRegistered);
+
             if (!isNotRegistered) throw loginError;
 
+            console.log("[startImmediateConsultation] chamando cadastro-externo...");
             setState((prev) => ({ ...prev, step: "registering" }));
             const registerData = buildRegisterData(cleanCpf, profile);
             await assemedClient.registerPatient(registerData);

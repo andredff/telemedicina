@@ -34,6 +34,13 @@ const ASSEMED_CLIENT_ID     = process.env.ASSEMED_CLIENT_ID     || "";
 const ASSEMED_CLIENT_SECRET = process.env.ASSEMED_CLIENT_SECRET || "";
 const ASSEMED_CNPJ          = process.env.ASSEMED_CNPJ          || "";
 
+app.options("/api/assemed/*", (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  res.sendStatus(204);
+});
+
 app.all("/api/assemed/*", async (req, res) => {
   const assemedPath = req.path.replace(/^\/api\/assemed/, "");
   const url = `${ASSEMED_TARGET}${assemedPath}`;
