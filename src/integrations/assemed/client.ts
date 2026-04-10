@@ -328,29 +328,6 @@ class AssemedClient {
       },
     });
 
-    const camposObrigatorios = [
-      { campo: "clientId", valor: this.clientId },
-      { campo: "clientSecret", valor: this.clientSecret },
-      { campo: "cnpj", valor: this.cnpj },
-      { campo: "nome", valor: data.nome },
-      { campo: "cpf", valor: data.cpf },
-      { campo: "dataNascimento", valor: data.dataNascimento },
-      { campo: "sexo", valor: data.sexo },
-      { campo: "telefone", valor: data.telefone },
-      { campo: "email", valor: data.email },
-    ];
-
-    const camposFaltando = camposObrigatorios.filter(c => !c.valor);
-    if (camposFaltando.length > 0) {
-      const campos = camposFaltando.map(c => c.campo).join(", ");
-      console.error("[Assemed] Campos obrigatórios faltando:", campos);
-      throw new AssemedApiError(
-        `Campos obrigatórios faltando: ${campos}`,
-        "VALIDATION_ERROR",
-        400
-      );
-    }
-
     return this.request<RegisterPatientResponse>(
       "/api/Pacientes/cadastro-externo",
       {

@@ -754,7 +754,7 @@ app.post("/api/cielo/webhook", async (req, res) => {
 // Proxy para Resend API. Mantém a chave no servidor (nunca exposta ao frontend).
 // A chave pode ser atualizada em runtime via /api/integrations/resend.
 let resendApiKey = process.env.RESEND_API_KEY || "";
-let resendFrom   = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
+let resendFrom   = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <onboarding@resend.dev>";
 
 // Carrega chave do Resend salva no banco (se existir, sobrescreve a do .env)
 async function loadResendKeyFromDB() {
