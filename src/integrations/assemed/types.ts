@@ -155,9 +155,11 @@ export interface Consultation {
   especialidadeNome: string;
   tipoProfissionalId: number;
   profissionalNome: string | null;
+  profissionalAgendamentoNome?: string | null; // Nome do médico agendado (consultas tipoAtendimento = 3)
   status: ConsultationStatus;
   situacao?: ConsultationStatus; // Alias para compatibilidade com API
   situacaoAtendimentoDescricao?: string; // Descrição textual do status vinda da API
+  motivoCancelamentoDescricao?: string;  // Descrição do motivo de cancelamento (ex: "Concluído")
   dataHoraCriacao?: string;
   dataCriacao?: string; // Alias alternativo da API
   dataHoraInicio: string | null;
@@ -172,20 +174,27 @@ export interface Consultation {
  * A API pode retornar em diferentes formatos
  */
 export function normalizeConsultationStatus(consultation: Consultation): ConsultationStatus {
-  // Primeiro tenta campos diretos
-  if (consultation.status) return consultation.status;
-  if (consultation.situacao) return consultation.situacao;
-  
-  // Normaliza descrição textual para enum
-  const desc = consultation.situacaoAtendimentoDescricao?.toLowerCase();
-  if (desc) {
-    if (desc.includes('cancelad')) return 'CANCELADO';
-    if (desc.includes('conclu') || desc.includes('finaliz')) return 'CONCLUIDO';
-    // Verificar "aguard" ANTES de "atendimento" pois "Aguardando atendimento" contém ambos
-    if (desc.includes('aguard') || desc.includes('espera')) return 'AGUARDANDO';
-    if (desc.includes('em atendimento') || desc.includes('andamento')) return 'EM_ATENDIMENTO';
-  }
-  
+  // Override: cancelamento com motivo "Concluído" é tratado como consulta concluída
+  const motivoConcluido = consultation.motivoCancelamentoDescricao === "Concluído";
+  if (motivoConcluido) return 'CONCLUIDO';
+
+  const validStatuses: ConsultationStatus[] = ['AGUARDANDO', 'EM_ATENDIMENTO', 'CONCLUIDO', 'CANCELADO'];
+
+  // Tenta campos diretos, mas só aceita se for um valor enum válido
+  if (consultation.status && validStatuses.includes(consultation.status)) return consultation.status;
+  if (consultation.situacao && validStatuses.includes(consultation.situacao)) return consultation.situacao;
+
+  // Normaliza qualquer string textual para enum (status, situacao ou descrição)
+  const raw = String(
+    consultation.situacaoAtendimentoDescricao || consultation.situacao || consultation.status || ''
+  ).toLowerCase();
+
+  if (raw.includes('cancelad')) return 'CANCELADO';
+  if (raw.includes('conclu') || raw.includes('finaliz')) return 'CONCLUIDO';
+  // Verificar "aguard" ANTES de "atendimento" pois "Aguardando atendimento" contém ambos
+  if (raw.includes('aguard') || raw.includes('espera')) return 'AGUARDANDO';
+  if (raw.includes('em atendimento') || raw.includes('andamento')) return 'EM_ATENDIMENTO';
+
   return 'AGUARDANDO';
 }
 

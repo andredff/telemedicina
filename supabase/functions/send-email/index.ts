@@ -3,7 +3,11 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
 
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
 const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? ''
+const SUPABASE_ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 
 interface EmailRequest {
   to: string
@@ -24,7 +28,28 @@ serve(async (req) => {
   }
 
   try {
-    const { to, subject, html, from = 'Novità <noreply@novita.com.br>' }: EmailRequest = await req.json()
+    // Validate JWT — only authenticated users can send emails
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { headers: { Authorization: authHeader } },
+    })
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser()
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid or expired token' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    const { to, subject, html, from = 'Novità Telemedicina <noreply@novitahomecare.com.br>' }: EmailRequest = await req.json()
 
     if (!to || !subject || !html) {
       return new Response(

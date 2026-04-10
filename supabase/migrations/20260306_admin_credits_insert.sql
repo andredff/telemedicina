@@ -53,7 +53,7 @@ COMMENT ON POLICY "Admins can insert consultation credits" ON public.consultatio
 IS 'Permite que administradores insiram créditos de consultas para qualquer usuário';
 
 -- Also allow admins to DELETE credits
-do $
+do $$
 begin
   if not exists (
     select 1 from pg_policies
@@ -72,4 +72,4 @@ begin
         or auth.role() = 'service_role'
       );
   end if;
-end $;
+end $$;

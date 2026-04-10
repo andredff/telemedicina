@@ -1,14 +1,19 @@
 export interface MedicationCatalog {
   id: string;
+  external_id: string | null;       // ID externo (coluna "ID" do Excel)
   name: string;
   active_ingredient: string | null;
   category: string | null;
   dosage: string | null;
+  form: string | null;              // Forma Farmacêutica
+  batch: string | null;             // Lote
+  expiry_date: string | null;       // Validade (ISO date)
+  stock: number;
+  supplier: string | null;          // Fornecedor
   manufacturer: string | null;
   price: number;
-  stock: number;
   pharmacy_id: string | null;
-  pharmacy_name?: string;       // joined from pharmacies
+  pharmacy_name?: string;           // joined from pharmacies
   created_at: string;
   updated_at: string;
 }
@@ -34,18 +39,21 @@ export interface PharmacyFull {
   updated_at: string;
 }
 
-/** Row used in Excel import preview */
+/** Row used in Excel import preview (matches the required Excel model) */
 export interface MedicationImportRow {
-  /** Line number in the spreadsheet (1-based) */
+  /** Line number in the spreadsheet (1-based, skipping header) */
   row: number;
+  external_id: string;
   name: string;
   active_ingredient: string;
   category: string;
   dosage: string;
-  manufacturer: string;
-  price: number;
+  form: string;               // Forma Farmacêutica
+  batch: string;              // Lote
+  expiry_date: string;        // ISO date string or '' if invalid
   stock: number;
-  pharmacy_name: string;
-  /** Errors found during validation */
+  price: number;              // Preço unitário (R$)
+  supplier: string;           // Fornecedor
+  /** Validation errors found during parsing */
   errors: string[];
 }

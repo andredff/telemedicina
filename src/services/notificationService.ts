@@ -6,6 +6,7 @@
 
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
+import { getAuthHeaders } from "@/lib/authHeaders";
 import { getEmailSubject, renderEmailTemplate } from "./emailTemplates";
 
 export type OrderStatus = "pending" | "processing" | "shipped" | "delivered" | "cancelled";
@@ -126,7 +127,7 @@ async function sendEmailViaResend(emailContent: {
 }): Promise<void> {
   const from =
     import.meta.env.VITE_RESEND_FROM ||
-    "Novità Telemedicina <onboarding@resend.dev>";
+    "Novità Telemedicina <noreply@novitahomecare.com.br>";
 
   // Em dev: usa URL relativa → proxy Vite (/api/resend → api.resend.com) sem precisar do Express
   // Em prod: usa VITE_LOCAL_SERVER_URL → backend Express que expõe /api/resend/emails
@@ -135,9 +136,10 @@ async function sendEmailViaResend(emailContent: {
     : (import.meta.env.VITE_LOCAL_SERVER_URL || "");
 
   try {
+    const authHeaders = await getAuthHeaders();
     const response = await fetch(`${baseUrl}/api/resend/emails`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeaders },
       body: JSON.stringify({
         from,
         to: [emailContent.to],

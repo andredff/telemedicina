@@ -4,9 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { Switch } from '@/components/ui/switch';
 import { useToast } from '@/hooks/use-toast';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
@@ -14,32 +13,98 @@ import {
 import {
   Pill, Plus, Pencil, Trash2, Search, Upload, FileSpreadsheet,
   AlertCircle, CheckCircle2, X, RefreshCw, Download,
+  ChevronLeft, ChevronRight, Percent,
 } from 'lucide-react';
 import { MedicationCatalog, MedicationImportRow, PharmacyFull } from '@/types/inventory';
 import {
   getMedicationCatalog, getPharmacies, deleteMedication,
-  updateMedication, upsertMedication, bulkInsertMedications,
+  updateMedication, upsertMedication, bulkUpsertMedications,
   getMedicationCategories,
 } from '@/services/inventoryService';
 import { cn } from '@/lib/utils';
 
-// ── Expected Excel columns (case-insensitive) ──────────────────────────────
-const EXPECTED_COLS = ['nome', 'principio_ativo', 'categoria', 'dosagem', 'fabricante', 'preco', 'estoque', 'farmacia'];
+// ── Required Excel columns (header names as they appear in the spreadsheet) ──
+//
+//  ID | Nome do Medicamento | Princípio Ativo | Categoria | Dosagem |
+//  Forma Farmacêutica | Lote | Validade | Estoque Atual | Fornecedor
+//
+const EXCEL_COL_MAP: Record<string, keyof MedicationImportRow> = {
+  'id':                    'external_id',
+  'nome do medicamento':   'name',
+  'principio ativo':       'active_ingredient',
+  'princípio ativo':       'active_ingredient',
+  'categoria':             'category',
+  'dosagem':               'dosage',
+  'forma farmaceutica':    'form',
+  'forma farmacêutica':    'form',
+  'lote':                  'batch',
+  'validade':              'expiry_date',
+  'estoque atual':         'stock',
+  'estoque':               'stock',
+  'preco':                 'price',
+  'preço':                 'price',
+  'fornecedor':            'supplier',
+};
 
 function normalizeHeader(h: string): string {
-  return h.toString().toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/\s+/g, '_')
-    .replace(/ã/g, 'a').replace(/ç/g, 'c').replace(/ê/g, 'e')
-    .replace(/ú/g, 'u').replace(/á/g, 'a').replace(/é/g, 'e')
-    .replace(/í/g, 'i').replace(/ó/g, 'o').replace(/[^a-z0-9_]/g, '');
+  return h.toString()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim();
+}
+
+/** Parse a validade field: accepts Date serial, ISO string, dd/mm/yyyy, mm/yyyy */
+function parseExpiry(raw: string | number): { iso: string; error: boolean } {
+  if (!raw && raw !== 0) return { iso: '', error: false };
+
+  // Excel date serial
+  if (typeof raw === 'number') {
+    try {
+      const d = XLSX.SSF.parse_date_code(raw);
+      if (d) {
+        const iso = `${d.y}-${String(d.m).padStart(2, '0')}-${String(d.d).padStart(2, '0')}`;
+        return { iso, error: false };
+      }
+    } catch {
+      // fall through
+    }
+  }
+
+  const str = String(raw).trim();
+
+  // dd/mm/yyyy or d/m/yyyy
+  const dmy = str.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (dmy) {
+    const iso = `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+    return { iso, error: isNaN(Date.parse(iso)) };
+  }
+
+  // mm/yyyy  → use last day of month
+  const my = str.match(/^(\d{1,2})\/(\d{4})$/);
+  if (my) {
+    const iso = `${my[2]}-${my[1].padStart(2, '0')}-01`;
+    return { iso, error: isNaN(Date.parse(iso)) };
+  }
+
+  // yyyy-mm-dd
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return { iso: str, error: isNaN(Date.parse(str)) };
+  }
+
+  return { iso: str, error: true };
 }
 
 function downloadTemplate() {
   const ws = XLSX.utils.aoa_to_sheet([
-    ['Nome', 'Principio Ativo', 'Categoria', 'Dosagem', 'Fabricante', 'Preco', 'Estoque', 'Farmacia'],
-    ['Paracetamol 500mg', 'Paracetamol', 'Analgésico', '500mg', 'EMS', '8.90', '100', 'Farmácia Saúde'],
-    ['Amoxicilina 500mg', 'Amoxicilina', 'Antibiótico', '500mg', 'Medley', '22.50', '50', 'Farmácia Saúde'],
+    ['ID', 'Nome do Medicamento', 'Princípio Ativo', 'Categoria', 'Dosagem',
+     'Forma Farmacêutica', 'Lote', 'Validade', 'Estoque Atual', 'Preço', 'Fornecedor'],
+    [163, 'LEVOMEPROMAZINA GTS 4% FR 20ML', 'Levomepromazina', 'Antipsicótico', '4% Gotas',
+     'Gotas', '', '', 0, 0, ''],
+    [164, 'LEVOTIROXINA - 125 MCG CRP', 'Levotiroxina Sódica', 'Hormônio tireoidiano', '125 MCG',
+     'Comprimido', '', '', 0, 0, ''],
+    [165, 'LEVOTIROXINA 25MCG CPR', 'Levotiroxina Sódica', 'Hormônio tireoidiano', '25MCG',
+     'Comprimido', '', '', 0, 0, ''],
   ]);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Medicamentos');
@@ -55,16 +120,18 @@ export default function AdminMedications() {
   const [pharmacies, setPharmacies] = useState<PharmacyFull[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [filterPharmacy, setFilterPharmacy] = useState('');
-  const [filterCategory, setFilterCategory] = useState('');
+  const [search, _setSearch] = useState('');
+  const [filterPharmacy, _setFilterPharmacy] = useState('');
+  const [filterCategory, _setFilterCategory] = useState('');
 
   // Edit dialog
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [editingMed, setEditingMed] = useState<MedicationCatalog | null>(null);
   const [editForm, setEditForm] = useState({
     name: '', active_ingredient: '', category: '', dosage: '',
-    manufacturer: '', price: 0, stock: 0, pharmacy_id: '' as string | null,
+    form: '', batch: '', expiry_date: '', stock: 0,
+    supplier: '', manufacturer: '', price: 0,
+    pharmacy_id: '' as string | null,
   });
   const [saving, setSaving] = useState(false);
 
@@ -75,9 +142,7 @@ export default function AdminMedications() {
   const [isDragging, setIsDragging] = useState(false);
   const [showImportPreview, setShowImportPreview] = useState(false);
 
-  useEffect(() => {
-    loadAll();
-  }, []);
+  useEffect(() => { loadAll(); }, []);
 
   async function loadAll() {
     setLoading(true);
@@ -92,14 +157,14 @@ export default function AdminMedications() {
     setLoading(false);
   }
 
-  // ── Excel parsing ─────────────────────────────────────────────────────────
+  // ── Excel parsing ──────────────────────────────────────────────────────────
 
   function parseExcel(file: File) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = new Uint8Array(e.target!.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: 'array' });
+        const workbook = XLSX.read(data, { type: 'array', cellDates: false });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const raw: Record<string, string | number>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
@@ -108,46 +173,70 @@ export default function AdminMedications() {
           return;
         }
 
-        // Map headers
+        // Build original-header → field map
         const firstRow = raw[0];
-        const headerMap: Record<string, string> = {};
+        const headerToField: Record<string, keyof MedicationImportRow> = {};
         Object.keys(firstRow).forEach((h) => {
           const norm = normalizeHeader(h);
-          EXPECTED_COLS.forEach((col) => {
-            if (norm.includes(col) || col.includes(norm)) headerMap[h] = col;
-          });
+          const field = EXCEL_COL_MAP[norm];
+          if (field) headerToField[h] = field;
         });
 
-        const rows: MedicationImportRow[] = raw.map((rawRow, idx) => {
-          const get = (col: string) => {
-            const key = Object.keys(headerMap).find((h) => headerMap[h] === col);
-            return key ? String(rawRow[key] ?? '').trim() : '';
-          };
+        const get = (row: Record<string, string | number>, field: keyof MedicationImportRow): string => {
+          const key = Object.keys(headerToField).find((h) => headerToField[h] === field);
+          return key ? String(row[key] ?? '').trim() : '';
+        };
+
+        const getRaw = (row: Record<string, string | number>, field: keyof MedicationImportRow): string | number => {
+          const key = Object.keys(headerToField).find((h) => headerToField[h] === field);
+          return key ? row[key] ?? '' : '';
+        };
+
+        const rows: MedicationImportRow[] = [];
+
+        for (let idx = 0; idx < raw.length; idx++) {
+          const rawRow = raw[idx];
+          const name = get(rawRow, 'name');
+
+          // Skip rows without name (as per spec)
+          if (!name) continue;
 
           const errors: string[] = [];
-          const name = get('nome');
-          const priceRaw = get('preco').replace(',', '.');
-          const stockRaw = get('estoque');
-          const price = parseFloat(priceRaw);
-          const stock = parseInt(stockRaw, 10);
 
-          if (!name) errors.push('Nome obrigatório');
-          if (isNaN(price) || price < 0) errors.push('Preço inválido');
-          if (isNaN(stock) || stock < 0) errors.push('Estoque inválido');
+          const stockRaw = get(rawRow, 'stock');
+          const stockNum = parseInt(stockRaw, 10);
+          const stock = isNaN(stockNum) || stockNum < 0 ? 0 : stockNum;
+          if (isNaN(stockNum) || stockNum < 0) errors.push('Estoque inválido → definido como 0');
 
-          return {
-            row: idx + 2,
+          const priceRaw = get(rawRow, 'price');
+          const priceNum = parseFloat(String(priceRaw).replace(',', '.'));
+          const price = isNaN(priceNum) || priceNum < 0 ? 0 : priceNum;
+
+          const expiryRaw = getRaw(rawRow, 'expiry_date');
+          const { iso: expiryIso, error: expiryError } = parseExpiry(expiryRaw);
+          if (expiryRaw !== '' && expiryError) errors.push('Data de validade inválida');
+
+          rows.push({
+            row: idx + 2, // +2: header is row 1, data starts at row 2
+            external_id: get(rawRow, 'external_id'),
             name,
-            active_ingredient: get('principio_ativo'),
-            category: get('categoria'),
-            dosage: get('dosagem'),
-            manufacturer: get('fabricante'),
-            price: isNaN(price) ? 0 : price,
-            stock: isNaN(stock) ? 0 : stock,
-            pharmacy_name: get('farmacia'),
+            active_ingredient: get(rawRow, 'active_ingredient'),
+            category: get(rawRow, 'category'),
+            dosage: get(rawRow, 'dosage'),
+            form: get(rawRow, 'form'),
+            batch: get(rawRow, 'batch'),
+            expiry_date: expiryIso,
+            stock,
+            price,
+            supplier: get(rawRow, 'supplier'),
             errors,
-          };
-        });
+          });
+        }
+
+        if (rows.length === 0) {
+          toast({ title: 'Nenhuma linha com nome encontrada', variant: 'destructive' });
+          return;
+        }
 
         setImportRows(rows);
         setShowImportPreview(true);
@@ -169,43 +258,79 @@ export default function AdminMedications() {
     setIsDragging(false);
     const file = e.dataTransfer.files[0];
     if (file) parseExcel(file);
-  }, [pharmacies]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Import confirmation ────────────────────────────────────────────────────
 
   async function confirmImport() {
-    const valid = importRows.filter((r) => r.errors.length === 0);
-    if (valid.length === 0) {
+    // Rows with date errors are still imported (only truly invalid dates block)
+    const importable = importRows.filter((r) => !r.errors.some((e) => e.startsWith('Data de validade inválida') && r.expiry_date === ''));
+    if (importable.length === 0) {
       toast({ title: 'Nenhuma linha válida para importar', variant: 'destructive' });
       return;
     }
+
     setImporting(true);
     setImportProgress(0);
 
     try {
-      // Build pharmacy name → id map
-      const pharmacyMap: Record<string, string | null> = {};
-      pharmacies.forEach((p) => { pharmacyMap[p.name.toLowerCase()] = p.id; });
+      // Default pharmacy: first available, or null
+      const defaultPharmacyId = pharmacies[0]?.id ?? null;
 
-      const payload = valid.map((r) => ({
-        name: r.name,
-        active_ingredient: r.active_ingredient || null,
-        category: r.category || null,
-        dosage: r.dosage || null,
-        manufacturer: r.manufacturer || null,
-        price: r.price,
-        stock: r.stock,
-        pharmacy_id: r.pharmacy_name
-          ? (pharmacyMap[r.pharmacy_name.toLowerCase()] ?? null)
-          : null,
-      }));
+      // Deduplicate by (name, dosage) — keep last occurrence (mirrors upsert behaviour)
+      const seen = new Map<string, typeof importable[number]>();
+      for (const r of importable) {
+        const key = `${r.name.toLowerCase()}||${(r.dosage || '').toLowerCase()}`;
+        seen.set(key, r);
+      }
+      const deduped = Array.from(seen.values());
 
-      // Insert in chunks of 50 for progress feedback
-      const chunkSize = 50;
-      for (let i = 0; i < payload.length; i += chunkSize) {
-        await bulkInsertMedications(payload.slice(i, i + chunkSize));
-        setImportProgress(Math.round(((i + chunkSize) / payload.length) * 100));
+      // Build lookup of current prices by (name, dosage)
+      const currentPriceMap = new Map<string, number>();
+      for (const m of medications) {
+        const key = `${m.name.toLowerCase()}||${(m.dosage || '').toLowerCase()}`;
+        currentPriceMap.set(key, m.price);
       }
 
-      toast({ title: `${valid.length} medicamento${valid.length !== 1 ? 's' : ''} importado${valid.length !== 1 ? 's' : ''} com sucesso!` });
+      let priceChanges = 0;
+      const payload = deduped.map((r) => {
+        const key = `${r.name.toLowerCase()}||${(r.dosage || '').toLowerCase()}`;
+        const currentPrice = currentPriceMap.get(key) ?? 0;
+        // Only update price if spreadsheet has a value > 0 AND it differs from current
+        const newPrice = r.price > 0 && r.price !== currentPrice ? r.price : currentPrice;
+        if (newPrice !== currentPrice) priceChanges++;
+        return {
+          external_id: r.external_id || null,
+          name: r.name,
+          active_ingredient: r.active_ingredient || null,
+          category: r.category || null,
+          dosage: r.dosage || null,
+          form: r.form || null,
+          batch: r.batch || null,
+          expiry_date: r.expiry_date || null,
+          stock: r.stock,
+          supplier: r.supplier || null,
+          manufacturer: null,
+          price: newPrice,
+          pharmacy_id: defaultPharmacyId,
+        };
+      });
+
+      const chunkSize = 50;
+      for (let i = 0; i < payload.length; i += chunkSize) {
+        await bulkUpsertMedications(payload.slice(i, i + chunkSize));
+        setImportProgress(Math.min(100, Math.round(((i + chunkSize) / payload.length) * 100)));
+      }
+
+      const n = deduped.length;
+      const dupCount = importable.length - deduped.length;
+      const descParts: string[] = [];
+      if (dupCount > 0) descParts.push(`${dupCount} duplicado${dupCount !== 1 ? 's' : ''} consolidado${dupCount !== 1 ? 's' : ''}.`);
+      if (priceChanges > 0) descParts.push(`${priceChanges} preço${priceChanges !== 1 ? 's' : ''} atualizado${priceChanges !== 1 ? 's' : ''}.`);
+      toast({
+        title: `${n} medicamento${n !== 1 ? 's' : ''} importado${n !== 1 ? 's' : ''} com sucesso!`,
+        description: descParts.length > 0 ? descParts.join(' ') : undefined,
+      });
       setShowImportPreview(false);
       setImportRows([]);
       loadAll();
@@ -217,33 +342,57 @@ export default function AdminMedications() {
     }
   }
 
-  // ── Edit / create ─────────────────────────────────────────────────────────
+  // ── Edit / create ──────────────────────────────────────────────────────────
 
   function openEdit(med: MedicationCatalog) {
     setEditingMed(med);
     setEditForm({
-      name: med.name, active_ingredient: med.active_ingredient ?? '',
-      category: med.category ?? '', dosage: med.dosage ?? '',
-      manufacturer: med.manufacturer ?? '', price: med.price,
-      stock: med.stock, pharmacy_id: med.pharmacy_id,
+      name: med.name,
+      active_ingredient: med.active_ingredient ?? '',
+      category: med.category ?? '',
+      dosage: med.dosage ?? '',
+      form: med.form ?? '',
+      batch: med.batch ?? '',
+      expiry_date: med.expiry_date ?? '',
+      stock: med.stock,
+      supplier: med.supplier ?? '',
+      manufacturer: med.manufacturer ?? '',
+      price: med.price,
+      pharmacy_id: med.pharmacy_id,
     });
     setShowEditDialog(true);
   }
 
   function openNew() {
     setEditingMed(null);
-    setEditForm({ name: '', active_ingredient: '', category: '', dosage: '', manufacturer: '', price: 0, stock: 0, pharmacy_id: null });
+    setEditForm({
+      name: '', active_ingredient: '', category: '', dosage: '',
+      form: '', batch: '', expiry_date: '', stock: 0,
+      supplier: '', manufacturer: '', price: 0, pharmacy_id: null,
+    });
     setShowEditDialog(true);
   }
 
   async function saveMed() {
-    if (!editForm.name.trim()) { toast({ title: 'Nome obrigatório', variant: 'destructive' }); return; }
+    if (!editForm.name.trim()) {
+      toast({ title: 'Nome obrigatório', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     const payload = {
-      name: editForm.name, active_ingredient: editForm.active_ingredient || null,
-      category: editForm.category || null, dosage: editForm.dosage || null,
-      manufacturer: editForm.manufacturer || null, price: editForm.price,
-      stock: editForm.stock, pharmacy_id: editForm.pharmacy_id || null,
+      external_id: null as string | null,
+      name: editForm.name,
+      active_ingredient: editForm.active_ingredient || null,
+      category: editForm.category || null,
+      dosage: editForm.dosage || null,
+      form: editForm.form || null,
+      batch: editForm.batch || null,
+      expiry_date: editForm.expiry_date || null,
+      stock: editForm.stock,
+      supplier: editForm.supplier || null,
+      manufacturer: editForm.manufacturer || null,
+      price: editForm.price,
+      pharmacy_id: editForm.pharmacy_id || null,
     };
     if (editingMed) {
       await updateMedication(editingMed.id, payload);
@@ -264,18 +413,66 @@ export default function AdminMedications() {
     loadAll();
   }
 
-  // ── Filter ────────────────────────────────────────────────────────────────
+  // ── Filter + pagination ────────────────────────────────────────────────────
+
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filtered = medications.filter((m) => {
-    const matchSearch = !search || m.name.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = !search ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
       (m.active_ingredient ?? '').toLowerCase().includes(search.toLowerCase());
     const matchPharmacy = !filterPharmacy || m.pharmacy_id === filterPharmacy;
     const matchCategory = !filterCategory || m.category === filterCategory;
     return matchSearch && matchPharmacy && matchCategory;
   });
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // Reset to page 1 when filters change
+  const setSearch = (v: string) => { _setSearch(v); setCurrentPage(1); };
+  const setFilterPharmacy = (v: string) => { _setFilterPharmacy(v); setCurrentPage(1); };
+  const setFilterCategory = (v: string) => { _setFilterCategory(v); setCurrentPage(1); };
+
+  // ── Fator K ────────────────────────────────────────────────────────────────
+
+  const [factorK, setFactorK] = useState('');
+  const [applyingFactor, setApplyingFactor] = useState(false);
+
+  async function applyFactorK() {
+    const k = parseFloat(factorK.replace(',', '.'));
+    if (isNaN(k) || k <= 0) {
+      toast({ title: 'Fator K inválido', description: 'Informe um número positivo.', variant: 'destructive' });
+      return;
+    }
+    if (!confirm(`Multiplicar o preço de TODOS os ${filtered.length} medicamento${filtered.length !== 1 ? 's' : ''} filtrados por ${k}?`)) return;
+
+    setApplyingFactor(true);
+    try {
+      const updates = filtered.map((m) => ({
+        ...m,
+        price: Math.round(m.price * k * 100) / 100,
+      }));
+      const chunkSize = 50;
+      for (let i = 0; i < updates.length; i += chunkSize) {
+        await Promise.all(updates.slice(i, i + chunkSize).map((m) => updateMedication(m.id, { price: m.price })));
+      }
+      toast({ title: `Preços atualizados com fator ${k}`, description: `${updates.length} medicamento${updates.length !== 1 ? 's' : ''} atualizado${updates.length !== 1 ? 's' : ''}.` });
+      setFactorK('');
+      loadAll();
+    } catch (err) {
+      toast({ title: 'Erro ao aplicar fator K', description: String(err), variant: 'destructive' });
+    } finally {
+      setApplyingFactor(false);
+    }
+  }
+
   const validCount = importRows.filter((r) => r.errors.length === 0).length;
   const errorCount = importRows.filter((r) => r.errors.length > 0).length;
+
+  // ── Render ─────────────────────────────────────────────────────────────────
 
   return (
     <div className="space-y-6">
@@ -285,7 +482,9 @@ export default function AdminMedications() {
           <Pill className="h-6 w-6 text-primary" />
           <div>
             <h1 className="text-2xl font-bold">Catálogo de Medicamentos</h1>
-            <p className="text-sm text-gray-500">{medications.length} medicamento{medications.length !== 1 ? 's' : ''} cadastrado{medications.length !== 1 ? 's' : ''}</p>
+            <p className="text-sm text-gray-500">
+              {medications.length} medicamento{medications.length !== 1 ? 's' : ''} cadastrado{medications.length !== 1 ? 's' : ''}
+            </p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -308,17 +507,63 @@ export default function AdminMedications() {
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
         className={cn(
-          'border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-all',
-          isDragging ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-primary/40 hover:bg-gray-50'
+          'border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all',
+          isDragging
+            ? 'border-primary bg-primary/5 scale-[1.01]'
+            : 'border-gray-200 hover:border-primary/40 hover:bg-gray-50'
         )}
       >
-        <Upload className={cn('h-8 w-8 mx-auto mb-2', isDragging ? 'text-primary' : 'text-gray-400')} />
-        <p className="text-sm font-medium text-gray-600">
+        <Upload className={cn('h-9 w-9 mx-auto mb-3', isDragging ? 'text-primary' : 'text-gray-400')} />
+        <p className="text-sm font-medium text-gray-700">
           {isDragging ? 'Solte o arquivo aqui' : 'Arraste um .xlsx aqui ou clique para selecionar'}
         </p>
-        <p className="text-xs text-gray-400 mt-1">Use o botão "Modelo Excel" para baixar o template correto</p>
+        <p className="text-xs text-gray-400 mt-1">
+          Colunas esperadas: ID · Nome do Medicamento · Princípio Ativo · Categoria · Dosagem · Forma Farmacêutica · Lote · Validade · Estoque Atual · Preço · Fornecedor
+        </p>
+        <p className="text-xs text-gray-400">Use o botão "Modelo Excel" para baixar o template correto.</p>
         <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={handleFileInput} />
       </div>
+
+      {/* Fator K */}
+      <Card>
+        <CardContent className="py-4">
+          <div className="flex flex-wrap items-end gap-3">
+            <div className="flex items-center gap-2">
+              <Percent className="h-4 w-4 text-primary shrink-0" />
+              <span className="text-sm font-medium">Ajuste de Preço por Fator K</span>
+            </div>
+            <div className="flex items-end gap-2 flex-1 min-w-[260px]">
+              <div className="flex-1 max-w-[200px]">
+                <Label className="text-xs text-gray-500 mb-1 block">Fator multiplicador</Label>
+                <Input
+                  type="number"
+                  min={0.01}
+                  step={0.01}
+                  placeholder="Ex: 1.10 (+10%)"
+                  value={factorK}
+                  onChange={(e) => setFactorK(e.target.value)}
+                  className="h-9"
+                />
+              </div>
+              <Button
+                onClick={applyFactorK}
+                disabled={applyingFactor || !factorK || medications.length === 0}
+                className="gap-2 h-9"
+                variant="outline"
+              >
+                {applyingFactor ? (
+                  <><RefreshCw className="h-4 w-4 animate-spin" />Aplicando...</>
+                ) : (
+                  <>Aplicar aos {filtered.length} filtrados</>
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-gray-400 self-center">
+              Aplica somente aos medicamentos com preço diferente de zero. Aplica sobre os resultados do filtro atual.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <Card>
@@ -326,7 +571,11 @@ export default function AdminMedications() {
           <div className="flex flex-wrap gap-3">
             <div className="flex items-center gap-2 flex-1 min-w-[200px]">
               <Search className="h-4 w-4 text-gray-400 shrink-0" />
-              <Input placeholder="Buscar medicamento ou princípio ativo..." value={search} onChange={(e) => setSearch(e.target.value)} />
+              <Input
+                placeholder="Buscar medicamento ou princípio ativo..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
             </div>
             <select
               value={filterPharmacy}
@@ -345,7 +594,7 @@ export default function AdminMedications() {
               {categories.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
             {(search || filterPharmacy || filterCategory) && (
-              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setFilterPharmacy(''); setFilterCategory(''); }}>
+              <Button variant="ghost" size="sm" onClick={() => { setSearch(''); setFilterPharmacy(''); setFilterCategory(''); setCurrentPage(1); }}>
                 <X className="h-4 w-4 mr-1" />Limpar
               </Button>
             )}
@@ -358,35 +607,52 @@ export default function AdminMedications() {
             </div>
           ) : filtered.length === 0 ? (
             <p className="text-center text-gray-500 py-12">
-              {medications.length === 0 ? 'Nenhum medicamento cadastrado. Importe um Excel para começar.' : 'Nenhum resultado encontrado.'}
+              {medications.length === 0
+                ? 'Nenhum medicamento cadastrado. Importe um Excel para começar.'
+                : 'Nenhum resultado encontrado.'}
             </p>
           ) : (
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Medicamento</TableHead>
+                  <TableHead>Forma / Lote</TableHead>
                   <TableHead>Categoria</TableHead>
-                  <TableHead>Farmácia</TableHead>
+                  <TableHead>Validade</TableHead>
+                  <TableHead>Fornecedor</TableHead>
                   <TableHead>Preço</TableHead>
                   <TableHead>Estoque</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((med) => (
+                {paginated.map((med) => (
                   <TableRow key={med.id}>
                     <TableCell>
                       <p className="font-medium">{med.name}</p>
                       {med.active_ingredient && <p className="text-xs text-gray-500">{med.active_ingredient}</p>}
                       {med.dosage && <p className="text-xs text-gray-400">{med.dosage}</p>}
                     </TableCell>
-                    <TableCell>
-                      {med.category ? (
-                        <Badge variant="outline" className="text-xs">{med.category}</Badge>
-                      ) : '—'}
+                    <TableCell className="text-sm">
+                      <span>{med.form ?? '—'}</span>
+                      {med.batch && <p className="text-xs text-gray-400">Lote: {med.batch}</p>}
                     </TableCell>
-                    <TableCell className="text-sm">{med.pharmacy_name ?? '—'}</TableCell>
-                    <TableCell className="font-medium text-green-700">R$ {med.price.toFixed(2)}</TableCell>
+                    <TableCell>
+                      {med.category
+                        ? <Badge variant="outline" className="text-xs">{med.category}</Badge>
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {med.expiry_date
+                        ? new Date(med.expiry_date).toLocaleDateString('pt-BR')
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">{med.supplier ?? med.pharmacy_name ?? '—'}</TableCell>
+                    <TableCell className="text-sm font-medium">
+                      {med.price > 0
+                        ? med.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : <span className="text-gray-400">—</span>}
+                    </TableCell>
                     <TableCell>
                       <Badge className={med.stock > 0 ? 'bg-green-100 text-green-800 border-green-200' : 'bg-red-100 text-red-800 border-red-200'}>
                         {med.stock > 0 ? `${med.stock} un.` : 'Sem estoque'}
@@ -408,11 +674,65 @@ export default function AdminMedications() {
             </Table>
           )}
         </CardContent>
+
+        {/* Pagination */}
+        {!loading && filtered.length > PAGE_SIZE && (
+          <div className="flex items-center justify-between px-4 py-3 border-t text-sm text-gray-600">
+            <span>
+              {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} de {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === 1}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1)
+                .filter((p) => p === 1 || p === totalPages || Math.abs(p - safePage) <= 2)
+                .reduce<(number | '...')[]>((acc, p, idx, arr) => {
+                  if (idx > 0 && typeof arr[idx - 1] === 'number' && (p as number) - (arr[idx - 1] as number) > 1) acc.push('...');
+                  acc.push(p);
+                  return acc;
+                }, [])
+                .map((p, i) =>
+                  p === '...' ? (
+                    <span key={`ellipsis-${i}`} className="px-1 text-gray-400">…</span>
+                  ) : (
+                    <Button
+                      key={p}
+                      variant={p === safePage ? 'default' : 'outline'}
+                      size="sm"
+                      onClick={() => setCurrentPage(p as number)}
+                      className="h-8 w-8 p-0"
+                    >
+                      {p}
+                    </Button>
+                  )
+                )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={safePage === totalPages}
+                onClick={() => setCurrentPage((p) => p + 1)}
+                className="h-8 w-8 p-0"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* ── Import Preview Dialog ── */}
-      <Dialog open={showImportPreview} onOpenChange={(open) => { if (!open && !importing) { setShowImportPreview(false); setImportRows([]); } }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
+      <Dialog
+        open={showImportPreview}
+        onOpenChange={(open) => { if (!open && !importing) { setShowImportPreview(false); setImportRows([]); } }}
+      >
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSpreadsheet className="h-5 w-5" />
@@ -420,21 +740,24 @@ export default function AdminMedications() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Summary */}
-          <div className="flex gap-3 py-2">
+          {/* Summary badges */}
+          <div className="flex flex-wrap gap-3 py-2">
             <div className="flex items-center gap-2 px-3 py-2 bg-green-50 rounded-lg border border-green-200">
               <CheckCircle2 className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-semibold text-green-800">{validCount} válidos</span>
+              <span className="text-sm font-semibold text-green-800">{validCount} sem erros</span>
             </div>
             {errorCount > 0 && (
-              <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
-                <AlertCircle className="h-4 w-4 text-red-600" />
-                <span className="text-sm font-semibold text-red-800">{errorCount} com erro</span>
+              <div className="flex items-center gap-2 px-3 py-2 bg-amber-50 rounded-lg border border-amber-200">
+                <AlertCircle className="h-4 w-4 text-amber-600" />
+                <span className="text-sm font-semibold text-amber-800">{errorCount} com avisos</span>
               </div>
             )}
             <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border">
-              <span className="text-sm text-gray-600">{importRows.length} linhas no total</span>
+              <span className="text-sm text-gray-600">{importRows.length} linhas lidas</span>
             </div>
+            <p className="text-xs text-gray-500 self-center ml-auto">
+              Duplicados (mesmo nome + dosagem) serão <strong>atualizados</strong>.
+            </p>
           </div>
 
           {/* Progress bar */}
@@ -445,7 +768,10 @@ export default function AdminMedications() {
                 <span>{importProgress}%</span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
-                <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${importProgress}%` }} />
+                <div
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${importProgress}%` }}
+                />
               </div>
             </div>
           )}
@@ -456,34 +782,50 @@ export default function AdminMedications() {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-12">Linha</TableHead>
+                  <TableHead>ID Externo</TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Princípio Ativo</TableHead>
-                  <TableHead>Categoria</TableHead>
-                  <TableHead>Preço</TableHead>
+                  <TableHead>Dosagem</TableHead>
+                  <TableHead>Forma</TableHead>
+                  <TableHead>Lote</TableHead>
+                  <TableHead>Validade</TableHead>
                   <TableHead>Estoque</TableHead>
-                  <TableHead>Farmácia</TableHead>
+                  <TableHead>Preço</TableHead>
+                  <TableHead>Fornecedor</TableHead>
                   <TableHead>Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {importRows.map((row) => (
-                  <TableRow key={row.row} className={row.errors.length > 0 ? 'bg-red-50' : ''}>
+                  <TableRow key={row.row} className={row.errors.length > 0 ? 'bg-amber-50/60' : ''}>
                     <TableCell className="text-xs text-gray-500">{row.row}</TableCell>
-                    <TableCell className="font-medium text-sm">{row.name || '—'}</TableCell>
+                    <TableCell className="text-xs text-gray-400">{row.external_id || '—'}</TableCell>
+                    <TableCell className="font-medium text-sm">{row.name}</TableCell>
                     <TableCell className="text-sm text-gray-600">{row.active_ingredient || '—'}</TableCell>
-                    <TableCell className="text-sm">{row.category || '—'}</TableCell>
-                    <TableCell className="text-sm">R$ {row.price.toFixed(2)}</TableCell>
+                    <TableCell className="text-sm">{row.dosage || '—'}</TableCell>
+                    <TableCell className="text-sm">{row.form || '—'}</TableCell>
+                    <TableCell className="text-sm">{row.batch || '—'}</TableCell>
+                    <TableCell className="text-sm">
+                      {row.expiry_date
+                        ? (() => { try { return new Date(row.expiry_date).toLocaleDateString('pt-BR'); } catch { return row.expiry_date; } })()
+                        : '—'}
+                    </TableCell>
                     <TableCell className="text-sm">{row.stock}</TableCell>
-                    <TableCell className="text-sm">{row.pharmacy_name || '—'}</TableCell>
+                    <TableCell className="text-sm">
+                      {row.price > 0
+                        ? row.price.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                        : '—'}
+                    </TableCell>
+                    <TableCell className="text-sm">{row.supplier || '—'}</TableCell>
                     <TableCell>
                       {row.errors.length === 0 ? (
                         <CheckCircle2 className="h-4 w-4 text-green-600" />
                       ) : (
                         <div className="flex items-start gap-1">
-                          <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                          <AlertCircle className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
                           <div>
                             {row.errors.map((err, i) => (
-                              <p key={i} className="text-xs text-red-600">{err}</p>
+                              <p key={i} className="text-xs text-amber-700">{err}</p>
                             ))}
                           </div>
                         </div>
@@ -496,26 +838,39 @@ export default function AdminMedications() {
           </div>
 
           <DialogFooter className="gap-2 mt-2">
-            <Button variant="outline" onClick={() => { setShowImportPreview(false); setImportRows([]); }} disabled={importing}>
+            <Button
+              variant="outline"
+              onClick={() => { setShowImportPreview(false); setImportRows([]); }}
+              disabled={importing}
+            >
               Cancelar
             </Button>
             {errorCount > 0 && (
-              <Button variant="outline" onClick={() => fileInputRef.current?.click()} disabled={importing} className="gap-2">
-                <RefreshCw className="h-4 w-4" />Reprocessar
+              <Button
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={importing}
+                className="gap-2"
+              >
+                <RefreshCw className="h-4 w-4" />Reprocessar arquivo
               </Button>
             )}
-            <Button onClick={confirmImport} disabled={importing || validCount === 0} className="gap-2 min-w-[160px]">
+            <Button
+              onClick={confirmImport}
+              disabled={importing || importRows.length === 0}
+              className="gap-2 min-w-[180px]"
+            >
               {importing ? (
                 <><RefreshCw className="h-4 w-4 animate-spin" />Importando...</>
               ) : (
-                <><Upload className="h-4 w-4" />Importar {validCount} linha{validCount !== 1 ? 's' : ''}</>
+                <><Upload className="h-4 w-4" />Importar {importRows.length} medicamento{importRows.length !== 1 ? 's' : ''}</>
               )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit/New Medication Dialog ── */}
+      {/* ── Edit / New Medication Dialog ── */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
@@ -524,7 +879,11 @@ export default function AdminMedications() {
           <div className="space-y-4 py-2">
             <div>
               <Label>Nome *</Label>
-              <Input value={editForm.name} onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))} placeholder="Ex: Paracetamol 500mg" />
+              <Input
+                value={editForm.name}
+                onChange={(e) => setEditForm((p) => ({ ...p, name: e.target.value }))}
+                placeholder="Ex: Paracetamol 500mg"
+              />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -540,17 +899,33 @@ export default function AdminMedications() {
                 <Input value={editForm.dosage} onChange={(e) => setEditForm((p) => ({ ...p, dosage: e.target.value }))} placeholder="Ex: 500mg" />
               </div>
               <div>
-                <Label>Fabricante</Label>
-                <Input value={editForm.manufacturer} onChange={(e) => setEditForm((p) => ({ ...p, manufacturer: e.target.value }))} placeholder="Ex: EMS" />
+                <Label>Forma Farmacêutica</Label>
+                <Input value={editForm.form} onChange={(e) => setEditForm((p) => ({ ...p, form: e.target.value }))} placeholder="Ex: Comprimido" />
               </div>
               <div>
-                <Label>Preço (R$) *</Label>
-                <Input type="number" min={0} step={0.01} value={editForm.price} onChange={(e) => setEditForm((p) => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+                <Label>Lote</Label>
+                <Input value={editForm.batch} onChange={(e) => setEditForm((p) => ({ ...p, batch: e.target.value }))} placeholder="Ex: L2024A" />
+              </div>
+              <div>
+                <Label>Validade</Label>
+                <Input type="date" value={editForm.expiry_date} onChange={(e) => setEditForm((p) => ({ ...p, expiry_date: e.target.value }))} />
               </div>
               <div>
                 <Label>Estoque (unidades)</Label>
                 <Input type="number" min={0} value={editForm.stock} onChange={(e) => setEditForm((p) => ({ ...p, stock: parseInt(e.target.value) || 0 }))} />
               </div>
+              <div>
+                <Label>Preço (R$)</Label>
+                <Input type="number" min={0} step={0.01} value={editForm.price} onChange={(e) => setEditForm((p) => ({ ...p, price: parseFloat(e.target.value) || 0 }))} />
+              </div>
+            </div>
+            <div>
+              <Label>Fornecedor</Label>
+              <Input value={editForm.supplier} onChange={(e) => setEditForm((p) => ({ ...p, supplier: e.target.value }))} placeholder="Ex: EMS" />
+            </div>
+            <div>
+              <Label>Fabricante</Label>
+              <Input value={editForm.manufacturer} onChange={(e) => setEditForm((p) => ({ ...p, manufacturer: e.target.value }))} placeholder="Ex: EMS Sigma Pharma" />
             </div>
             <div>
               <Label>Farmácia</Label>

@@ -39,13 +39,13 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 site_url = "http://localhost:5173"
-additional_redirect_urls = ["http://localhost:5173"]
+additional_redirect_urls = ["http://localhost:5173", "http://localhost:5173/reset-password"]
 jwt_expiry = 3600
 enable_refresh_token_rotation = true
 refresh_token_reuse_interval = 10
 enable_signup = true
 enable_anonymous_sign_ins = false
-minimum_password_length = 6
+minimum_password_length = 8
 
 [auth.email]
 enable_signup = true
@@ -56,6 +56,14 @@ secure_password_change = false
 [auth.email.template.invite]
 subject = "Você foi convidado para Novità Telemedicina"
 content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.confirmation]
+subject = "Confirme seu e-mail — Novità Telemedicina"
+content_path = "./supabase/templates/confirmation.html"
+
+[auth.email.template.recovery]
+subject = "Recuperação de senha — Novità"
+content_path = "./supabase/templates/recovery.html"
 
 [auth.sms]
 enable_signup = false

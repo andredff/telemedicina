@@ -135,6 +135,8 @@ class EmailQueue {
         return templates.consultaAgendada(data);
       case "LembreteConsulta":
         return templates.lembreteConsulta(data);
+      case "NotificacaoPedido":
+        return templates.notificacaoPedido(data);
       default:
         throw new Error(`Tipo de evento desconhecido: ${tipo}`);
     }

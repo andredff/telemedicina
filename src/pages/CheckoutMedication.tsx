@@ -9,7 +9,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import { useCart } from "@/hooks/useCart";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
 import type { CustomerData } from "@/services/paymentService";
+import type { CatalogCartItem } from "@/types/prescription";
 
 const CheckoutMedication = () => {
   const navigate = useNavigate();
@@ -18,6 +20,8 @@ const CheckoutMedication = () => {
   const [loading, setLoading] = useState(true);
   const cart = useCart();
   const cartItems = cart.items;
+  const catalogItems = cart.catalogItems;
+  const { markAsPaid } = usePaidPrescriptions();
   const [paymentDone, setPaymentDone] = useState(false);
   const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
 
@@ -49,10 +53,10 @@ const CheckoutMedication = () => {
   }, [navigate]);
 
   useEffect(() => {
-    if (!cart.loading && cartItems.length === 0 && !paymentDone) {
+    if (!cart.loading && cartItems.length === 0 && catalogItems.length === 0 && !paymentDone) {
       navigate("/cart");
     }
-  }, [cart.loading, cartItems.length, paymentDone, navigate]);
+  }, [cart.loading, cartItems.length, catalogItems.length, paymentDone, navigate]);
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -75,6 +79,7 @@ const CheckoutMedication = () => {
   const handleSuccess = (_paymentId: string) => {
     setPaymentDone(true);
     cart.clearCart();
+    cart.clearCatalogItems();
   };
 
   if (loading || cart.loading) {
@@ -85,7 +90,7 @@ const CheckoutMedication = () => {
     );
   }
 
-  if (cartItems.length === 0 && !paymentDone) {
+  if (cartItems.length === 0 && catalogItems.length === 0 && !paymentDone) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
@@ -127,8 +132,10 @@ const CheckoutMedication = () => {
 
           <MedicationCheckout
             items={cartItems}
+            catalogItems={catalogItems as CatalogCartItem[]}
             customer={customer}
             onSuccess={handleSuccess}
+            onPrescriptionsPaid={markAsPaid}
             onCancel={() => navigate("/cart")}
           />
         </div>

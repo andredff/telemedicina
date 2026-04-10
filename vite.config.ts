@@ -26,7 +26,22 @@ export default defineConfig(({ mode }) => {
           secure: false,
           rewrite: (path) => path.replace(/^\/api\/assemed/, ""),
         },
-        // Proxy para Resend (email) - injeta API key no header Authorization
+        // Proxy para endpoints de integrações no Express server (dev)
+        "/api/integrations": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
+        // Admin endpoints → Express server
+        "/api/admin": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
+        // /api/resend/emails → Express local (que decide entre Mailpit e Resend real)
+        "/api/resend/emails": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
+        // Outros subpaths /api/resend/* → Resend API diretamente (com chave injetada)
         "/api/resend": {
           target: "https://api.resend.com",
           changeOrigin: true,

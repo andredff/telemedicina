@@ -8,17 +8,204 @@ dotenv.config({ path: path.resolve(__dirname, "..", ".env"), override: false });
 
 const express = require("express");
 const cors = require("cors");
+const { default: rateLimit, ipKeyGenerator } = require("express-rate-limit");
 const { createClient } = require("@supabase/supabase-js");
 
 const app = express();
 const PORT = process.env.PORT || 5174;
 
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+
 const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map(s => s.trim())
-  : undefined; // undefined = allow all (dev)
+  : IS_PRODUCTION
+    ? ["https://novita.migrai.com.br", "https://novitahomecare.com.br"]
+    : undefined; // undefined = allow all (dev only)
 
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
 app.use(express.json());
+
+// ─── Proxy Assemed — injeta credenciais server-side ──────────────────────────
+const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "true"
+  ? "https://dev-api-assemed.azurewebsites.net"
+  : "https://api.assemedtelemedicina.com";
+
+const ASSEMED_CLIENT_ID     = process.env.ASSEMED_CLIENT_ID     || "";
+const ASSEMED_CLIENT_SECRET = process.env.ASSEMED_CLIENT_SECRET || "";
+const ASSEMED_CNPJ          = process.env.ASSEMED_CNPJ          || "";
+
+app.all("/api/assemed/*", async (req, res) => {
+  const assemedPath = req.path.replace(/^\/api\/assemed/, "");
+  const url = `${ASSEMED_TARGET}${assemedPath}`;
+
+  try {
+    const headers = { "Content-Type": "application/json" };
+    if (req.headers.authorization) headers["Authorization"] = req.headers.authorization;
+
+    // Injeta credenciais no body para rotas que as exigem
+    let body;
+    if (req.method !== "GET" && req.method !== "HEAD") {
+      const merged = { ...req.body };
+      console.log("[Assemed Proxy] ENV clientId presente:", !!ASSEMED_CLIENT_ID, "| body keys:", Object.keys(merged));
+      if ("clientId"     in merged) merged.clientId     = ASSEMED_CLIENT_ID;
+      if ("clientSecret" in merged) merged.clientSecret = ASSEMED_CLIENT_SECRET;
+      if ("cnpj"         in merged && !merged.cnpj) merged.cnpj = ASSEMED_CNPJ;
+      // cadastro-externo usa identificacao.clientId / identificacao.clientSecret
+      if (merged.identificacao) {
+        merged.identificacao = {
+          ...merged.identificacao,
+          clientId:     ASSEMED_CLIENT_ID,
+          clientSecret: ASSEMED_CLIENT_SECRET,
+        };
+      }
+      body = JSON.stringify(merged);
+      console.log("[Assemed Proxy] Body enviado para Assemed:", body.substring(0, 300));
+    }
+
+    const upstream = await fetch(url, { method: req.method, headers, body });
+    const contentType = upstream.headers.get("content-type") || "";
+
+    res.status(upstream.status);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    if (contentType) res.setHeader("Content-Type", contentType);
+
+    if (contentType.includes("application/json")) {
+      const data = await upstream.json();
+      console.log("[Assemed Proxy] Resposta", upstream.status, url, JSON.stringify(data).substring(0, 200));
+      return res.json(data);
+    }
+    const text = await upstream.text();
+    console.log("[Assemed Proxy] Resposta", upstream.status, url, text.substring(0, 200));
+    return res.send(text);
+  } catch (err) {
+    console.error("[Assemed Proxy] Erro:", err.message);
+    res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
+  }
+});
+
+// ─── Rate limiting ──────────────────────────────────────────────────────────
+const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas requisições. Aguarde um momento." },
+});
+app.use(globalLimiter);
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minuto
+  max: 10,             // máx 10 requests por IP por minuto
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas tentativas de pagamento. Aguarde um momento." },
+});
+
+const emailLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Limita por usuário autenticado (sub do JWT) ou por IP como fallback
+  keyGenerator: (req) => {
+    const auth = req.headers.authorization || "";
+    const token = auth.replace("Bearer ", "");
+    if (token) {
+      try {
+        const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64").toString());
+        if (payload?.sub) return `email:user:${payload.sub}`;
+      } catch { /* fallback para IP */ }
+    }
+    return `email:ip:${ipKeyGenerator(req)}`;
+  },
+  message: { success: false, message: "Muitas requisições de e-mail. Aguarde um momento." },
+});
+
+const notificationLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Muitas requisições de notificação. Aguarde um momento." },
+});
+
+// ─── Auth middleware — valida JWT do Supabase ─────────────────────────────────
+async function requireAuth(req, res, next) {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({ error: "Token de autenticação obrigatório" });
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+
+  // Validate the JWT by calling Supabase auth
+  const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const supabaseAnonKey = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseAnonKey) {
+    // If Supabase is not configured, skip auth in development
+    if (!IS_PRODUCTION) return next();
+    return res.status(500).json({ error: "Servidor não configurado para autenticação" });
+  }
+
+  try {
+    const response = await fetch(`${supabaseUrl}/auth/v1/user`, {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+        "apikey": supabaseAnonKey,
+      },
+    });
+
+    if (!response.ok) {
+      return res.status(401).json({ error: "Token inválido ou expirado" });
+    }
+
+    const user = await response.json();
+    req.user = user;
+    next();
+  } catch (err) {
+    console.error("[Auth] Erro ao validar token:", err.message);
+    return res.status(401).json({ error: "Erro na validação do token" });
+  }
+}
+
+// Admin-only middleware (requires requireAuth first)
+async function requireAdmin(req, res, next) {
+  if (!req.user?.id) {
+    return res.status(401).json({ error: "Não autenticado" });
+  }
+
+  if (!supabase) {
+    // If Supabase is not configured, skip in development
+    if (!IS_PRODUCTION) return next();
+    return res.status(500).json({ error: "Supabase não configurado" });
+  }
+
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", req.user.id)
+      .single();
+
+    if (data?.role !== "admin") {
+      return res.status(403).json({ error: "Acesso restrito a administradores" });
+    }
+
+    next();
+  } catch (err) {
+    return res.status(500).json({ error: "Erro ao verificar permissões" });
+  }
+}
+
+// Helper: safe error message (never expose internals in production)
+function safeErrorMessage(err) {
+  if (IS_PRODUCTION) return "Erro interno do servidor";
+  return err.message || "Erro interno";
+}
+
+// ─── Webhook secret — proteção contra payloads forjados ──────────────────────
+const WEBHOOK_SECRET = process.env.CIELO_WEBHOOK_SECRET || "";
 
 // ─── Supabase (optional) ────────────────────────────────────────────────────
 let supabase = null;
@@ -28,9 +215,17 @@ if (supabaseUrl && process.env.SUPABASE_SERVICE_ROLE_KEY) {
   console.log("✓ Supabase client initialized");
 }
 
+
+// ─── Receitas — OCR + IA + Matching ─────────────────────────────────────────
+// Disponibiliza supabase para os handlers de receita via app.locals
+app.locals.supabase = supabase;
+const receitasRouter = require("./receitas/index");
+app.use("/api/receitas", receitasRouter);
+
 // ─── Sistema de Notificações por E-mail ────────────────────────────────────
 const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
+const emailTemplates = require("./notifications/templates");
 
 const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY || process.env.NODE_ENV === "development";
 dispatcher.init(process.env.RESEND_API_KEY, RESEND_MOCK_MODE);
@@ -187,7 +382,7 @@ function simulatePayment(cardNumber, amountInCents, paymentType) {
 }
 
 // ─── POST /api/cielo/payment ─────────────────────────────────────────────────
-app.post("/api/cielo/payment", async (req, res) => {
+app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => {
   try {
     if (!MERCHANT_ID || !MERCHANT_KEY) {
       return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
@@ -205,6 +400,41 @@ app.post("/api/cielo/payment", async (req, res) => {
 
     if (!orderId || !customer || !amountInCents) {
       return res.status(400).json({ success: false, message: "Missing required fields: orderId, customer, amountInCents" });
+    }
+    if (typeof amountInCents !== "number" || amountInCents <= 0 || !Number.isInteger(amountInCents)) {
+      return res.status(400).json({ success: false, message: "amountInCents deve ser um inteiro positivo" });
+    }
+    if (!customer.name || typeof customer.name !== "string" || customer.name.trim().length < 2) {
+      return res.status(400).json({ success: false, message: "Nome do cliente inválido" });
+    }
+    if (customer.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email)) {
+      return res.status(400).json({ success: false, message: "E-mail do cliente inválido" });
+    }
+    if (customer.cpf) {
+      const cpfDigits = String(customer.cpf).replace(/\D/g, "");
+      if (cpfDigits.length !== 11) {
+        return res.status(400).json({ success: false, message: "CPF deve ter 11 dígitos" });
+      }
+    }
+
+    // ── Idempotência: verifica se já existe pagamento bem-sucedido para este orderId ──
+    if (supabase) {
+      const { data: existing } = await supabase
+        .from("payment_logs")
+        .select("payment_id, status")
+        .eq("order_id", String(orderId))
+        .eq("status", "success")
+        .limit(1);
+
+      if (existing && existing.length > 0) {
+        if (!IS_PRODUCTION) console.log(`[Cielo] Pagamento duplicado bloqueado — orderId=${orderId} paymentId=${existing[0].payment_id}`);
+        return res.json({
+          success:   true,
+          paymentId: existing[0].payment_id,
+          message:   "Pagamento já processado anteriormente",
+          duplicate: true,
+        });
+      }
     }
 
     // ── Monta request Cielo ──────────────────────────────────────────────────
@@ -276,19 +506,19 @@ app.post("/api/cielo/payment", async (req, res) => {
       }
     }
 
-    console.log("[Cielo] Request →", JSON.stringify(redact(cieloReq), null, 2));
+    if (!IS_PRODUCTION) console.log("[Cielo] Request →", JSON.stringify(redact(cieloReq), null, 2));
 
     // ── Envia para Cielo ─────────────────────────────────────────────────────
     let { httpStatus, parsed } = await callCielo("POST", "", cieloReq);
-    console.log("[Cielo] Response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
+    if (!IS_PRODUCTION) console.log("[Cielo] Response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
 
     // Se erro 319 (Smart Recurrency não habilitada), re-tenta sem recorrência
     if (Array.isArray(parsed) && parsed.some(e => e.Code === 319)) {
-      console.log("[Cielo] Smart Recurrency not enabled — retrying as regular credit card");
+      if (!IS_PRODUCTION) console.log("[Cielo] Smart Recurrency not enabled — retrying as regular credit card");
       delete cieloReq.Payment.RecurrentPayment;
       cieloReq.Payment.CreditCard.SaveCard = false;
       ({ httpStatus, parsed } = await callCielo("POST", "", cieloReq));
-      console.log("[Cielo] Retry response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
+      if (!IS_PRODUCTION) console.log("[Cielo] Retry response ←", httpStatus, JSON.stringify(parsed)?.substring(0, 600));
     }
 
     if (!parsed) {
@@ -352,12 +582,12 @@ app.post("/api/cielo/payment", async (req, res) => {
 
   } catch (err) {
     console.error("[Cielo] Internal error:", err);
-    return res.status(500).json({ success: false, message: err.message || "Erro interno" });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── GET /api/cielo/payment/:paymentId ──────────────────────────────────────
-app.get("/api/cielo/payment/:paymentId", async (req, res) => {
+app.get("/api/cielo/payment/:paymentId", requireAuth, async (req, res) => {
   try {
     if (!MERCHANT_ID) return res.status(500).json({ success: false, message: "Cielo not configured" });
 
@@ -377,12 +607,12 @@ app.get("/api/cielo/payment/:paymentId", async (req, res) => {
       message:   result.returnMessage,
     });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── POST /api/cielo/payment/:paymentId/capture ──────────────────────────────
-app.post("/api/cielo/payment/:paymentId/capture", async (req, res) => {
+app.post("/api/cielo/payment/:paymentId/capture", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { amount } = req.body;
@@ -392,12 +622,12 @@ app.post("/api/cielo/payment/:paymentId/capture", async (req, res) => {
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 2, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── POST /api/cielo/payment/:paymentId/cancel ───────────────────────────────
-app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
+app.post("/api/cielo/payment/:paymentId/cancel", requireAuth, requireAdmin, async (req, res) => {
   try {
     const { paymentId } = req.params;
     const { amount } = req.body;
@@ -407,77 +637,206 @@ app.post("/api/cielo/payment/:paymentId/cancel", async (req, res) => {
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 10, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
   } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
+    return res.status(500).json({ success: false, message: safeErrorMessage(err) });
   }
 });
 
 // ─── Recurrence management ───────────────────────────────────────────────────
-app.put("/api/cielo/recurrence/:id/deactivate", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/deactivate", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/deactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/reactivate", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/reactivate", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/reactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/amount", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/amount", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/amount`;
     await callCielo("PUT", url, req.body.amount);
     return res.json({ success: true });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
-app.put("/api/cielo/recurrence/:id/interval", async (req, res) => {
+app.put("/api/cielo/recurrence/:id/interval", requireAuth, async (req, res) => {
   try {
     const url = `${CIELO_URLS.transactional}/${req.params.id}/interval`;
     await callCielo("PUT", url, req.body.interval);
     return res.json({ success: true });
-  } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
+  } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
 });
 
 // ─── Webhook ─────────────────────────────────────────────────────────────────
+// P5: Autenticação via secret na query string
+// P6: Confirma status real com GET na Cielo antes de persistir
+// P7: Mapeamento completo de status (inclui 12, 13, 20)
 app.post("/api/cielo/webhook", async (req, res) => {
   try {
-    const payload = req.body;
-    console.log("[Cielo] Webhook:", JSON.stringify(payload));
-
-    if (supabase && payload.PaymentId) {
-      const statusMap = { 1: "processing", 2: "processing", 3: "cancelled", 10: "cancelled", 11: "cancelled" };
-      const newStatus = statusMap[payload.Status] || "pending";
-
-      await supabase.from("orders")
-        .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
-        .eq("payment_id", payload.PaymentId);
+    // Em produção o WEBHOOK_SECRET é obrigatório — rejeita se não configurado
+    if (IS_PRODUCTION && !WEBHOOK_SECRET) {
+      console.error("[Cielo] Webhook bloqueado — CIELO_WEBHOOK_SECRET não configurado em produção");
+      return res.status(500).json({ error: "Webhook não configurado" });
+    }
+    // Valida secret quando definido
+    if (WEBHOOK_SECRET) {
+      const providedSecret = req.query.secret || req.headers["x-webhook-secret"];
+      if (providedSecret !== WEBHOOK_SECRET) {
+        console.warn("[Cielo] Webhook rejeitado — secret inválido", { ip: req.ip });
+        return res.status(403).json({ error: "Forbidden" });
+      }
     }
 
+    const payload = req.body;
+    if (!IS_PRODUCTION) console.log("[Cielo] Webhook recebido:", JSON.stringify(payload));
+
+    if (!supabase || !payload.PaymentId) {
+      return res.json({ received: true });
+    }
+
+    // P6 — Consulta Cielo para confirmar o status real da transação
+    let confirmedStatus = payload.Status;
+    if (MERCHANT_ID && MERCHANT_KEY) {
+      try {
+        const queryUrl = `${CIELO_URLS.query}/${payload.PaymentId}`;
+        const { parsed } = await callCielo("GET", queryUrl);
+        if (parsed?.Payment?.Status !== undefined) {
+          confirmedStatus = parsed.Payment.Status;
+          console.log(`[Cielo] Webhook status confirmado via API: payload=${payload.Status} → real=${confirmedStatus}`);
+        } else {
+          console.warn("[Cielo] Não foi possível confirmar status via API — usando payload do webhook");
+        }
+      } catch (err) {
+        console.warn("[Cielo] Erro ao confirmar status via API:", err.message, "— usando payload do webhook");
+      }
+    }
+
+    // P7 — Mapeamento completo de status Cielo → status do pedido
+    const statusMap = {
+      1:  "processing",  // Autorizado
+      2:  "processing",  // Capturado/Pago
+      3:  "cancelled",   // Negado
+      10: "cancelled",   // Cancelado (Void)
+      11: "cancelled",   // Estornado (Refund)
+      12: "pending",     // Pendente (PIX aguardando)
+      13: "cancelled",   // Abortado
+      20: "processing",  // Agendado (Recorrência)
+    };
+    const newStatus = statusMap[confirmedStatus] || "pending";
+
+    await supabase.from("orders")
+      .update({ payment_status: newStatus, updated_at: new Date().toISOString() })
+      .eq("payment_id", payload.PaymentId);
+
+    if (!IS_PRODUCTION) console.log(`[Cielo] Webhook processado — PaymentId=${payload.PaymentId} status=${confirmedStatus} → ${newStatus}`);
     return res.json({ received: true });
   } catch (err) {
-    return res.status(500).json({ error: err.message });
+    console.error("[Cielo] Webhook erro:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
 // ─── Resend Email Proxy ───────────────────────────────────────────────────────
 // Proxy para Resend API. Mantém a chave no servidor (nunca exposta ao frontend).
-const RESEND_API_KEY = process.env.RESEND_API_KEY || "";
-const RESEND_FROM    = process.env.RESEND_FROM || "Novità Telemedicina <onboarding@resend.dev>";
+// A chave pode ser atualizada em runtime via /api/integrations/resend.
+let resendApiKey = process.env.RESEND_API_KEY || "";
+let resendFrom   = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
 
-app.post("/api/resend/emails", async (req, res) => {
+// Carrega chave do Resend salva no banco (se existir, sobrescreve a do .env)
+async function loadResendKeyFromDB() {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "integrations")
+      .single();
+
+    if (data?.value?.resendApiKey) {
+      resendApiKey = data.value.resendApiKey;
+      console.log("[Resend] ✓ API key carregada do banco de dados");
+    }
+    if (data?.value?.resendFromEmail) {
+      resendFrom = data.value.resendFromEmail;
+    }
+  } catch (err) {
+    // Não bloqueia inicialização — usa .env como fallback
+    console.log("[Resend] Usando API key do .env (nenhuma salva no banco)");
+  }
+}
+loadResendKeyFromDB();
+
+// ─── Endpoint: testar conexão Resend ────────────────────────────────────────
+app.post("/api/integrations/resend/test", requireAuth, requireAdmin, async (req, res) => {
+  const { apiKey } = req.body;
+  const keyToTest = apiKey || resendApiKey;
+
+  if (!keyToTest) {
+    return res.status(400).json({ success: false, error: "Nenhuma API key fornecida" });
+  }
+
+  try {
+    const response = await fetch("https://api.resend.com/domains", {
+      method: "GET",
+      headers: { "Authorization": `Bearer ${keyToTest}` },
+    });
+
+    if (response.status === 401) {
+      return res.json({ success: false, error: "API key inválida" });
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      return res.json({ success: false, error: body.message || `Erro HTTP ${response.status}` });
+    }
+
+    const data = await response.json();
+    return res.json({
+      success: true,
+      domains: (data.data || []).map((d) => ({ name: d.name, status: d.status })),
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Endpoint: status da integração Resend ──────────────────────────────────
+app.get("/api/integrations/resend/status", requireAuth, requireAdmin, (_req, res) => {
+  res.json({
+    configured: Boolean(resendApiKey),
+    from: resendFrom,
+    source: resendApiKey
+      ? (resendApiKey === process.env.RESEND_API_KEY ? "env" : "database")
+      : "none",
+  });
+});
+
+// ─── Callback: atualizar chave em runtime (chamado após save no admin) ──────
+app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_req, res) => {
+  await loadResendKeyFromDB();
+
+  // Reinicializa o dispatcher com a nova chave
+  const mockMode = !resendApiKey || process.env.NODE_ENV === "development";
+  dispatcher.init(resendApiKey, mockMode);
+
+  res.json({ success: true, configured: Boolean(resendApiKey) });
+});
+
+app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
   const { to, subject, html, from } = req.body;
 
   if (!to || !subject || !html) {
     return res.status(400).json({ error: "Campos obrigatórios: to, subject, html" });
   }
 
-  if (!RESEND_API_KEY) {
+  if (!resendApiKey) {
     // Modo simulado: registra no log mas não envia
     console.log("[Resend] ⚠️  RESEND_API_KEY não configurada — simulando envio");
     console.log(`[Resend] → Para: ${Array.isArray(to) ? to.join(", ") : to}`);
@@ -490,10 +849,10 @@ app.post("/api/resend/emails", async (req, res) => {
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${RESEND_API_KEY}`,
+        "Authorization": `Bearer ${resendApiKey}`,
       },
       body: JSON.stringify({
-        from: from || RESEND_FROM,
+        from: from || resendFrom,
         to:   Array.isArray(to) ? to : [to],
         subject,
         html,
@@ -507,11 +866,11 @@ app.post("/api/resend/emails", async (req, res) => {
       return res.status(response.status).json({ error: data });
     }
 
-    console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
+    if (!IS_PRODUCTION) console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
     return res.json(data);
   } catch (err) {
     console.error("[Resend] Falha na requisição:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -556,6 +915,15 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     dataHora: new Date().toISOString(),
   });
 
+  // Renderiza template completo com identidade visual
+  const { subject, html } = emailTemplates.notificacaoPedido({
+    nome:         nomeUsuario,
+    pedidoId,
+    status:       novoStatus,
+    mensagem:     mensagemOpcional,
+    trackingCode: trackingCode || undefined,
+  });
+
   // Registra notificação no banco
   const sentAt = new Date().toISOString();
   if (supabase) {
@@ -564,46 +932,88 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
       customer_email: email,
       customer_name:  nomeUsuario,
       status:         novoStatus,
-      subject:        `Atualização do pedido #${pedidoId.substring(0, 8)} — ${novoStatus}`,
-      body:           mensagemOpcional,
+      subject,
+      body:           html,
       tracking_code:  trackingCode || null,
       sent_at:        sentAt,
     }).catch(err => console.error("[Notificação] Erro ao registrar log:", err.message));
   }
 
-  // Envia email com retry (até 3 tentativas)
-  for (let tentativa = 1; tentativa <= 3; tentativa++) {
-    try {
-      // Chama o próprio endpoint Resend (reutiliza a lógica já centralizada)
-      const baseUrl = `http://localhost:${process.env.PORT || 5174}`;
-      const resp = await fetch(`${baseUrl}/api/resend/emails`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          to:      [email],
-          subject: `Atualização do pedido #${pedidoId.substring(0, 8).toUpperCase()} — Novità`,
-          html:    `<p>Olá, ${nomeUsuario}!</p><p>${mensagemOpcional}</p>`,
-        }),
-      });
-
-      if (resp.ok) {
-        console.log(`[Notificação] 📧 Email enviado (tentativa ${tentativa}) → ${email}`);
-        console.log({ pedidoId, status: "EMAIL_ENVIADO", timestamp: new Date() });
-        return;
-      }
-
-      console.warn(`[Notificação] Tentativa ${tentativa} falhou — status ${resp.status}`);
-    } catch (err) {
-      console.warn(`[Notificação] Tentativa ${tentativa} — erro: ${err.message}`);
-    }
-
-    if (tentativa < 3) await new Promise(r => setTimeout(r, 1000 * tentativa));
-  }
-
-  console.error(`[Notificação] ❌ Email não enviado após 3 tentativas — pedido ${pedidoId}`);
+  // Envia via dispatcher (suporta Mailpit em dev e Resend em prod)
+  dispatcher.dispatch("NotificacaoPedido", {
+    nome:         nomeUsuario,
+    email,
+    pedidoId,
+    status:       novoStatus,
+    mensagem:     mensagemOpcional,
+    trackingCode: trackingCode || undefined,
+  });
+  console.log(`[Notificação] 📧 Email enfileirado → ${email} (pedido ${pedidoId})`);
 }
 
-app.put("/api/orders/:id/status", async (req, res) => {
+// ─── Admin: reset de senha ────────────────────────────────────────────────────
+// Envia e-mail de recuperação de senha para o usuário via Supabase Auth Admin API
+app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const { id } = req.params;
+
+  try {
+    // Busca o email do usuário pelo profile
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("email")
+      .eq("id", id)
+      .single();
+
+    if (profileError || !profile?.email) {
+      return res.status(404).json({ error: "Usuário não encontrado" });
+    }
+
+    // Usa o cliente Supabase com service role para chamar a Auth Admin API
+    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      return res.status(500).json({ error: "Credenciais Supabase não configuradas" });
+    }
+
+    // Gera link de recuperação de senha via Admin API
+    const response = await fetch(`${supabaseUrl}/auth/v1/admin/users/${id}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": serviceKey,
+        "Authorization": `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({ email: profile.email, email_confirm: true }),
+    });
+
+    // Envia o e-mail de recuperação via resetPasswordForEmail
+    const resetResponse = await fetch(`${supabaseUrl}/auth/v1/recover`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ email: profile.email }),
+    });
+
+    if (!resetResponse.ok) {
+      const err = await resetResponse.json().catch(() => ({}));
+      return res.status(500).json({ error: err.msg || "Falha ao enviar e-mail de recuperação" });
+    }
+
+    if (!IS_PRODUCTION) console.log(`[Admin] Reset de senha enviado para ${profile.email} (userId=${id})`);
+    return res.json({ success: true, email: profile.email });
+  } catch (err) {
+    console.error("[Admin] Erro ao resetar senha:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) => {
   if (!supabase) {
     return res.status(503).json({ error: "Supabase não configurado no servidor" });
   }
@@ -658,7 +1068,7 @@ app.put("/api/orders/:id/status", async (req, res) => {
 
   } catch (err) {
     console.error("[Orders] Erro ao atualizar status:", err.message);
-    return res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -671,9 +1081,9 @@ app.put("/api/orders/:id/status", async (req, res) => {
  * Endpoint genérico para despachar qualquer evento de domínio.
  * Usado por webhooks do Supabase Auth e integrações internas.
  *
- * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | ..., data: { ... } }
+ * Body: { tipo: "UsuarioCadastrado" | "SenhaAlterada" | "ConsultaAgendada" | ..., data: { ... } }
  */
-app.post("/api/notifications/events", (req, res) => {
+app.post("/api/notifications/events", notificationLimiter, requireAuth, (req, res) => {
   const { tipo, data } = req.body || {};
 
   if (!tipo || !data) {
@@ -698,7 +1108,7 @@ app.post("/api/notifications/events", (req, res) => {
  *   dataHora (ISO 8601), userId (opcional)
  * }
  */
-app.post("/api/notifications/consulta-agendada", async (req, res) => {
+app.post("/api/notifications/consulta-agendada", notificationLimiter, requireAuth, async (req, res) => {
   const { consultaId, email, nome, especialidade, profissional, dataHora, userId } = req.body || {};
 
   if (!consultaId || !email || !nome || !dataHora) {
@@ -751,7 +1161,7 @@ app.post("/api/notifications/consulta-agendada", async (req, res) => {
  * GET /api/notifications/stats
  * Retorna métricas da fila de e-mails.
  */
-app.get("/api/notifications/stats", (_req, res) => {
+app.get("/api/notifications/stats", requireAuth, requireAdmin, (_req, res) => {
   res.json({
     queue:    dispatcher.queueStatus(),
     modo:     RESEND_MOCK_MODE ? "MOCK (sem RESEND_API_KEY)" : "RESEND",
@@ -764,10 +1174,10 @@ app.get("/api/notifications/stats", (_req, res) => {
  * Dispara um evento de teste com dados sintéticos.
  * Útil para verificar templates localmente.
  *
- * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta
+ * Param:  tipo — UsuarioCadastrado | SenhaAlterada | ConsultaAgendada | LembreteConsulta | NotificacaoPedido
  * Body:   { email } (opcional — usa padrão se omitido)
  */
-app.post("/api/notifications/test/:tipo", (req, res) => {
+app.post("/api/notifications/test/:tipo", requireAuth, requireAdmin, (req, res) => {
   const { tipo }  = req.params;
   const { email } = req.body || {};
 
@@ -798,6 +1208,14 @@ app.post("/api/notifications/test/:tipo", (req, res) => {
       profissional:  "Dra. Ana Oliveira",
       dataHora:      formatarDataHoraLocal(new Date(Date.now() + 30 * 60 * 1000).toISOString()),
       consultaId:    "99998",
+    },
+    NotificacaoPedido: {
+      nome:     "André Tester",
+      email:    dest,
+      pedidoId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      status:   "shipped",
+      mensagem: "Seu pedido saiu para entrega e chegará em breve!",
+      trackingCode: "BR123456789",
     },
   };
 
@@ -859,9 +1277,93 @@ app.get("/api/health", (_req, res) => {
   });
 });
 
+// ─── /api/receitas/extrair — alias para o novo pipeline ──────────────────────
+// Mantém compatibilidade retroativa. O pipeline completo (OCR + IA + matching)
+// está em /api/receitas/analisar (server/receitas/index.js).
+// Este endpoint delega internamente e adapta a resposta ao formato antigo.
+const multerLegacy = require("multer");
+const uploadLegacy = multerLegacy({ storage: multerLegacy.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+
+app.post("/api/receitas/extrair", uploadLegacy.single("file"), async (req, res) => {
+  try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: "Nenhum arquivo enviado." });
+
+    const { extractText }        = require("./receitas/ocr");
+    const { extractMedications } = require("./receitas/ai");
+
+    const ocrResult = await extractText(file.buffer, file.mimetype);
+    if (!ocrResult.text || ocrResult.text.trim().length < 10) {
+      return res.status(422).json({ error: "Não foi possível extrair texto do arquivo." });
+    }
+
+    const aiResult = await extractMedications(ocrResult.text);
+
+    // Retorna no formato legado esperado pelo frontend anterior
+    return res.json({
+      medicamentos: aiResult.medicamentos,
+      provider: aiResult.provider,
+    });
+  } catch (err) {
+    console.error("[receitas/extrair] Erro:", err);
+    return res.status(500).json({ error: "Erro interno ao processar a receita." });
+  }
+});
+
+// ─── PDF Proxy ────────────────────────────────────────────────────────────────
+// Busca um PDF externo (ex: receituário Assemed) e serve como blob,
+// evitando bloqueio de CORS/X-Frame-Options no iframe do frontend.
+//
+// GET /api/proxy/pdf?url=<encoded_url>
+app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
+  const { url } = req.query;
+  if (!url || typeof url !== "string") {
+    return res.status(400).json({ error: "Parâmetro 'url' obrigatório." });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return res.status(400).json({ error: "URL inválida." });
+  }
+
+  // Permite apenas HTTPS para evitar SSRF em redes internas
+  if (parsed.protocol !== "https:") {
+    return res.status(400).json({ error: "Apenas URLs HTTPS são permitidas." });
+  }
+
+  try {
+    const response = await fetch(url, {
+      headers: { Accept: "application/pdf,*/*" },
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!response.ok) {
+      return res.status(502).json({ error: `Origem retornou ${response.status}` });
+    }
+
+    const contentType = response.headers.get("content-type") || "application/pdf";
+    const buffer = await response.arrayBuffer();
+
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Length", buffer.byteLength);
+    // Permite embedding no iframe do mesmo domínio
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+    res.setHeader("Cache-Control", "private, max-age=300");
+    res.send(Buffer.from(buffer));
+  } catch (err) {
+    console.error("[proxy/pdf] Erro ao buscar PDF:", err.message);
+    res.status(502).json({ error: "Não foi possível buscar o PDF.", detail: err.message });
+  }
+});
+
 // ─── Start ────────────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
+  const groqStatus  = process.env.GROQ_API_KEY        ? "configurado" : "não configurado";
+  const ollamaInfo  = "ver /api/receitas/status";
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║  Novità — Backend Server                                 ║
@@ -870,6 +1372,13 @@ app.listen(PORT, () => {
 ║  Pagamentos: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${MERCHANT_ID ? MERCHANT_ID.substring(0, 8) + "..." : "não configurado"}          ║
 ║  E-mails:    ${emailMode.padEnd(32)}║
 ║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║
+║                                                          ║
+║  Receitas — OCR + IA + Matching:                         ║
+║  POST /api/receitas/analisar        (arquivo)            ║
+║  POST /api/receitas/analisar-texto  (texto colado)       ║
+║  GET  /api/receitas/status          (provedores IA)      ║
+║  Groq:   ${groqStatus.padEnd(42)}║
+║  Ollama: ${ollamaInfo.padEnd(42)}║
 ║                                                          ║
 ║  Endpoints de notificação:                               ║
 ║  POST /api/notifications/events                          ║

@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   ShoppingCart,
-  FileText,
   BookOpen,
   BarChart2,
   Settings,
@@ -25,27 +24,30 @@ export default function AdminLayout() {
 
   useEffect(() => {
     const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      
-      if (!user) {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+
+        if (!user) {
+          navigate('/auth');
+          return;
+        }
+
+        setUser(user);
+
+        const adminCheck = await RBAC.isAdmin(user.id);
+        setIsAdmin(adminCheck);
+
+        if (!adminCheck) {
+          navigate('/dashboard');
+          return;
+        }
+      } catch {
         navigate('/auth');
-        return;
+      } finally {
+        setLoading(false);
       }
-      
-      setUser(user);
-      
-      // Check if user is admin
-      const adminCheck = await RBAC.isAdmin(user.id);
-      setIsAdmin(adminCheck);
-      
-      if (!adminCheck) {
-        navigate('/dashboard');
-        return;
-      }
-      
-      setLoading(false);
     };
-    
+
     checkAuth();
   }, [navigate]);
 
@@ -59,7 +61,7 @@ export default function AdminLayout() {
     { id: 'users', icon: <Users className="h-5 w-5" />, label: 'Usuários', path: '/admin/usuarios' },
     { id: 'orders', icon: <ShoppingCart className="h-5 w-5" />, label: 'Pedidos', path: '/admin/pedidos' },
     { id: 'medications', icon: <Pill className="h-5 w-5" />, label: 'Medicamentos', path: '/admin/medicamentos' },
-    { id: 'prescriptions', icon: <FileText className="h-5 w-5" />, label: 'Receitas', path: '/admin/receitas' },
+
     { id: 'content', icon: <BookOpen className="h-5 w-5" />, label: 'Conteúdo', path: '/admin/conteudo' },
     { id: 'reports', icon: <BarChart2 className="h-5 w-5" />, label: 'Relatórios', path: '/admin/relatorios' },
     { id: 'settings', icon: <Settings className="h-5 w-5" />, label: 'Configurações', path: '/admin/configuracoes' },

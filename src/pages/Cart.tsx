@@ -1,49 +1,218 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, ShoppingBag, Plus, Minus, Truck, Store } from "lucide-react";
+import {
+  Trash2, ShoppingCart, Plus, Minus, Truck, Store,
+  Tag, ShoppingBag, ArrowRight, Shield, RotateCcw, AlertTriangle, Pill,
+} from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Session } from "@supabase/supabase-js";
 import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
+import type { CartItem, CatalogCartItem } from "@/types/prescription";
+
+// ─── Item row component ───────────────────────────────────────────────────────
+
+function QuantityControl({
+  quantity,
+  onDecrease,
+  onIncrease,
+  disableDecrease,
+  disableIncrease,
+}: {
+  quantity: number;
+  onDecrease: () => void;
+  onIncrease: () => void;
+  disableDecrease: boolean;
+  disableIncrease: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-0.5 bg-muted/60 rounded-lg p-0.5">
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md hover:bg-background"
+        onClick={onDecrease}
+        disabled={disableDecrease}
+      >
+        <Minus className="h-3 w-3" />
+      </Button>
+      <span className="w-8 text-center text-sm font-semibold tabular-nums">{quantity}</span>
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 rounded-md hover:bg-background"
+        onClick={onIncrease}
+        disabled={disableIncrease}
+      >
+        <Plus className="h-3 w-3" />
+      </Button>
+    </div>
+  );
+}
+
+function PrescriptionItemRow({
+  item,
+  onUpdateQuantity,
+  onRemove,
+}: {
+  item: CartItem;
+  onUpdateQuantity: (id: string, qty: number) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="flex gap-4 py-4 border-b border-border/40 last:border-0">
+      {/* Icon */}
+      <div className="h-11 w-11 rounded-xl bg-primary/8 flex items-center justify-center shrink-0 mt-0.5">
+        <Pill className="h-5 w-5 text-primary/70" />
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold text-sm text-foreground leading-snug">{item.name}</p>
+            {item.dosage && <p className="text-xs text-muted-foreground mt-0.5">{item.dosage}</p>}
+            {item.frequency && <p className="text-xs text-muted-foreground/70 mt-0.5">{item.frequency}</p>}
+            {item.pharmacyName && (
+              <span className="inline-flex items-center gap-1 text-[11px] bg-primary/8 text-primary px-2 py-0.5 rounded-full mt-1">
+                <Store className="h-2.5 w-2.5" />
+                {item.pharmacyName}
+              </span>
+            )}
+          </div>
+          <p className="font-bold text-base text-foreground shrink-0 tabular-nums">
+            R$ {(item.price * item.quantity).toFixed(2)}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            R$ {item.price.toFixed(2)} × {item.quantity}
+          </p>
+          <div className="flex items-center gap-2">
+            <QuantityControl
+              quantity={item.quantity}
+              onDecrease={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
+              onIncrease={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
+              disableDecrease={item.quantity <= 1}
+              disableIncrease={false}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              onClick={() => onRemove(item.cartItemId)}
+              title="Remover item"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CatalogItemRow({
+  item,
+  onUpdateQuantity,
+  onRemove,
+}: {
+  item: CatalogCartItem;
+  onUpdateQuantity: (id: string, qty: number) => void;
+  onRemove: (id: string) => void;
+}) {
+  return (
+    <div className="flex gap-4 py-4 border-b border-border/40 last:border-0">
+      {/* Icon */}
+      <div className="h-11 w-11 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0 mt-0.5">
+        <Tag className="h-4.5 w-4.5 text-emerald-600" />
+      </div>
+
+      {/* Info */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-semibold text-sm text-foreground leading-snug">{item.name}</p>
+              <Badge className="bg-emerald-100 text-emerald-700 border-emerald-200 text-[10px] px-1.5 py-0 h-4 shrink-0 font-medium">
+                Com desconto
+              </Badge>
+            </div>
+            {item.principioAtivo && <p className="text-xs text-muted-foreground mt-0.5">{item.principioAtivo}</p>}
+            {item.dosage && <p className="text-xs text-muted-foreground/70">{item.dosage}</p>}
+            {item.receitaId && (
+              <p className="text-[11px] text-emerald-600/80 mt-0.5">Receita #{item.receitaId}</p>
+            )}
+          </div>
+          <p className="font-bold text-base text-foreground shrink-0 tabular-nums">
+            R$ {(item.price * item.quantity).toFixed(2)}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between mt-3">
+          <p className="text-xs text-muted-foreground tabular-nums">
+            R$ {item.price.toFixed(2)} × {item.quantity}
+            {item.maxQuantity !== undefined && (
+              <span className="ml-1 text-muted-foreground/60">
+                (máx. {item.maxQuantity})
+              </span>
+            )}
+          </p>
+          <div className="flex items-center gap-2">
+            <QuantityControl
+              quantity={item.quantity}
+              onDecrease={() => onUpdateQuantity(item.cartItemId, item.quantity - 1)}
+              onIncrease={() => onUpdateQuantity(item.cartItemId, item.quantity + 1)}
+              disableDecrease={item.quantity <= 1}
+              disableIncrease={item.maxQuantity !== undefined && item.quantity >= item.maxQuantity}
+            />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 rounded-lg text-muted-foreground/50 hover:text-destructive hover:bg-destructive/10 transition-colors"
+              onClick={() => onRemove(item.cartItemId)}
+              title="Remover item"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 
 const Cart = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const cart = useCart();
   const cartItems = cart.items;
-  const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const catalogItems = cart.catalogItems;
   const [loading, setLoading] = useState(true);
   const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
   const { accessToken: assemedAccessToken } = useAssemedToken();
 
+  const totalItems = cartItems.length + catalogItems.length;
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (!session) {
-          navigate("/auth");
-        }
+      (_event, session) => {
+        if (!session) navigate("/auth");
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-
-      if (!session) {
-        navigate("/auth");
-      }
+      if (!session) navigate("/auth");
       setLoading(false);
     });
 
@@ -52,27 +221,29 @@ const Cart = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const updateQuantity = (cartItemId: string, newQuantity: number) => {
-    cart.updateQuantity(cartItemId, newQuantity);
-  };
-
-  const removeItem = (cartItemId: string) => {
+  const handleRemovePrescriptionItem = (cartItemId: string) => {
     cart.removeItem(cartItemId);
-    toast({
-      title: "Item removido",
-      description: "Medicamento removido do carrinho",
-    });
+    toast({ title: "Item removido do carrinho" });
   };
 
-  const subtotal = cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
-
-  const isFreeShipping = shippingConfig?.enableFreeShipping && subtotal >= shippingConfig.freeShippingThreshold;
-  const estimatedShipping = isFreeShipping ? 0 : (shippingConfig?.shippingCost ?? 0);
-  const estimatedTotal = subtotal + estimatedShipping;
-
-  const handleCheckout = () => {
-    navigate("/checkout/medication");
+  const handleRemoveCatalogItem = (cartItemId: string) => {
+    cart.removeCatalogItem(cartItemId);
+    toast({ title: "Item removido do carrinho" });
   };
+
+  const subtotal =
+    cartItems.reduce((sum, item) => sum + item.price * item.quantity, 0) +
+    catalogItems.reduce((sum, item) => sum + item.price * item.quantity, 0);
+
+  const isFreeShipping =
+    shippingConfig?.enableFreeShipping && subtotal >= shippingConfig.freeShippingThreshold;
+  const shippingCost = isFreeShipping ? 0 : (shippingConfig?.shippingCost ?? 0);
+  const total = subtotal + shippingCost;
+
+  const missingForFree =
+    shippingConfig?.enableFreeShipping && !isFreeShipping
+      ? shippingConfig.freeShippingThreshold - subtotal
+      : 0;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -82,182 +253,262 @@ const Cart = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+        <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header 
-        isAuthenticated 
-        onLogout={handleLogout} 
-        cartItemsCount={cartItems.length}
+    <div className="min-h-screen bg-muted/30">
+      <Header
+        isAuthenticated
+        onLogout={handleLogout}
+        cartItemsCount={totalItems}
       />
-      
-      <main className="page-container">
-        <BackLink to={-1} label="Voltar" />
-        <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
-            Carrinho de Compras
+
+      <main className="max-w-5xl mx-auto px-4 py-6 pb-32 lg:pb-8">
+        <BackLink to={-1} label="Continuar comprando" />
+
+        <div className="flex items-center gap-3 mt-4 mb-6">
+          <ShoppingCart className="h-6 w-6 text-primary" />
+          <h1 className="text-2xl font-heading font-bold text-foreground">
+            Carrinho
           </h1>
-          <p className="text-muted-foreground">
-            Revise seus medicamentos antes de finalizar
-          </p>
+          {totalItems > 0 && (
+            <span className="text-sm text-muted-foreground">
+              ({totalItems} {totalItems === 1 ? "item" : "itens"})
+            </span>
+          )}
         </div>
 
-        {cartItems.length === 0 ? (
-          <Card className="text-center py-12 border-border/50">
-            <CardContent>
-              <ShoppingBag className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-              <h2 className="text-xl font-heading font-semibold mb-2">Carrinho vazio</h2>
-              <p className="text-muted-foreground mb-6">
-                Adicione medicamentos dos seus receituários
+        {/* ─── Empty state ──────────────────────────────────────────────── */}
+        {totalItems === 0 ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
+            <div className="h-20 w-20 rounded-full bg-muted flex items-center justify-center">
+              <ShoppingBag className="h-10 w-10 text-muted-foreground/40" />
+            </div>
+            <div>
+              <p className="text-xl font-heading font-semibold">Seu carrinho está vazio</p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                Adicione medicamentos das suas receitas para continuar
               </p>
-              <Button 
-                onClick={() => navigate("/dashboard")}
-                className="gradient-hero text-primary-foreground"
-              >
-                Ver receituários
-              </Button>
-            </CardContent>
-          </Card>
+            </div>
+            <Button
+              className="mt-2 gradient-hero text-primary-foreground gap-2"
+              onClick={() => navigate("/prescriptions")}
+            >
+              <ShoppingCart className="h-4 w-4" />
+              Ver receituários
+            </Button>
+          </div>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-3">
+          <div className="grid gap-5 lg:grid-cols-3 lg:items-start">
+
+            {/* ─── Items list ──────────────────────────────────────────── */}
             <div className="lg:col-span-2 space-y-4">
-              {cartItems.map((item) => (
-                <Card key={item.cartItemId} className="border-border/50">
-                  <CardContent className="flex items-center gap-4 p-6">
-                    <div className="flex-1">
-                      <h3 className="font-heading font-semibold text-lg mb-1">{item.name}</h3>
-                      <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <p className="text-sm text-muted-foreground">
-                          Receituário: {item.prescriptionId}
+
+              {/* Free shipping progress bar */}
+              {missingForFree > 0 && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
+                  <p className="text-sm text-emerald-800 font-medium mb-2">
+                    Faltam <strong>R$ {missingForFree.toFixed(2)}</strong> para frete grátis!
+                  </p>
+                  <div className="h-1.5 bg-emerald-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, (subtotal / (shippingConfig?.freeShippingThreshold ?? 1)) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {isFreeShipping && (
+                <div className="bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3 flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-emerald-600 shrink-0" />
+                  <p className="text-sm text-emerald-800 font-medium">
+                    Frete grátis aplicado!
+                  </p>
+                </div>
+              )}
+
+              {/* Prescription items */}
+              {cartItems.length > 0 && (
+                <div className="bg-white rounded-2xl border border-border/50 shadow-sm px-5">
+                  {cartItems.map((item) => (
+                    <PrescriptionItemRow
+                      key={item.cartItemId}
+                      item={item}
+                      onUpdateQuantity={cart.updateQuantity}
+                      onRemove={handleRemovePrescriptionItem}
+                    />
+                  ))}
+                </div>
+              )}
+
+              {/* Catalog items (from prescriptions via OCR) — agrupados por receita */}
+              {catalogItems.length > 0 && (() => {
+                // Agrupa por receitaId
+                const groups: { receitaId: string | undefined; items: typeof catalogItems }[] = [];
+                for (const item of catalogItems) {
+                  const existing = groups.find(g => g.receitaId === item.receitaId);
+                  if (existing) existing.items.push(item);
+                  else groups.push({ receitaId: item.receitaId, items: [item] });
+                }
+                const namedGroups = groups.filter(g => g.receitaId !== undefined);
+                const hasMultiple = namedGroups.length > 1;
+
+                return (
+                  <>
+                    {hasMultiple && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                        <p className="text-sm text-amber-800">
+                          Você possui medicamentos de{" "}
+                          <strong>{namedGroups.length} receitas diferentes</strong> no carrinho.
+                          Serão gerados pedidos separados por receita.
                         </p>
-                        {item.pharmacyName && (
-                          <span className="inline-flex items-center gap-1 text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">
-                            <Store className="h-3 w-3" />
-                            {item.pharmacyName}
-                          </span>
-                        )}
                       </div>
-                      <div className="text-sm space-y-1">
-                        <p><span className="font-medium">Posologia:</span> {item.frequency}</p>
-                        <p><span className="font-medium">Duração:</span> {item.duration}</p>
-                      </div>
-                      <div className="flex items-center gap-2 mt-3">
-                        <span className="text-sm text-muted-foreground">Quantidade:</span>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
-                          >
-                            <Minus className="h-3 w-3" />
-                          </Button>
-                          <Input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => updateQuantity(item.cartItemId, parseInt(e.target.value) || 1)}
-                            className="w-16 h-7 text-center"
-                          />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            className="h-7 w-7"
-                            onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
-                          >
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-right space-y-2">
-                      <div>
-                        <p className="text-xs text-muted-foreground">Preço unitário</p>
-                        <p className="text-sm">R$ {item.price.toFixed(2)}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Total</p>
-                        <p className="text-2xl font-heading font-bold text-primary">
-                          R$ {(item.price * item.quantity).toFixed(2)}
-                        </p>
-                      </div>
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        onClick={() => removeItem(item.cartItemId)}
-                        className="gap-2"
+                    )}
+                    {groups.map(group => (
+                      <div
+                        key={group.receitaId ?? "__sem-receita__"}
+                        className="bg-white rounded-2xl border border-border/50 shadow-sm px-5"
                       >
-                        <Trash2 className="h-4 w-4" />
-                        Remover
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                        <div className="flex items-center gap-2 py-3 border-b border-border/30">
+                          <Tag className="h-4 w-4 text-emerald-600" />
+                          <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide">
+                            {group.receitaId
+                              ? `Medicamentos com desconto — Receita #${group.receitaId}`
+                              : "Medicamentos com desconto — receita"}
+                          </p>
+                        </div>
+                        {group.items.map((item) => (
+                          <CatalogItemRow
+                            key={item.cartItemId}
+                            item={item}
+                            onUpdateQuantity={cart.updateCatalogQuantity}
+                            onRemove={handleRemoveCatalogItem}
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </>
+                );
+              })()}
+
+              {/* Clear cart */}
+              <button
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors"
+                onClick={async () => {
+                  await cart.clearCart();
+                  cart.clearCatalogItems();
+                  toast({ title: "Carrinho esvaziado" });
+                }}
+              >
+                <RotateCcw className="h-3 w-3" />
+                Esvaziar carrinho
+              </button>
             </div>
 
+            {/* ─── Order summary ────────────────────────────────────────── */}
             <div className="lg:col-span-1">
-              <Card className="sticky top-20 border-border/50 shadow-card">
-                <CardHeader>
-                  <CardTitle className="font-heading">Resumo do Pedido</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Subtotal:</span>
-                      <span className="font-semibold">R$ {subtotal.toFixed(2)}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">Frete:</span>
-                      {isFreeShipping ? (
-                        <span className="font-semibold text-green-600">Grátis</span>
-                      ) : shippingConfig ? (
-                        <span className="font-semibold">R$ {shippingConfig.shippingCost.toFixed(2)}</span>
-                      ) : (
-                        <span className="text-muted-foreground text-xs">Calculado no checkout</span>
-                      )}
-                    </div>
-                    {shippingConfig?.enableFreeShipping && !isFreeShipping && (
-                      <p className="text-xs text-green-600">
-                        Frete grátis para compras acima de R$ {shippingConfig.freeShippingThreshold.toFixed(2)}!
-                      </p>
-                    )}
-                  </div>
+              <div className="bg-white rounded-2xl border border-border/50 shadow-sm p-5 sticky top-20 space-y-4">
+                <p className="font-heading font-semibold text-base">Resumo do pedido</p>
 
-                  <div className="border-t border-border/50 pt-4">
-                    <div className="flex justify-between items-center mb-4">
-                      <span className="text-lg font-semibold">Total:</span>
-                      <span className="text-2xl font-heading font-bold text-primary">
-                        R$ {estimatedTotal.toFixed(2)}
+                <div className="space-y-2 text-sm">
+                  {cartItems.map((item) => (
+                    <div key={item.cartItemId} className="flex justify-between text-muted-foreground">
+                      <span className="truncate mr-2">
+                        {item.name} × {item.quantity}
                       </span>
+                      <span className="shrink-0">R$ {(item.price * item.quantity).toFixed(2)}</span>
                     </div>
+                  ))}
+                  {catalogItems.map((item) => (
+                    <div key={item.cartItemId} className="flex justify-between text-muted-foreground">
+                      <span className="truncate mr-2">
+                        {item.name} × {item.quantity}
+                      </span>
+                      <span className="shrink-0 text-emerald-700">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
 
-                    <Button
-                      className="w-full gradient-hero text-primary-foreground"
-                      onClick={handleCheckout}
-                      size="lg"
-                    >
-                      Finalizar Pedido
-                    </Button>
-                    {shippingConfig && (
-                      <div className="flex items-center justify-center gap-1 mt-3">
-                        <Truck className="h-3 w-3 text-muted-foreground" />
-                        <p className="text-xs text-muted-foreground">
-                          Entrega em {shippingConfig.minDeliveryDays} a {shippingConfig.maxDeliveryDays} dias úteis
-                        </p>
-                      </div>
+                <Separator />
+
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="font-medium">R$ {subtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Frete</span>
+                    {isFreeShipping ? (
+                      <span className="font-medium text-emerald-600">Grátis</span>
+                    ) : shippingConfig ? (
+                      <span className="font-medium">R$ {shippingCost.toFixed(2)}</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">Calculado no checkout</span>
                     )}
                   </div>
-                </CardContent>
-              </Card>
+                </div>
+
+                <Separator />
+
+                <div className="flex justify-between items-center">
+                  <span className="font-heading font-bold text-base">Total</span>
+                  <span className="font-heading font-bold text-2xl text-primary">
+                    R$ {total.toFixed(2)}
+                  </span>
+                </div>
+
+                {shippingConfig && (
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Truck className="h-3.5 w-3.5 shrink-0" />
+                    <span>
+                      Entrega em {shippingConfig.minDeliveryDays}–{shippingConfig.maxDeliveryDays} dias úteis
+                    </span>
+                  </div>
+                )}
+
+                <Button
+                  className="w-full gradient-hero text-primary-foreground gap-2 h-12 text-base font-semibold"
+                  onClick={() => navigate("/checkout/medication")}
+                  size="lg"
+                >
+                  Ir para o pagamento
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+
+                <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">
+                  <Shield className="h-3 w-3" />
+                  <span>Pagamento 100% seguro</span>
+                </div>
+              </div>
             </div>
           </div>
         )}
       </main>
+
+      {/* ─── Mobile sticky checkout bar ───────────────────────────────────── */}
+      {totalItems > 0 && (
+        <div className="fixed bottom-0 inset-x-0 bg-white border-t border-border/50 shadow-lg px-4 py-3 flex items-center gap-3 lg:hidden z-40">
+          <div className="flex-1">
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="font-heading font-bold text-xl text-primary">R$ {total.toFixed(2)}</p>
+          </div>
+          <Button
+            className="gradient-hero text-primary-foreground gap-2 h-12 px-6 font-semibold"
+            onClick={() => navigate("/checkout/medication")}
+          >
+            Ir para o pagamento
+            <ArrowRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       <ActiveConsultationBanner accessToken={assemedAccessToken} />
     </div>
   );

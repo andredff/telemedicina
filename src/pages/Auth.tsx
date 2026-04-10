@@ -14,13 +14,18 @@ import { z } from "zod";
 // Validation schemas
 const loginSchema = z.object({
   email: z.string().trim().email({ message: "Email inválido" }).max(255),
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+  password: z.string().min(1, { message: "Senha é obrigatória" }),
 });
 
 const signupSchema = z.object({
   name: z.string().trim().min(2, { message: "Nome deve ter pelo menos 2 caracteres" }).max(100),
   email: z.string().trim().email({ message: "Email inválido" }).max(255),
-  password: z.string().min(6, { message: "Senha deve ter pelo menos 6 caracteres" }),
+  password: z
+    .string()
+    .min(8, { message: "Senha deve ter pelo menos 8 caracteres" })
+    .regex(/[A-Z]/, { message: "Senha deve conter pelo menos uma letra maiúscula" })
+    .regex(/[a-z]/, { message: "Senha deve conter pelo menos uma letra minúscula" })
+    .regex(/\d/, { message: "Senha deve conter pelo menos um número" }),
   cpf: z.string().regex(/^\d{3}\.?\d{3}\.?\d{3}-?\d{2}$/, { message: "CPF inválido" }),
   phone: z.string().min(10, { message: "Telefone inválido" }).max(20),
   birthDate: z.string().min(10, { message: "Data de nascimento é obrigatória" }),
@@ -47,6 +52,32 @@ const formatPhone = (value: string): string => {
   return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7)}`;
 };
 
+function getServerUrl() {
+  if (import.meta.env.DEV) return "";
+  return import.meta.env.VITE_LOCAL_SERVER_URL || "";
+}
+
+async function notifyUserRegistered(email: string, name: string) {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.access_token) return;
+    const baseUrl = getServerUrl();
+    await fetch(`${baseUrl}/api/notifications/events`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({
+        tipo: "UsuarioCadastrado",
+        data: { email, nome: name },
+      }),
+    });
+  } catch {
+    // Fire-and-forget — don't block the user
+  }
+}
+
 const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -60,6 +91,7 @@ const Auth = () => {
   const [cpfValue, setCpfValue] = useState("");
   const [phoneValue, setPhoneValue] = useState("");
   const [birthDateValue, setBirthDateValue] = useState("");
+  const [signupPassword, setSignupPassword] = useState("");
 
   const selectedPlan = searchParams.get("plan");
   const consultationType = searchParams.get("type");
@@ -310,11 +342,14 @@ const Auth = () => {
         description: "Bem-vindo à Novità!",
       });
 
+      // Dispara email de boas-vindas (fire-and-forget)
+      notifyUserRegistered(result.data.email, result.data.name);
+
       // Auto-login after signup (since auto-confirm is enabled)
       if (data.session) {
         navigate(getRedirectPath(selectedPlan || null));
       }
-      
+
       setIsLoading(false);
     } catch (error) {
       toast({
@@ -606,10 +641,12 @@ const Auth = () => {
                             id="signup-password"
                             name="password"
                             type={showPassword ? "text" : "password"}
-                            placeholder="Mínimo 6 caracteres"
+                            placeholder="Crie uma senha segura"
                             required
                             autoComplete="new-password"
-                            minLength={6}
+                            minLength={8}
+                            value={signupPassword}
+                            onChange={(e) => setSignupPassword(e.target.value)}
                           />
                           <button
                             type="button"
@@ -618,6 +655,24 @@ const Auth = () => {
                           >
                             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                           </button>
+                        </div>
+                        <div className="rounded-lg bg-muted/50 border border-border/50 p-3 space-y-1.5">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">A senha deve conter:</p>
+                          {[
+                            { label: "Mínimo 8 caracteres", valid: signupPassword.length >= 8 },
+                            { label: "Pelo menos uma letra maiúscula (A–Z)", valid: /[A-Z]/.test(signupPassword) },
+                            { label: "Pelo menos uma letra minúscula (a–z)", valid: /[a-z]/.test(signupPassword) },
+                            { label: "Pelo menos um número (0–9)", valid: /\d/.test(signupPassword) },
+                          ].map(({ label, valid }) => (
+                            <div key={label} className="flex items-center gap-2">
+                              <span className={`flex-shrink-0 w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold ${valid ? "bg-green-500 text-white" : "bg-muted-foreground/20 text-muted-foreground"}`}>
+                                {valid ? "✓" : "·"}
+                              </span>
+                              <span className={`text-xs ${valid ? "text-green-700 dark:text-green-400" : "text-muted-foreground"}`}>
+                                {label}
+                              </span>
+                            </div>
+                          ))}
                         </div>
                       </div>
                       <Button 

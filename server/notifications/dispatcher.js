@@ -10,6 +10,7 @@
 "use strict";
 
 const { EmailQueue } = require("./queue");
+const nodemailer = require("nodemailer");
 
 // ─── Eventos válidos ──────────────────────────────────────────────────────────
 const EVENTOS_VALIDOS = new Set([
@@ -17,6 +18,7 @@ const EVENTOS_VALIDOS = new Set([
   "SenhaAlterada",
   "ConsultaAgendada",
   "LembreteConsulta",
+  "NotificacaoPedido",
 ]);
 
 // ─── Validadores de payload ───────────────────────────────────────────────────
@@ -38,6 +40,12 @@ const VALIDADORES = {
     if (!d.email)   throw new Error("LembreteConsulta: campo 'email' obrigatório");
     if (!d.nome)    throw new Error("LembreteConsulta: campo 'nome' obrigatório");
     if (!d.dataHora) throw new Error("LembreteConsulta: campo 'dataHora' obrigatório");
+  },
+  NotificacaoPedido: (d) => {
+    if (!d.nome)      throw new Error("NotificacaoPedido: campo 'nome' obrigatório");
+    if (!d.pedidoId)  throw new Error("NotificacaoPedido: campo 'pedidoId' obrigatório");
+    if (!d.status)    throw new Error("NotificacaoPedido: campo 'status' obrigatório");
+    if (!d.email)     throw new Error("NotificacaoPedido: campo 'email' obrigatório");
   },
 };
 
@@ -97,23 +105,30 @@ function getQueue() {
 
 module.exports = { init, dispatch, queueStatus, getQueue };
 
-// ─── Função de envio (Resend SDK) ─────────────────────────────────────────────
+// ─── Função de envio ──────────────────────────────────────────────────────────
 function buildSenderFn(resendApiKey, mockMode) {
-  // Modo mock: só loga, não envia
-  if (mockMode || !resendApiKey) {
+  const FROM = process.env.RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
+
+  // Modo Mailpit: env var MAILPIT_SMTP_PORT definida (ou porta padrão do Supabase local)
+  const mailpitPort = parseInt(process.env.MAILPIT_SMTP_PORT || "54325", 10);
+  const mailpitHost = process.env.MAILPIT_SMTP_HOST || "127.0.0.1";
+  const useMailpit  = !resendApiKey || mockMode;
+
+  if (useMailpit) {
+    const transporter = nodemailer.createTransport({
+      host: mailpitHost,
+      port: mailpitPort,
+      secure: false,
+      ignoreTLS: true,
+    });
+
     return async (to, subject, html) => {
-      console.log("─".repeat(60));
-      console.log(`📧 [EMAIL MOCK]`);
-      console.log(`   Para:     ${to}`);
-      console.log(`   Assunto:  ${subject}`);
-      console.log(`   HTML:     ${html.slice(0, 120).replace(/\n/g, " ")}...`);
-      console.log("─".repeat(60));
+      await transporter.sendMail({ from: FROM, to, subject, html });
+      console.log(`📧 [Mailpit] → ${to} | ${subject}`);
     };
   }
 
   // Modo real: envia via Resend REST API
-  const RESEND_FROM = process.env.RESEND_FROM || "Novità <onboarding@resend.dev>";
-
   return async (to, subject, html) => {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -121,20 +136,13 @@ function buildSenderFn(resendApiKey, mockMode) {
         "Content-Type":  "application/json",
         "Authorization": `Bearer ${resendApiKey}`,
       },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to:   [to],
-        subject,
-        html,
-      }),
+      body: JSON.stringify({ from: FROM, to: [to], subject, html }),
     });
 
     const body = await response.json();
-
     if (!response.ok) {
       throw new Error(`Resend API error ${response.status}: ${JSON.stringify(body)}`);
     }
-
     console.log(`[Resend] ✓ id=${body.id} → ${to}`);
   };
 }

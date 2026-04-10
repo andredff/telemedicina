@@ -15,9 +15,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2, Truck } from 'lucide-react';
+import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2, Truck, Eye, EyeOff, CheckCircle2, XCircle, RotateCw } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { logger } from "@/lib/logger";
+import { getAuthHeaders } from "@/lib/authHeaders";
+
+const LOCAL_SERVER_URL = import.meta.env.VITE_LOCAL_SERVER_URL || '';
 
 interface SettingsData {
   general: {
@@ -40,6 +43,8 @@ interface SettingsData {
     twoFactorEnabled: boolean;
   };
   integrations: {
+    resendApiKey: string;
+    resendFromEmail: string;
     googleAnalyticsId: string;
     recaptchaSiteKey: string;
     recaptchaSecretKey: string;
@@ -80,6 +85,8 @@ const defaultSettings: SettingsData = {
     twoFactorEnabled: false,
   },
   integrations: {
+    resendApiKey: '',
+    resendFromEmail: '',
     googleAnalyticsId: '',
     recaptchaSiteKey: '',
     recaptchaSecretKey: '',
@@ -103,6 +110,9 @@ export default function AdminSettings() {
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [showResendKey, setShowResendKey] = useState(false);
+  const [testingResend, setTestingResend] = useState(false);
+  const [resendStatus, setResendStatus] = useState<{ configured: boolean; from: string; source: string } | null>(null);
 
   const fetchSettings = async () => {
     try {
@@ -139,6 +149,7 @@ export default function AdminSettings() {
 
   useEffect(() => {
     fetchSettings();
+    fetchResendStatus();
   }, []);
 
   const handleSaveSettings = async (category: keyof SettingsData) => {
@@ -163,6 +174,75 @@ export default function AdminSettings() {
       });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveIntegrations = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await AdminQueries.updateSetting('integrations', settings.integrations, user?.id);
+
+      if (error) throw error;
+
+      // Notifica o backend para recarregar a chave em runtime
+      try {
+        const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
+        const authHeaders = await getAuthHeaders();
+        await fetch(`${baseUrl}/api/integrations/resend/reload`, { method: 'POST', headers: authHeaders });
+      } catch {
+        // Backend pode não estar rodando em dev — ignora
+      }
+
+      toast({ title: 'Sucesso', description: 'Configurações de integração salvas' });
+      fetchResendStatus();
+    } catch (error) {
+      logger.error('Error saving integrations:', error);
+      toast({ title: 'Erro', description: 'Falha ao salvar configurações', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTestResend = async () => {
+    setTestingResend(true);
+    try {
+      const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
+      const keyToTest = settings.integrations.resendApiKey || undefined;
+
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${baseUrl}/api/integrations/resend/test`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeaders },
+        body: JSON.stringify({ apiKey: keyToTest }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        const domainNames = data.domains?.map((d: { name: string }) => d.name).join(', ') || 'nenhum';
+        toast({ title: 'Conexão OK', description: `API Key válida. Domínios: ${domainNames}` });
+      } else {
+        toast({ title: 'Falha na validação', description: data.error || 'API Key inválida', variant: 'destructive' });
+      }
+    } catch (error) {
+      toast({ title: 'Erro', description: 'Não foi possível conectar ao servidor', variant: 'destructive' });
+    } finally {
+      setTestingResend(false);
+    }
+  };
+
+  const fetchResendStatus = async () => {
+    try {
+      const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${baseUrl}/api/integrations/resend/status`, { headers: authHeaders });
+      if (response.ok) {
+        const data = await response.json();
+        setResendStatus(data);
+      }
+    } catch {
+      // Server may not be running
     }
   };
 
@@ -562,50 +642,152 @@ export default function AdminSettings() {
 
         {/* Integration Settings */}
         <TabsContent value="integrations">
-          <Card>
-            <CardHeader>
-              <CardTitle>Integrações</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label htmlFor="googleAnalyticsId">Google Analytics ID</Label>
-                <Input
-                  id="googleAnalyticsId"
-                  value={settings.integrations.googleAnalyticsId}
-                  onChange={(e) => updateSetting('integrations', 'googleAnalyticsId', e.target.value)}
-                  placeholder="UA-XXXXXX-X ou G-XXXXXXXX"
-                />
-              </div>
-              
-              <div>
-                <h3 className="font-medium mb-4">reCAPTCHA</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-6">
+            {/* Resend (Email) */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
                   <div>
-                    <Label htmlFor="recaptchaSiteKey">Site Key</Label>
-                    <Input
-                      id="recaptchaSiteKey"
-                      value={settings.integrations.recaptchaSiteKey}
-                      onChange={(e) => updateSetting('integrations', 'recaptchaSiteKey', e.target.value)}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="recaptchaSecretKey">Secret Key</Label>
-                    <Input
-                      id="recaptchaSecretKey"
-                      value={settings.integrations.recaptchaSecretKey}
-                      onChange={(e) => updateSetting('integrations', 'recaptchaSecretKey', e.target.value)}
-                      type="password"
-                    />
+                    <CardTitle className="flex items-center gap-2">
+                      Resend — Envio de E-mail
+                      {resendStatus && (
+                        resendStatus.configured ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                            <CheckCircle2 className="h-3 w-3" /> Conectado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            <XCircle className="h-3 w-3" /> Não configurado
+                          </span>
+                        )
+                      )}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      API para envio de e-mails transacionais (cadastro, pedidos, consultas)
+                    </p>
                   </div>
                 </div>
-              </div>
-              
-              <Button onClick={() => handleSaveSettings('integrations')} disabled={saving}>
-                {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
-                Salvar Configurações de Integração
-              </Button>
-            </CardContent>
-          </Card>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="resendApiKey">API Key</Label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Input
+                        id="resendApiKey"
+                        type={showResendKey ? 'text' : 'password'}
+                        value={settings.integrations.resendApiKey}
+                        onChange={(e) => updateSetting('integrations', 'resendApiKey', e.target.value)}
+                        placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowResendKey(!showResendKey)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      >
+                        {showResendKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={handleTestResend}
+                      disabled={testingResend}
+                    >
+                      {testingResend ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <>
+                          <RotateCw className="h-4 w-4 mr-1" />
+                          Testar
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Obtenha sua chave em <span className="font-medium">resend.com/api-keys</span>.
+                    {resendStatus?.source === 'env' && ' Atualmente usando a chave do arquivo .env do servidor.'}
+                  </p>
+                </div>
+
+                <div>
+                  <Label htmlFor="resendFromEmail">Remetente (From)</Label>
+                  <Input
+                    id="resendFromEmail"
+                    value={settings.integrations.resendFromEmail}
+                    onChange={(e) => updateSetting('integrations', 'resendFromEmail', e.target.value)}
+                    placeholder="Novità Telemedicina <noreply@novitahomecare.com.br>"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Formato: Nome &lt;email@dominio.com&gt; — o domínio deve estar verificado no Resend
+                  </p>
+                </div>
+
+                {resendStatus && (
+                  <div className={`rounded-lg p-3 text-sm ${resendStatus.configured ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-yellow-50 border border-yellow-200 text-yellow-800'}`}>
+                    <strong>Status:</strong>{' '}
+                    {resendStatus.configured
+                      ? `Integração ativa (fonte: ${resendStatus.source === 'env' ? 'variável de ambiente' : 'painel admin'})`
+                      : 'Modo simulação — e-mails são registrados no log mas não enviados'
+                    }
+                    <br />
+                    <strong>Remetente atual:</strong> {resendStatus.from}
+                  </div>
+                )}
+
+                <Button onClick={handleSaveIntegrations} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar Configuração do Resend
+                </Button>
+              </CardContent>
+            </Card>
+
+            {/* Outras Integrações */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Outras Integrações</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <Label htmlFor="googleAnalyticsId">Google Analytics ID</Label>
+                  <Input
+                    id="googleAnalyticsId"
+                    value={settings.integrations.googleAnalyticsId}
+                    onChange={(e) => updateSetting('integrations', 'googleAnalyticsId', e.target.value)}
+                    placeholder="UA-XXXXXX-X ou G-XXXXXXXX"
+                  />
+                </div>
+
+                <div>
+                  <h3 className="font-medium mb-4">reCAPTCHA</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="recaptchaSiteKey">Site Key</Label>
+                      <Input
+                        id="recaptchaSiteKey"
+                        value={settings.integrations.recaptchaSiteKey}
+                        onChange={(e) => updateSetting('integrations', 'recaptchaSiteKey', e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="recaptchaSecretKey">Secret Key</Label>
+                      <Input
+                        id="recaptchaSecretKey"
+                        value={settings.integrations.recaptchaSecretKey}
+                        onChange={(e) => updateSetting('integrations', 'recaptchaSecretKey', e.target.value)}
+                        type="password"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <Button onClick={() => handleSaveSettings('integrations')} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar Outras Integrações
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
         </TabsContent>
       </Tabs>
     </div>

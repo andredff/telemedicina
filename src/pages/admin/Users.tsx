@@ -31,7 +31,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users, RefreshCw } from 'lucide-react';
+import { Search, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users, RefreshCw, KeyRound } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface User {
@@ -50,6 +50,7 @@ export default function AdminUsers() {
   const [roleFilter, setRoleFilter] = useState('all');
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -94,6 +95,36 @@ export default function AdminUsers() {
   const handleEditUser = (user: User) => {
     setEditingUser({ ...user });
     setIsDialogOpen(true);
+  };
+
+  const handleResetPassword = async () => {
+    if (!editingUser) return;
+    setIsResettingPassword(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/admin/users/${editingUser.id}/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session?.access_token}`,
+        },
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Erro ao resetar senha");
+      toast({
+        title: "E-mail enviado",
+        description: `Link de redefinição enviado para ${result.email}`,
+      });
+    } catch (error) {
+      logger.error("Error resetting password:", error);
+      toast({
+        title: "Erro",
+        description: error instanceof Error ? error.message : "Falha ao enviar e-mail de recuperação",
+        variant: "destructive",
+      });
+    } finally {
+      setIsResettingPassword(false);
+    }
   };
 
   const handleSaveUser = async () => {
@@ -238,9 +269,21 @@ export default function AdminUsers() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={handleSaveUser} className="w-full">
-                  Salvar Alterações
-                </Button>
+                <div className="flex gap-2 pt-2">
+                  <Button onClick={handleSaveUser} className="flex-1">
+                    Salvar Alterações
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleResetPassword}
+                    disabled={isResettingPassword}
+                    className="gap-2"
+                    title="Enviar e-mail de redefinição de senha"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                    {isResettingPassword ? "Enviando..." : "Resetar Senha"}
+                  </Button>
+                </div>
               </div>
             )}
           </DialogContent>

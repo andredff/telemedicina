@@ -82,11 +82,25 @@ export async function deleteMedication(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/**
+ * Upsert medications in bulk. Deduplicates by (name, dosage):
+ * if a row with the same name+dosage already exists it is updated,
+ * otherwise a new row is inserted.
+ */
+export async function bulkUpsertMedications(
+  rows: Omit<MedicationCatalog, 'id' | 'created_at' | 'updated_at' | 'pharmacy_name'>[]
+): Promise<void> {
+  const { error } = await supabase
+    .from('medication_catalog')
+    .upsert(rows, { onConflict: 'name,dosage', ignoreDuplicates: false });
+  if (error) throw error;
+}
+
+/** @deprecated use bulkUpsertMedications */
 export async function bulkInsertMedications(
   rows: Omit<MedicationCatalog, 'id' | 'created_at' | 'updated_at' | 'pharmacy_name'>[]
 ): Promise<void> {
-  const { error } = await supabase.from('medication_catalog').insert(rows);
-  if (error) throw error;
+  return bulkUpsertMedications(rows);
 }
 
 export async function getMedicationCategories(): Promise<string[]> {

@@ -9,6 +9,7 @@ import {
 import { logger } from "@/lib/logger";
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -48,11 +49,18 @@ import {
   Eye,
   Bell,
   Mail,
-  History
+  History,
+  FileText,
+  ExternalLink,
+  ClipboardCheck,
+  CheckCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
+import { cieloClient } from '@/integrations/cielo';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
 
 interface OrderItem {
   name: string;
@@ -69,9 +77,19 @@ interface Order {
   date: string;
   status: string;
   total: number;
+  subtotal?: number;
+  shipping?: number;
+  payment_method?: string;
+  payment_status?: string;
   items: OrderItem[];
   prescription_id?: string;
   tracking_code?: string;
+  receita_id?: string;
+  receita_url_pdf?: string;
+  consulta_id?: string;
+  receita_review_status?: 'approved' | 'rejected' | null;
+  receita_review_notes?: string | null;
+  receita_reviewed_at?: string | null;
 }
 
 interface NotificationHistory {
@@ -93,6 +111,12 @@ export default function AdminOrders() {
   const [estimatedDelivery, setEstimatedDelivery] = useState('');
   const [notificationHistory, setNotificationHistory] = useState<NotificationHistory[]>([]);
   const [sendingNotification, setSendingNotification] = useState(false);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [reviewOrder, setReviewOrder] = useState<Order | null>(null);
+  const [reviewNotes, setReviewNotes] = useState('');
+  const [submittingReview, setSubmittingReview] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [loadingPdf, setLoadingPdf] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -110,6 +134,8 @@ export default function AdminOrders() {
       setLoading(true);
       const { data, error } = await AdminQueries.getAllOrders();
 
+      logger.info("[AdminOrders] fetchOrders", { count: data?.length, error });
+
       if (error) throw error;
 
       const formattedOrders = (data || []).map((order: Record<string, unknown>) => {
@@ -126,9 +152,19 @@ export default function AdminOrders() {
           date: (order.date as string) || (order.created_at as string),
           status: normalizeStatus(order.status as string) || 'pending',
           total: (order.total as number) || 0,
+          subtotal: (order.subtotal as number) || undefined,
+          shipping: (order.shipping as number) || undefined,
+          payment_method: (order.payment_method as string) || undefined,
+          payment_status: (order.payment_status as string) || undefined,
           items: itemsData as OrderItem[],
           prescription_id: order.prescription_id as string,
           tracking_code: order.tracking_code as string,
+          receita_id: order.receita_id as string | undefined,
+          receita_url_pdf: order.receita_url_pdf as string | undefined,
+          consulta_id: order.consulta_id as string | undefined,
+          receita_review_status: order.receita_review_status as 'approved' | 'rejected' | null | undefined,
+          receita_review_notes: order.receita_review_notes as string | null | undefined,
+          receita_reviewed_at: order.receita_reviewed_at as string | null | undefined,
         };
       });
 
@@ -153,13 +189,17 @@ export default function AdminOrders() {
     return matchesSearch && matchesStatus;
   });
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, reviewStatus?: string | null) => {
+    // Pedido pendente com receita e ainda não revisado → badge especial
+    if (status === 'pending' && reviewStatus === undefined) {
+      // sem receita, badge normal
+    }
     const statusConfig = {
-      pending: { text: 'Pendente', color: 'bg-slate-100 text-slate-800', icon: <Clock className="h-4 w-4" /> },
-      processing: { text: 'Processando', color: 'bg-yellow-100 text-yellow-800', icon: <Package className="h-4 w-4" /> },
-      shipped: { text: 'Em Trânsito', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
-      delivered: { text: 'Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
-      cancelled: { text: 'Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
+      pending: { text: 'Pedido Pago', color: 'bg-slate-100 text-slate-800', icon: <Clock className="h-4 w-4" /> },
+      processing: { text: 'Pedido em Separação', color: 'bg-yellow-100 text-yellow-800', icon: <Package className="h-4 w-4" /> },
+      shipped: { text: 'Pedido Enviado', color: 'bg-purple-100 text-purple-800', icon: <Truck className="h-4 w-4" /> },
+      delivered: { text: 'Pedido Entregue', color: 'bg-green-100 text-green-800', icon: <CheckCircle2 className="h-4 w-4" /> },
+      cancelled: { text: 'Pedido Cancelado', color: 'bg-red-100 text-red-800', icon: <XCircle className="h-4 w-4" /> }
     };
 
     const config = statusConfig[status as keyof typeof statusConfig] ||
@@ -306,6 +346,78 @@ export default function AdminOrders() {
     }
   };
 
+  const loadPdfViaProxy = async (pdfUrl: string) => {
+    setLoadingPdf(true);
+    setPdfBlobUrl(null);
+    try {
+      const LOCAL_SERVER = import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:5174';
+      const res = await fetch(
+        `${LOCAL_SERVER}/api/proxy/pdf?url=${encodeURIComponent(pdfUrl)}`,
+        { credentials: 'include' }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      setPdfBlobUrl(URL.createObjectURL(blob));
+    } catch (err) {
+      logger.error('[AdminOrders] Erro ao carregar PDF via proxy:', err);
+      // Fallback: tenta direto (pode falhar por CORS)
+      setPdfBlobUrl(pdfUrl);
+    } finally {
+      setLoadingPdf(false);
+    }
+  };
+
+  const handleReview = async (decision: 'approved' | 'rejected') => {
+    if (!reviewOrder) return;
+    setSubmittingReview(true);
+    try {
+      const { error } = await AdminQueries.reviewOrder(reviewOrder.id, decision, reviewNotes);
+      if (error) throw error;
+
+      const newStatus = decision === 'approved' ? 'processing' : 'cancelled';
+
+      // Estorno automático ao rejeitar
+      if (decision === 'rejected' && reviewOrder.payment_id) {
+        try {
+          await cieloClient.cancelSale(reviewOrder.payment_id);
+          logger.info('[AdminOrders] Estorno realizado para payment_id:', reviewOrder.payment_id);
+          await AdminQueries.updateOrderPaymentStatus(reviewOrder.id, 'refunded');
+        } catch (refundErr) {
+          logger.error('[AdminOrders] Falha no estorno:', refundErr);
+          // Não bloqueia o fluxo — pedido segue cancelado, estorno manual necessário
+          toast({ title: 'Aviso', description: 'Pedido cancelado, mas o estorno automático falhou. Verifique manualmente.', variant: 'destructive' });
+        }
+      }
+
+      setOrders(orders.map(o =>
+        o.id === reviewOrder.id
+          ? { ...o, status: newStatus, receita_review_status: decision, receita_review_notes: reviewNotes, receita_reviewed_at: new Date().toISOString() }
+          : o
+      ));
+
+      await sendOrderStatusNotification({
+        orderId: reviewOrder.id,
+        customerEmail: reviewOrder.customer_email || '',
+        customerName: reviewOrder.customer,
+        status: newStatus as OrderStatus,
+      });
+
+      toast({
+        title: decision === 'approved' ? 'Pedido aprovado' : 'Pedido rejeitado',
+        description: decision === 'approved'
+          ? 'Medicamentos confirmados. Pedido movido para Processando.'
+          : 'Pedido cancelado e estorno iniciado.',
+      });
+      setReviewOrder(null);
+      setReviewNotes('');
+    } catch (err) {
+      logger.error('Error reviewing order:', err);
+      toast({ title: 'Erro', description: 'Não foi possível salvar a revisão.', variant: 'destructive' });
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -331,11 +443,11 @@ export default function AdminOrders() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="pending">Pendente</SelectItem>
-            <SelectItem value="processing">Processando</SelectItem>
-            <SelectItem value="shipped">Em Trânsito</SelectItem>
-            <SelectItem value="delivered">Entregue</SelectItem>
-            <SelectItem value="cancelled">Cancelado</SelectItem>
+            <SelectItem value="pending">Pedido Pago</SelectItem>
+            <SelectItem value="processing">Pedido em Separação</SelectItem>
+            <SelectItem value="shipped">Pedido Enviado</SelectItem>
+            <SelectItem value="delivered">Pedido Entregue</SelectItem>
+            <SelectItem value="cancelled">Pedido Cancelado</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -382,8 +494,44 @@ export default function AdminOrders() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell>{order.prescription_id || 'N/A'}</TableCell>
-                  <TableCell>{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}</TableCell>
+                  <TableCell>
+                    {order.receita_url_pdf ? (
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() => setPdfPreviewUrl(order.receita_url_pdf!)}
+                          className="flex items-center gap-1.5 text-sm text-primary hover:underline font-medium"
+                          title="Visualizar receita"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Consulta #{order.receita_id ?? order.consulta_id ?? order.prescription_id ?? 'N/A'}
+                        </button>
+                        {order.receita_review_status === 'approved' && (
+                          <span className="flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                            <CheckCheck className="h-3 w-3" />Aprovada
+                          </span>
+                        )}
+                        {order.receita_review_status === 'rejected' && (
+                          <span className="flex items-center gap-1 text-[11px] text-red-600 font-medium">
+                            <XCircle className="h-3 w-3" />Rejeitada
+                          </span>
+                        )}
+                        {!order.receita_review_status && (
+                          <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+                            <ShieldAlert className="h-3 w-3" />Aguarda revisão
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">
+                        {order.receita_id ?? order.consulta_id ?? order.prescription_id ?? '—'}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{order.items?.length || 0} {order.items?.length === 1 ? 'item' : 'itens'}</span>
+                    </div>
+                  </TableCell>
                   <TableCell>
                     {new Date(order.date).toLocaleDateString('pt-BR', {
                       day: '2-digit',
@@ -400,17 +548,32 @@ export default function AdminOrders() {
                         value={order.status}
                         onValueChange={(value) => handleStatusChange(order.id, value)}
                       >
-                      <SelectTrigger className="w-[120px] text-sm">
-                        <SelectValue placeholder="Alterar status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pending">Pendente</SelectItem>
-                        <SelectItem value="processing">Processando</SelectItem>
-                        <SelectItem value="shipped">Em Trânsito</SelectItem>
-                        <SelectItem value="delivered">Entregue</SelectItem>
-                        <SelectItem value="cancelled">Cancelado</SelectItem>
-                      </SelectContent>
-                    </Select>
+                        <SelectTrigger className="w-[120px] text-sm">
+                          <SelectValue placeholder="Alterar status" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="pending">Pedido Pago</SelectItem>
+                          <SelectItem value="processing">Pedido em Separação</SelectItem>
+                          <SelectItem value="shipped">Pedido Enviado</SelectItem>
+                          <SelectItem value="delivered">Pedido Entregue</SelectItem>
+                          <SelectItem value="cancelled">Pedido Cancelado</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {order.receita_url_pdf && !order.receita_review_status && (
+                        <Button
+                          size="sm"
+                          className="gap-1.5 bg-amber-500 hover:bg-amber-600 text-white"
+                          onClick={() => {
+                            setReviewOrder(order);
+                            setReviewNotes('');
+                            if (order.receita_url_pdf) loadPdfViaProxy(order.receita_url_pdf);
+                          }}
+                          title="Revisar receita"
+                        >
+                          <ClipboardCheck className="h-4 w-4" />
+                          Revisar
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -442,7 +605,7 @@ export default function AdminOrders() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Processando</CardTitle>
+            <CardTitle className="text-sm font-medium">Em Separação</CardTitle>
             <Clock className="h-4 w-4 text-yellow-600" />
           </CardHeader>
           <CardContent>
@@ -454,7 +617,7 @@ export default function AdminOrders() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Em Trânsito</CardTitle>
+            <CardTitle className="text-sm font-medium">Enviados</CardTitle>
             <Truck className="h-4 w-4 text-purple-600" />
           </CardHeader>
           <CardContent>
@@ -515,7 +678,68 @@ export default function AdminOrders() {
                     <p className="font-mono font-medium">{selectedOrder.tracking_code}</p>
                   </div>
                 )}
+                {(selectedOrder.receita_id || selectedOrder.consulta_id) && (
+                  <div className="col-span-2 p-3 rounded-lg border border-primary/20 bg-primary/5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <Label className="text-muted-foreground flex items-center gap-1.5">
+                          <FileText className="h-4 w-4" />
+                          Receita Vinculada
+                        </Label>
+                        <p className="font-medium mt-0.5">
+                          Consulta #{selectedOrder.receita_id ?? selectedOrder.consulta_id}
+                        </p>
+                      </div>
+                      {selectedOrder.receita_url_pdf && (
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5"
+                            onClick={() => setPdfPreviewUrl(selectedOrder.receita_url_pdf!)}
+                          >
+                            <FileText className="h-4 w-4" />
+                            Ver Receita
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => window.open(selectedOrder.receita_url_pdf!, '_blank')}
+                            title="Abrir em nova aba"
+                          >
+                            <ExternalLink className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
+
+              {/* Order Items */}
+              {selectedOrder.items && selectedOrder.items.length > 0 && (
+                <div>
+                  <Label className="flex items-center gap-2 mb-2">
+                    <Package className="h-4 w-4" />
+                    Itens do Pedido ({selectedOrder.items.length})
+                  </Label>
+                  <div className="border rounded-lg divide-y">
+                    {selectedOrder.items.map((item, i) => (
+                      <div key={i} className="p-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-sm">{item.name}</p>
+                          <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
+                        </div>
+                        <span className="font-medium text-sm">R$ {(item.price * item.quantity).toFixed(2)}</span>
+                      </div>
+                    ))}
+                    <div className="p-3 flex items-center justify-between bg-muted/50">
+                      <span className="font-semibold text-sm">Total</span>
+                      <span className="font-bold text-primary">R$ {selectedOrder.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Notification History */}
               <div>
@@ -554,6 +778,236 @@ export default function AdminOrders() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Revisão Farmacêutica ──────────────────────────────────────────── */}
+      <Dialog open={!!reviewOrder} onOpenChange={(open) => {
+        if (!open) {
+          setReviewOrder(null);
+          setReviewNotes('');
+          if (pdfBlobUrl && pdfBlobUrl.startsWith('blob:')) URL.revokeObjectURL(pdfBlobUrl);
+          setPdfBlobUrl(null);
+        }
+      }}>
+        <DialogContent className="max-w-6xl max-h-[95vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <ClipboardCheck className="h-5 w-5 text-amber-500" />
+              Revisão Farmacêutica — Pedido #{reviewOrder?.id}
+            </DialogTitle>
+            <DialogDescription>
+              Verifique a receita e confirme se os medicamentos solicitados correspondem à prescrição
+            </DialogDescription>
+          </DialogHeader>
+
+          {reviewOrder && (
+            <div className="flex flex-1 overflow-hidden min-h-0">
+
+              {/* Coluna esquerda: PDF */}
+              <div className="flex-1 flex flex-col border-r min-w-0">
+                <div className="px-4 py-2 bg-muted/50 border-b flex items-center justify-between shrink-0">
+                  <span className="text-sm font-medium flex items-center gap-1.5">
+                    <FileText className="h-4 w-4 text-primary" />
+                    Receita — Consulta #{reviewOrder.receita_id ?? reviewOrder.consulta_id ?? 'N/A'}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="gap-1.5 text-xs h-7"
+                    onClick={() => window.open(reviewOrder.receita_url_pdf!, '_blank')}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" />
+                    Nova aba
+                  </Button>
+                </div>
+                <div className="flex-1 p-3">
+                  {loadingPdf ? (
+                    <div className="w-full h-full min-h-[500px] rounded-lg border bg-muted/30 flex flex-col items-center justify-center gap-3">
+                      <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                      <p className="text-sm text-muted-foreground">Carregando receita...</p>
+                    </div>
+                  ) : pdfBlobUrl ? (
+                    <iframe
+                      src={pdfBlobUrl}
+                      className="w-full h-full rounded-lg border min-h-[500px]"
+                      title="Receita PDF"
+                    />
+                  ) : (
+                    <div className="w-full h-full min-h-[500px] rounded-lg border bg-muted/30 flex flex-col items-center justify-center gap-3">
+                      <FileText className="h-10 w-10 text-muted-foreground/40" />
+                      <p className="text-sm text-muted-foreground">PDF não disponível para preview</p>
+                      <Button size="sm" variant="outline" className="gap-2" onClick={() => window.open(reviewOrder.receita_url_pdf!, '_blank')}>
+                        <ExternalLink className="h-4 w-4" />
+                        Abrir em nova aba
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Coluna direita: dados do pedido + ação */}
+              <div className="w-[360px] shrink-0 flex flex-col overflow-y-auto">
+                <div className="p-4 space-y-4">
+
+                  {/* Paciente */}
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wide mb-2">Paciente</p>
+                    <p className="font-medium">{reviewOrder.customer}</p>
+                    <p className="text-sm text-muted-foreground">{reviewOrder.customer_email}</p>
+                    {reviewOrder.customer_phone && (
+                      <p className="text-sm text-muted-foreground">{reviewOrder.customer_phone}</p>
+                    )}
+                  </div>
+
+                  <Separator />
+
+                  {/* Medicamentos solicitados */}
+                  <div>
+                    <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wide mb-2">
+                      Medicamentos Solicitados ({reviewOrder.items.length})
+                    </p>
+                    <div className="space-y-2">
+                      {reviewOrder.items.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between p-2.5 rounded-lg bg-muted/40 border border-border/50">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">{item.name}</p>
+                            <p className="text-xs text-muted-foreground">Qtd: {item.quantity}</p>
+                          </div>
+                          <span className="text-sm font-semibold shrink-0 ml-2">
+                            R$ {(item.price * item.quantity).toFixed(2)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex justify-between mt-2 pt-2 border-t text-sm">
+                      <span className="text-muted-foreground">Subtotal</span>
+                      <span className="font-medium">R$ {(reviewOrder.subtotal ?? reviewOrder.total).toFixed(2)}</span>
+                    </div>
+                    {reviewOrder.shipping != null && reviewOrder.shipping > 0 && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Frete</span>
+                        <span className="font-medium">R$ {reviewOrder.shipping.toFixed(2)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm font-semibold pt-1">
+                      <span>Total</span>
+                      <span className="text-primary">R$ {reviewOrder.total.toFixed(2)}</span>
+                    </div>
+                  </div>
+
+                  <Separator />
+
+                  {/* JSON bruto colapsável */}
+                  <div>
+                    <details className="group">
+                      <summary className="text-xs font-semibold uppercase text-muted-foreground tracking-wide cursor-pointer select-none">
+                        JSON do Pedido
+                      </summary>
+                      <pre className="mt-2 p-3 rounded-lg bg-slate-950 text-slate-200 text-[11px] overflow-x-auto max-h-48 overflow-y-auto leading-relaxed">
+                        {JSON.stringify({
+                          id: reviewOrder.id,
+                          status: reviewOrder.status,
+                          date: reviewOrder.date,
+                          customer: reviewOrder.customer,
+                          customer_email: reviewOrder.customer_email,
+                          delivery_address: reviewOrder.delivery_address,
+                          payment_method: reviewOrder.payment_method,
+                          payment_status: reviewOrder.payment_status,
+                          total: reviewOrder.total,
+                          receita_id: reviewOrder.receita_id,
+                          consulta_id: reviewOrder.consulta_id,
+                          receita_url_pdf: reviewOrder.receita_url_pdf,
+                          items: reviewOrder.items,
+                        }, null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+
+                  <Separator />
+
+                  {/* Observações + decisão */}
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Decisão do Farmacêutico</p>
+                    <div>
+                      <Label htmlFor="review-notes" className="text-sm mb-1.5 block">
+                        Observações (opcional)
+                      </Label>
+                      <Textarea
+                        id="review-notes"
+                        placeholder="Ex: Receita válida. Dosagem confirmada conforme prescrição."
+                        value={reviewNotes}
+                        onChange={(e) => setReviewNotes(e.target.value)}
+                        rows={3}
+                        className="text-sm resize-none"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        className="flex-1 gap-2 bg-emerald-600 hover:bg-emerald-700"
+                        disabled={submittingReview}
+                        onClick={() => handleReview('approved')}
+                      >
+                        {submittingReview ? (
+                          <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <CheckCheck className="h-4 w-4" />
+                        )}
+                        Aprovar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        className="flex-1 gap-2"
+                        disabled={submittingReview}
+                        onClick={() => handleReview('rejected')}
+                      >
+                        {submittingReview ? (
+                          <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        ) : (
+                          <XCircle className="h-4 w-4" />
+                        )}
+                        Rejeitar
+                      </Button>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Receita Preview Dialog */}
+      <Dialog open={!!pdfPreviewUrl} onOpenChange={(open) => { if (!open) setPdfPreviewUrl(null); }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="px-6 pt-5 pb-3">
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Receita Médica
+            </DialogTitle>
+            <DialogDescription>
+              Valide se os medicamentos do pedido correspondem à receita
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden px-6 pb-4">
+            {pdfPreviewUrl && (
+              <iframe
+                src={pdfPreviewUrl}
+                className="w-full h-[65vh] rounded-lg border"
+                title="Receita PDF"
+              />
+            )}
+          </div>
+          <div className="flex justify-end gap-2 px-6 pb-5">
+            <Button variant="outline" onClick={() => setPdfPreviewUrl(null)}>Fechar</Button>
+            {pdfPreviewUrl && (
+              <Button variant="outline" className="gap-2" onClick={() => window.open(pdfPreviewUrl, '_blank')}>
+                <ExternalLink className="h-4 w-4" />
+                Abrir em nova aba
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
 

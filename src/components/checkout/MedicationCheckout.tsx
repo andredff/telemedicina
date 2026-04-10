@@ -23,7 +23,7 @@ import {
   type CustomerData,
 } from "@/services/paymentService";
 import { toast } from "sonner";
-import type { CartItem } from "@/types/prescription";
+import type { CartItem, CatalogCartItem } from "@/types/prescription";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { sendOrderStatusNotification, sendLogisticsServiceOrder } from "@/services/notificationService";
@@ -34,17 +34,35 @@ type PaymentMethod = "credit_card" | "pix";
 
 interface MedicationCheckoutProps {
   items: CartItem[];
+  catalogItems?: CatalogCartItem[];
   customer: CustomerData;
   onSuccess?: (paymentId: string) => void;
+  onPrescriptionsPaid?: (receitaIds: string[]) => void;
   onCancel?: () => void;
 }
 
 export function MedicationCheckout({
   items,
+  catalogItems = [],
   customer,
   onSuccess,
+  onPrescriptionsPaid,
   onCancel,
 }: MedicationCheckoutProps) {
+  // Converte catalogItems → CartItem para exibição/cálculos; receitaId vive em prescriptionId
+  const catalogAsCartItems: CartItem[] = catalogItems.map(ci => ({
+    cartItemId: ci.cartItemId,
+    id: ci.cartItemId,
+    prescriptionId: ci.receitaId ?? "",
+    quantity: ci.quantity,
+    name: ci.name,
+    dosage: ci.dosage,
+    frequency: "",
+    duration: "",
+    price: ci.price,
+    inStock: true,
+  }));
+  const allItems = [...items, ...catalogAsCartItems];
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
   const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
@@ -63,11 +81,11 @@ export function MedicationCheckout({
   const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
   const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
 
-  const subtotal = items.reduce(
+  const subtotal = allItems.reduce(
     (acc, item) => acc + item.price * item.quantity,
     0
   );
-  
+
   // Calculate shipping based on selected option and admin config
   const shipping = selectedShipping && shippingConfig ? applyFreeShipping(selectedShipping.price, subtotal, shippingConfig) : 0;
   const total = subtotal + shipping;
@@ -75,12 +93,12 @@ export function MedicationCheckout({
   // Calculate shipping when address is set
   useEffect(() => {
     const fetchShipping = async () => {
-      if (deliveryAddress?.zipCode && items.length > 0) {
+      if (deliveryAddress?.zipCode && allItems.length > 0) {
         setIsCalculatingShipping(true);
         try {
           const { options, config } = await calculateCartShipping(
             deliveryAddress.zipCode,
-            items.length,
+            allItems.length,
             subtotal
           );
           setShippingOptions(options);
@@ -109,6 +127,58 @@ export function MedicationCheckout({
     return `MED-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
   };
 
+  // Agrupa itens por receitaId para criar pedidos separados
+  type OrderGroup = {
+    orderId: string;
+    receitaId: string | undefined;
+    receitaUrlPdf: string | undefined;
+    orderItems: { name: string; quantity: number; price: number; receitaId?: string }[];
+    groupSubtotal: number;
+  };
+
+  function buildOrderGroups(): OrderGroup[] {
+    const groups: OrderGroup[] = [];
+
+    // Itens sem receita (CartItem legacy)
+    if (items.length > 0) {
+      groups.push({
+        orderId: generateOrderId(),
+        receitaId: undefined,
+        receitaUrlPdf: undefined,
+        orderItems: items.map(i => ({ name: i.name, quantity: i.quantity, price: i.price })),
+        groupSubtotal: items.reduce((s, i) => s + i.price * i.quantity, 0),
+      });
+    }
+
+    // Catalog items agrupados por receitaId
+    const byReceita = new Map<string, CatalogCartItem[]>();
+    for (const ci of catalogItems) {
+      const key = ci.receitaId ?? "__sem-receita__";
+      if (!byReceita.has(key)) byReceita.set(key, []);
+      byReceita.get(key)!.push(ci);
+    }
+
+    for (const [key, groupItems] of byReceita.entries()) {
+      const receitaId = key === "__sem-receita__" ? undefined : key;
+      // All items in the same group share the same PDF URL — take the first non-null
+      const receitaUrlPdf = groupItems.find(i => i.receitaUrlPdf)?.receitaUrlPdf;
+      groups.push({
+        orderId: generateOrderId(),
+        receitaId,
+        receitaUrlPdf,
+        orderItems: groupItems.map(i => ({
+          name: i.name,
+          quantity: i.quantity,
+          price: i.price,
+          receitaId,
+        })),
+        groupSubtotal: groupItems.reduce((s, i) => s + i.price * i.quantity, 0),
+      });
+    }
+
+    return groups;
+  }
+
   const saveOrderToDatabase = async (params: {
     orderId: string;
     paymentId: string | null;
@@ -116,9 +186,12 @@ export function MedicationCheckout({
     deliveryAddress: string;
     paymentStatus: "paid" | "pending" | "failed";
     paymentMethod?: "credit_card" | "pix";
-    pixQrCode?: string | null;
-    pixQrCodeUrl?: string | null;
-    pixExpiresAt?: string | null;
+    orderItems: { name: string; quantity: number; price: number; receitaId?: string }[];
+    orderSubtotal: number;
+    orderShipping: number;
+    orderTotal: number;
+    receitaId?: string;
+    receitaUrlPdf?: string;
   }) => {
     try {
       const orderData = {
@@ -126,18 +199,17 @@ export function MedicationCheckout({
         user_id: params.userId,
         date: new Date().toISOString(),
         status: "processing" as const,
-        total: total,
-        items: items.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-        })),
+        total: params.orderTotal,
+        items: params.orderItems,
         delivery_address: params.deliveryAddress,
         payment_id: params.paymentId,
         payment_method: params.paymentMethod || "credit_card",
         installments: parseInt(installments),
-        shipping_cost: shipping,
-        subtotal: subtotal,
+        shipping_cost: params.orderShipping,
+        subtotal: params.orderSubtotal,
+        receita_id: params.receitaId ?? null,
+        receita_url_pdf: params.receitaUrlPdf ?? null,
+        consulta_id: params.receitaId ?? null, // receitaId == consultationId no modelo Assemed
       };
 
       const { data, error } = await supabase
@@ -159,6 +231,38 @@ export function MedicationCheckout({
     }
   };
 
+  const saveAllOrders = async (params: {
+    paymentId: string | null;
+    userId: string;
+    deliveryAddress: string;
+    paymentStatus: "paid" | "pending" | "failed";
+    paymentMethod?: "credit_card" | "pix";
+    orderGroups: OrderGroup[];
+  }) => {
+    const numGroups = params.orderGroups.length || 1;
+    const shippingPerGroup = shipping / numGroups;
+
+    for (const group of params.orderGroups) {
+      const groupTotal = group.groupSubtotal + shippingPerGroup;
+      await saveOrderToDatabase({
+        orderId: group.orderId,
+        paymentId: params.paymentId,
+        userId: params.userId,
+        deliveryAddress: params.deliveryAddress,
+        paymentStatus: params.paymentStatus,
+        paymentMethod: params.paymentMethod,
+        orderItems: group.orderItems,
+        orderSubtotal: group.groupSubtotal,
+        orderShipping: shippingPerGroup,
+        orderTotal: groupTotal,
+        receitaId: group.receitaId,
+        receitaUrlPdf: group.receitaUrlPdf,
+      });
+    }
+
+    return params.orderGroups[0]?.orderId ?? generateOrderId();
+  };
+
   const triggerLogisticsNotifications = async (orderId: string) => {
     if (!deliveryAddress || !customer) return;
     try {
@@ -169,7 +273,7 @@ export function MedicationCheckout({
         customerEmail: customer.email || "",
         customerName: customer.name,
         status: "pending",
-        items: items.map((i) => ({ name: i.name, quantity: i.quantity })),
+        items: allItems.map((i) => ({ name: i.name, quantity: i.quantity })),
       });
 
       await sendLogisticsServiceOrder(orderId, {
@@ -177,7 +281,7 @@ export function MedicationCheckout({
         email: customer.email || "",
         phone: "",
         address: addressString,
-      }, items.map((i) => ({ name: i.name, quantity: i.quantity })));
+      }, allItems.map((i) => ({ name: i.name, quantity: i.quantity })));
     } catch (err) {
       logger.warn("Falha ao enviar notificações de logística (não bloqueante):", err);
     }
@@ -201,11 +305,13 @@ export function MedicationCheckout({
       // Format delivery address for storage
       const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ''}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
 
-      const orderId = generateOrderId();
-      
+      const orderGroups = buildOrderGroups();
+      // Use o primeiro orderId para o pagamento
+      const primaryOrderId = orderGroups[0]?.orderId ?? generateOrderId();
+
       // Process payment
       const result = await processMedicationPayment(
-        orderId,
+        primaryOrderId,
         customer,
         cardData,
         toCents(total),
@@ -213,24 +319,28 @@ export function MedicationCheckout({
       );
 
       if (result.success && result.paymentId) {
-        // Save order to database
+        // Save one order per prescription group
         try {
-          await saveOrderToDatabase({
-            orderId,
+          await saveAllOrders({
             paymentId: result.paymentId,
             userId: user.id,
             deliveryAddress: deliveryAddressString,
             paymentStatus: "paid",
+            orderGroups,
           });
-          
+
           setPaymentResult({
             success: true,
             paymentId: result.paymentId,
-            orderId: orderId,
+            orderId: primaryOrderId,
             message: result.message,
           });
 
-          await triggerLogisticsNotifications(orderId);
+          await triggerLogisticsNotifications(primaryOrderId);
+          const paidReceitaIds = orderGroups
+            .map(g => g.receitaId)
+            .filter((id): id is string => id !== undefined);
+          onPrescriptionsPaid?.(paidReceitaIds);
           toast.success("Pagamento realizado e pedido registrado com sucesso!");
           onSuccess?.(result.paymentId);
         } catch (dbError) {
@@ -238,7 +348,7 @@ export function MedicationCheckout({
           setPaymentResult({
             success: true,
             paymentId: result.paymentId,
-            orderId: orderId,
+            orderId: primaryOrderId,
             message: 'Pagamento aprovado, mas houve um erro ao registrar o pedido. Entre em contato com o suporte.',
           });
           toast.warning("Pagamento aprovado, mas houve um erro ao salvar o pedido.");
@@ -271,23 +381,27 @@ export function MedicationCheckout({
 
       const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ""}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
 
-      const orderId = generateOrderId();
-
-      await saveOrderToDatabase({
-        orderId,
+      const orderGroups = buildOrderGroups();
+      const primaryOrderId = await saveAllOrders({
         paymentId: pixPaymentId,
         userId: user.id,
         deliveryAddress: deliveryAddressString,
         paymentStatus: "paid",
         paymentMethod: "pix",
+        orderGroups,
       });
 
-      await triggerLogisticsNotifications(orderId);
+      await triggerLogisticsNotifications(primaryOrderId);
+
+      const paidReceitaIds = orderGroups
+        .map(g => g.receitaId)
+        .filter((id): id is string => id !== undefined);
+      onPrescriptionsPaid?.(paidReceitaIds);
 
       setPaymentResult({
         success: true,
         paymentId: pixPaymentId,
-        orderId,
+        orderId: primaryOrderId,
         message: "Pagamento PIX confirmado!",
       });
 
@@ -409,10 +523,10 @@ export function MedicationCheckout({
                 <Package className="h-5 w-5" />
                 Resumo do Pedido
               </CardTitle>
-              <CardDescription>{items.length} item(s) no carrinho</CardDescription>
+              <CardDescription>{allItems.length} item(s) no carrinho</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {items.map((item) => (
+              {allItems.map((item) => (
                 <div key={item.cartItemId} className="flex justify-between items-start">
                   <div>
                     <p className="font-medium">{item.name}</p>
@@ -541,11 +655,11 @@ export function MedicationCheckout({
                 <Package className="h-5 w-5" />
                 Resumo do Pedido
               </CardTitle>
-              <CardDescription>{items.length} item(s) no carrinho</CardDescription>
+              <CardDescription>{allItems.length} item(s) no carrinho</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {items.map((item) => (
-                <div key={item.id} className="flex justify-between items-start">
+              {allItems.map((item) => (
+                <div key={item.cartItemId} className="flex justify-between items-start">
                   <div>
                     <p className="font-medium">{item.name}</p>
                     <p className="text-sm text-muted-foreground">

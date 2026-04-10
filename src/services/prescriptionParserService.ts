@@ -83,19 +83,136 @@ export async function extractTextFromFile(file: File): Promise<string | null> {
   }
 }
 
+// ─── Tokenização da receita ──────────────────────────────────────────────────
+
+interface PrescriptionTokens {
+  /** Texto normalizado completo */
+  full: string;
+  /** Primeira palavra longa (nome do remédio) */
+  nome: string;
+  /** Dosagem extraída, ex: "200mg", "500mg", "10ml" */
+  dosagem: string | null;
+  /** Forma farmacêutica, ex: "comprimido", "capsula", "solucao" */
+  forma: string | null;
+  /** Quantidade numérica, ex: "20" de "20un" ou "1" de "1 embalagem" */
+  quantidade: string | null;
+  /** Laboratório / fabricante */
+  laboratorio: string | null;
+}
+
+const FORMAS_FARMACEUTICAS = [
+  "comprimido", "capsula", "solucao", "suspensao", "xarope",
+  "pomada", "creme", "gel", "injetavel", "ampola", "supositorio",
+  "adesivo", "spray", "gotas", "colirio", "inalacao", "pastilha",
+];
+
+const LABORATORIOS_CONHECIDOS = [
+  "germed", "ems", "medley", "eurofarma", "biolab", "pfizer", "novartis",
+  "bayer", "sanofi", "astrazeneca", "roche", "abbott", "neo quimica",
+  "prati donaduzzi", "teuto", "ranbaxy", "sandoz", "teva", "hypermarcas",
+];
+
+function tokenizePrescription(normalizedText: string): PrescriptionTokens {
+  // Dosagem: número seguido de unidade farmacêutica
+  const dosagemMatch = normalizedText.match(/\b(\d+(?:[,.]\d+)?\s*(?:mg|mcg|g|ml|ui|ui\/ml|mg\/ml|%))\b/i);
+  const dosagem = dosagemMatch ? dosagemMatch[1].replace(/\s+/g, "") : null;
+
+  // Forma farmacêutica
+  const forma = FORMAS_FARMACEUTICAS.find(f => normalizedText.includes(f)) ?? null;
+
+  // Quantidade: número antes de "un", "unidade", "embalagem", "caixa", "comprimido"
+  const quantMatch = normalizedText.match(/\b(\d+)\s*(?:un\b|unidade|embalagem|caixa|comprimido|capsula|ampola)/i);
+  const quantidade = quantMatch ? quantMatch[1] : null;
+
+  // Laboratório
+  const laboratorio = LABORATORIOS_CONHECIDOS.find(l => normalizedText.includes(l)) ?? null;
+
+  // Nome: primeira "palavra longa" que não seja dosagem, forma, quantidade ou lab
+  const words = normalizedText.split(/\s+/);
+  const nome = words.find(w =>
+    w.length >= 4 &&
+    !FORMAS_FARMACEUTICAS.includes(w) &&
+    !LABORATORIOS_CONHECIDOS.includes(w) &&
+    !/^\d/.test(w)
+  ) ?? words[0] ?? "";
+
+  return { full: normalizedText, nome, dosagem, forma, quantidade, laboratorio };
+}
+
+// ─── Score por critério ──────────────────────────────────────────────────────
+
+const SCORE_THRESHOLD = 50; // score mínimo para considerar match válido
+
+function scoreMatch(
+  tokens: PrescriptionTokens,
+  med: MedicationCatalog
+): { score: number; matchedTerm: string } {
+  let score = 0;
+  let matchedTerm = "";
+
+  const medName = normalize(med.name);
+  const medActive = med.active_ingredient ? normalize(med.active_ingredient) : null;
+  const medDosagem = med.dosage ? normalize(med.dosage) : null;
+  const medForma = med.form ? normalize(med.form) : null;
+
+  // Nome do remédio — peso 50
+  if (medName.includes(tokens.nome) || tokens.full.includes(medName.split(" ")[0])) {
+    score += 50;
+    matchedTerm = tokens.nome;
+  } else if (medActive && (medActive.includes(tokens.nome) || tokens.full.includes(medActive.split(" ")[0]))) {
+    // Princípio ativo bate com nome da receita — peso 40
+    score += 40;
+    matchedTerm = medActive.split(" ")[0];
+  }
+
+  // Só pontua os outros critérios se já bateu o nome
+  if (score === 0) return { score: 0, matchedTerm: "" };
+
+  // Dosagem — peso 25
+  if (tokens.dosagem && medDosagem) {
+    const dNorm = tokens.dosagem.replace(/\s+/g, "");
+    if (medDosagem.replace(/\s+/g, "").includes(dNorm) || dNorm.includes(medDosagem.replace(/\s+/g, ""))) {
+      score += 25;
+    }
+  }
+
+  // Forma farmacêutica — peso 10
+  if (tokens.forma && medForma && medForma.includes(tokens.forma)) {
+    score += 10;
+  }
+
+  // Fabricante/laboratório — peso 5
+  if (tokens.laboratorio && med.manufacturer) {
+    const mfr = normalize(med.manufacturer);
+    if (mfr.includes(tokens.laboratorio) || tokens.laboratorio.includes(mfr.split(" ")[0])) {
+      score += 5;
+    }
+  }
+
+  return { score, matchedTerm };
+}
+
 // ─── Matching contra o catálogo ─────────────────────────────────────────────
 
 export interface MatchedMedication {
   medication: MedicationCatalog;
   /** Termo que gerou o match */
   matchedTerm: string;
-  /** Confiança aproximada: "high" | "medium" */
-  confidence: "high" | "medium";
+  /** Score numérico (0–100) */
+  score: number;
+  /** Confiança derivada do score */
+  confidence: "high" | "medium" | "low";
+}
+
+function scoreToConfidence(score: number): "high" | "medium" | "low" {
+  if (score >= 75) return "high";
+  if (score >= SCORE_THRESHOLD) return "medium";
+  return "low";
 }
 
 /**
  * Recebe o texto extraído do PDF e retorna medicamentos do catálogo
- * que foram encontrados no texto.
+ * que foram encontrados no texto, ordenados por score decrescente.
  */
 export async function matchMedicationsInText(
   rawText: string
@@ -104,52 +221,36 @@ export async function matchMedicationsInText(
   if (catalog.length === 0) return [];
 
   const normalizedText = normalize(rawText);
-  const matched: MatchedMedication[] = [];
+  // Tokeniza o texto da receita inteiro como um bloco único
+  const tokens = tokenizePrescription(normalizedText);
+
+  const candidates: (MatchedMedication & { _score: number })[] = [];
   const seenIds = new Set<string>();
 
   for (const med of catalog) {
     if (seenIds.has(med.id)) continue;
 
-    // Termos de busca: nome e princípio ativo (primeira palavra = mais relevante)
-    const terms: { term: string; confidence: "high" | "medium" }[] = [];
-
-    const nameParts = normalize(med.name).split(" ");
-    // Primeira palavra do nome (ex: "dipirona" em "Dipirona 500mg")
-    if (nameParts[0] && nameParts[0].length >= 4) {
-      terms.push({ term: nameParts[0], confidence: "high" });
-    }
-    // Nome completo sem dosagem (até 2 palavras)
-    const shortName = nameParts.slice(0, 2).join(" ");
-    if (shortName.length >= 6 && shortName !== nameParts[0]) {
-      terms.push({ term: shortName, confidence: "high" });
-    }
-
-    // Princípio ativo
-    if (med.active_ingredient) {
-      const activeParts = normalize(med.active_ingredient).split(" ");
-      if (activeParts[0] && activeParts[0].length >= 5) {
-        terms.push({ term: activeParts[0], confidence: "medium" });
-      }
-    }
-
-    for (const { term, confidence } of terms) {
-      if (normalizedText.includes(term)) {
-        matched.push({ medication: med, matchedTerm: term, confidence });
-        seenIds.add(med.id);
-        break;
-      }
+    const { score, matchedTerm } = scoreMatch(tokens, med);
+    if (score >= SCORE_THRESHOLD) {
+      candidates.push({
+        medication: med,
+        matchedTerm,
+        score,
+        confidence: scoreToConfidence(score),
+        _score: score,
+      });
+      seenIds.add(med.id);
     }
   }
 
-  // Ordena: alta confiança primeiro, depois por nome
-  matched.sort((a, b) => {
-    if (a.confidence !== b.confidence) {
-      return a.confidence === "high" ? -1 : 1;
-    }
-    return a.medication.name.localeCompare(b.medication.name);
-  });
+  // Ordena por score decrescente, depois por nome
+  candidates.sort((a, b) =>
+    b._score !== a._score
+      ? b._score - a._score
+      : a.medication.name.localeCompare(b.medication.name)
+  );
 
-  return matched;
+  return candidates.map(({ _score: _s, ...rest }) => rest);
 }
 
 // ─── Utilitário: texto manual (fallback quando CORS bloqueia PDF) ───────────

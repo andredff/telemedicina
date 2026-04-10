@@ -1,76 +1,94 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
   <title>Convite Novità</title>
   <style>
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-      line-height: 1.6;
-      color: #333;
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-    .header {
-      text-align: center;
-      padding: 20px 0;
-      border-bottom: 2px solid #10b981;
-    }
-    .logo {
-      font-size: 28px;
-      font-weight: bold;
-      color: #10b981;
-    }
-    .content {
-      padding: 30px 0;
-    }
-    .button {
-      display: inline-block;
-      background-color: #10b981;
-      color: white !important;
-      text-decoration: none;
-      padding: 12px 30px;
-      border-radius: 6px;
-      font-weight: 600;
-      margin: 20px 0;
-    }
-    .footer {
-      text-align: center;
-      padding: 20px 0;
-      color: #666;
-      font-size: 14px;
-      border-top: 1px solid #eee;
+    body, table, td { -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%; }
+    table, td { mso-table-lspace:0pt; mso-table-rspace:0pt; }
+    @media only screen and (max-width:620px) {
+      .email-container { width:100% !important; }
+      .email-body { padding:24px 16px !important; }
+      .email-header { padding:20px 16px !important; }
     }
   </style>
 </head>
-<body>
-  <div class="header">
-    <div class="logo">Novità Telemedicina</div>
-  </div>
-  
-  <div class="content">
-    <h2>Você foi convidado!</h2>
-    
-    <p>Olá,</p>
-    
-    <p>Você foi convidado para participar da plataforma <strong>Novità Telemedicina</strong>.</p>
-    
-    <p>Clique no botão abaixo para aceitar o convite e criar sua conta:</p>
-    
-    <p style="text-align: center;">
-      <a href="{{ .ConfirmationURL }}" class="button">Aceitar Convite</a>
-    </p>
-    
-    <p>Se você não esperava receber este convite, pode ignorar este email.</p>
-    
-    <p>Atenciosamente,<br>Equipe Novità</p>
-  </div>
-  
-  <div class="footer">
-    <p>&copy; 2024 Novità Telemedicina. Todos os direitos reservados.</p>
-    <p>Este é um email automático, não responda.</p>
-  </div>
+<body style="margin:0;padding:0;background-color:#F5F3EE;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1E293B;">
+  <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#F5F3EE;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table class="email-container" width="600" cellpadding="0" cellspacing="0" role="presentation"
+          style="max-width:600px;width:100%;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.06);">
+
+          <!-- Header -->
+          <tr>
+            <td class="email-header" style="padding:28px 32px;background:linear-gradient(135deg,#EDAF00,#CC9B00);text-align:center;">
+              <span style="font-size:26px;font-weight:800;color:#FFFFFF;letter-spacing:-0.5px;">Novità</span>
+              <span style="display:block;font-size:11px;color:rgba(255,255,255,0.7);font-weight:400;letter-spacing:1px;text-transform:uppercase;margin-top:-2px;">Telemedicina</span>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="email-body" style="padding:36px 32px 28px;">
+              <table cellpadding="0" cellspacing="0" role="presentation" style="margin-bottom:12px;">
+                <tr>
+                  <td style="background:#10B98118;color:#10B981;font-size:11px;font-weight:700;letter-spacing:0.6px;padding:5px 14px;border-radius:20px;text-transform:uppercase;border:1px solid #10B98130;">Convite</td>
+                </tr>
+              </table>
+
+              <h1 style="margin:0 0 12px;font-size:26px;font-weight:800;color:#1E293B;line-height:1.3;">
+                Você foi convidado! 🎉
+              </h1>
+              <p style="margin:0 0 20px;font-size:15px;color:#64748B;line-height:1.7;">
+                Você foi convidado para participar da plataforma <strong style="color:#1E293B;">Novità Telemedicina</strong>.
+                Clique no botão abaixo para aceitar o convite e criar sua conta.
+              </p>
+
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="margin:28px 0 12px;">
+                <tr>
+                  <td align="center">
+                    <a href="{{ .ConfirmationURL }}" style="display:inline-block;background:#10B981;color:#FFFFFF;font-size:14px;font-weight:700;padding:14px 32px;border-radius:8px;text-decoration:none;text-align:center;min-width:200px;box-shadow:0 2px 8px #10B98140;">
+                      Aceitar convite
+                    </a>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="font-size:12px;color:#64748B;text-align:center;margin-top:24px;line-height:1.5;">
+                Se você não esperava receber este convite, pode ignorar este e-mail com segurança.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#FAFAF7;border-top:1px solid #E8E4DA;padding:24px 32px;">
+              <table width="100%" cellpadding="0" cellspacing="0" role="presentation">
+                <tr>
+                  <td align="center">
+                    <p style="margin:0 0 8px;font-size:13px;color:#64748B;line-height:1.6;">
+                      <a href="https://novita.migrai.com.br" style="color:#EDAF00;font-weight:600;text-decoration:none;">novita.migrai.com.br</a>
+                    </p>
+                    <p style="margin:0 0 8px;font-size:12px;color:#64748B;line-height:1.5;">
+                      Precisa de ajuda? &nbsp;
+                      <a href="mailto:suporte@novita.com" style="color:#EDAF00;text-decoration:none;font-weight:500;">suporte@novita.com</a>
+                    </p>
+                    <p style="margin:0;font-size:11px;color:#94A3B8;line-height:1.5;">
+                      Este e-mail foi enviado automaticamente pela Novità Telemedicina.<br>
+                      Por favor, não responda diretamente a esta mensagem.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
