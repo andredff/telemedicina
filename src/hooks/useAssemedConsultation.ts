@@ -187,19 +187,15 @@ export function useAssemedConsultation() {
           const loginResponse = await assemedClient.login(cleanCpf);
           accessToken = loginResponse.accessToken;
         } catch (loginError: unknown) {
+          const errMsg = loginError instanceof Error ? loginError.message.toLowerCase() : String(loginError).toLowerCase();
+          const errStatus = (loginError as AssemedApiError)?.statusCode ?? 0;
           const isNotRegistered =
-            (loginError instanceof AssemedApiError &&
-              (loginError.statusCode === 404 ||
-                loginError.statusCode === 401 ||
-                (loginError.statusCode === 400 &&
-                  loginError.message.toLowerCase().includes("não cadastrado")))) ||
-            (loginError instanceof Error &&
-              (loginError.message.includes("404") ||
-                loginError.message.includes("401") ||
-                loginError.message.toLowerCase().includes("unauthorized") ||
-                loginError.message.toLowerCase().includes("not found") ||
-                loginError.message.toLowerCase().includes("não encontrado") ||
-                loginError.message.toLowerCase().includes("não cadastrado")));
+            errStatus === 404 ||
+            errMsg.includes("não cadastrado") ||
+            errMsg.includes("nao cadastrado") ||
+            errMsg.includes("cpf de paciente") ||
+            errMsg.includes("not found") ||
+            errMsg.includes("404");
 
           if (!isNotRegistered) {
             throw loginError;
@@ -278,20 +274,15 @@ export function useAssemedConsultation() {
             const loginResponse = await assemedClient.login(cleanCpf);
             accessToken = loginResponse.accessToken;
           } catch (loginError: unknown) {
-            // Detecta paciente não cadastrado
+            const errMsg = loginError instanceof Error ? loginError.message.toLowerCase() : String(loginError).toLowerCase();
+            const errStatus = (loginError as AssemedApiError)?.statusCode ?? 0;
             const isNotRegistered =
-              (loginError instanceof AssemedApiError &&
-                (loginError.statusCode === 404 ||
-                  loginError.statusCode === 401 ||
-                  (loginError.statusCode === 400 &&
-                    loginError.message.toLowerCase().includes("não cadastrado")))) ||
-              (loginError instanceof Error &&
-                (loginError.message.includes("404") ||
-                  loginError.message.includes("401") ||
-                  loginError.message.toLowerCase().includes("unauthorized") ||
-                  loginError.message.toLowerCase().includes("not found") ||
-                  loginError.message.toLowerCase().includes("não encontrado") ||
-                  loginError.message.toLowerCase().includes("não cadastrado")));
+              errStatus === 404 ||
+              errMsg.includes("não cadastrado") ||
+              errMsg.includes("nao cadastrado") ||
+              errMsg.includes("cpf de paciente") ||
+              errMsg.includes("not found") ||
+              errMsg.includes("404");
 
             if (!isNotRegistered) {
               throw loginError;
@@ -514,17 +505,16 @@ export function useAssemedConsultation() {
             const loginResponse = await assemedClient.login(cleanCpf);
             accessToken = loginResponse.accessToken;
           } catch (loginError: unknown) {
+            const errMsg = loginError instanceof Error ? loginError.message.toLowerCase() : String(loginError).toLowerCase();
+            const errStatus = (loginError as AssemedApiError)?.statusCode ?? 0;
+
             const isNotRegistered =
-              (loginError instanceof AssemedApiError &&
-                (loginError.statusCode === 404 ||
-                  loginError.statusCode === 401 ||
-                  (loginError.statusCode === 400 &&
-                    loginError.message.toLowerCase().includes("não cadastrado")))) ||
-              (loginError instanceof Error &&
-                (loginError.message.includes("404") ||
-                  loginError.message.includes("401") ||
-                  loginError.message.toLowerCase().includes("unauthorized") ||
-                  loginError.message.toLowerCase().includes("não cadastrado")));
+              errStatus === 404 ||
+              errMsg.includes("não cadastrado") ||
+              errMsg.includes("nao cadastrado") ||
+              errMsg.includes("cpf de paciente") ||
+              errMsg.includes("not found") ||
+              errMsg.includes("404");
 
             if (!isNotRegistered) throw loginError;
 
