@@ -26,9 +26,9 @@ app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
 app.use(express.json());
 
 // ─── Proxy Assemed — injeta credenciais server-side ──────────────────────────
-const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "false"
-  ? "https://api.assemedtelemedicina.com"
-  : "https://dev-api-assemed.azurewebsites.net";
+const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "true"
+  ? "https://dev-api-assemed.azurewebsites.net"
+  : "https://api.assemedtelemedicina.com";
 
 const ASSEMED_CLIENT_ID     = process.env.ASSEMED_CLIENT_ID     || "";
 const ASSEMED_CLIENT_SECRET = process.env.ASSEMED_CLIENT_SECRET || "";
