@@ -113,6 +113,8 @@ export default function AdminSettings() {
   const [showResendKey, setShowResendKey] = useState(false);
   const [testingResend, setTestingResend] = useState(false);
   const [resendStatus, setResendStatus] = useState<{ configured: boolean; from: string; source: string } | null>(null);
+  const [testEmailTo, setTestEmailTo] = useState('novitahealth@gmail.com');
+  const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
   const fetchSettings = async () => {
     try {
@@ -206,26 +208,31 @@ export default function AdminSettings() {
 
   const handleTestResend = async () => {
     setTestingResend(true);
+    setTestEmailResult(null);
     try {
       const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
-      const keyToTest = settings.integrations.resendApiKey || undefined;
-
       const authHeaders = await getAuthHeaders();
       const response = await fetch(`${baseUrl}/api/integrations/resend/test`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders },
-        body: JSON.stringify({ apiKey: keyToTest }),
+        body: JSON.stringify({
+          apiKey: settings.integrations.resendApiKey || undefined,
+          to: testEmailTo,
+          from: settings.integrations.resendFromEmail || undefined,
+        }),
       });
 
       const data = await response.json();
 
       if (data.success) {
-        const domainNames = data.domains?.map((d: { name: string }) => d.name).join(', ') || 'nenhum';
-        toast({ title: 'Conexão OK', description: `API Key válida. Domínios: ${domainNames}` });
+        setTestEmailResult({ success: true, message: `Email enviado para ${data.to}. ID: ${data.id}` });
+        toast({ title: 'Email enviado!', description: `Verifique a caixa de ${data.to}` });
       } else {
-        toast({ title: 'Falha na validação', description: data.error || 'API Key inválida', variant: 'destructive' });
+        setTestEmailResult({ success: false, message: data.error || 'Falha no envio' });
+        toast({ title: 'Falha no envio', description: data.error || 'Erro desconhecido', variant: 'destructive' });
       }
-    } catch (error) {
+    } catch {
+      setTestEmailResult({ success: false, message: 'Não foi possível conectar ao servidor' });
       toast({ title: 'Erro', description: 'Não foi possível conectar ao servidor', variant: 'destructive' });
     } finally {
       setTestingResend(false);
@@ -671,38 +678,22 @@ export default function AdminSettings() {
               <CardContent className="space-y-4">
                 <div>
                   <Label htmlFor="resendApiKey">API Key</Label>
-                  <div className="flex gap-2">
-                    <div className="relative flex-1">
-                      <Input
-                        id="resendApiKey"
-                        type={showResendKey ? 'text' : 'password'}
-                        value={settings.integrations.resendApiKey}
-                        onChange={(e) => updateSetting('integrations', 'resendApiKey', e.target.value)}
-                        placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        className="pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowResendKey(!showResendKey)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
-                      >
-                        {showResendKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <Button
-                      variant="outline"
-                      onClick={handleTestResend}
-                      disabled={testingResend}
+                  <div className="relative">
+                    <Input
+                      id="resendApiKey"
+                      type={showResendKey ? 'text' : 'password'}
+                      value={settings.integrations.resendApiKey}
+                      onChange={(e) => updateSetting('integrations', 'resendApiKey', e.target.value)}
+                      placeholder="re_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className="pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResendKey(!showResendKey)}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
                     >
-                      {testingResend ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <>
-                          <RotateCw className="h-4 w-4 mr-1" />
-                          Testar
-                        </>
-                      )}
-                    </Button>
+                      {showResendKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     Obtenha sua chave em <span className="font-medium">resend.com/api-keys</span>.
@@ -734,6 +725,34 @@ export default function AdminSettings() {
                     <strong>Remetente atual:</strong> {resendStatus.from}
                   </div>
                 )}
+
+                <div className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                  <p className="text-sm font-medium">Enviar email de teste</p>
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      placeholder="destinatario@email.com"
+                      value={testEmailTo}
+                      onChange={(e) => setTestEmailTo(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button variant="outline" onClick={handleTestResend} disabled={testingResend || !testEmailTo}>
+                      {testingResend ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCw className="h-4 w-4 mr-1" />}
+                      Enviar teste
+                    </Button>
+                  </div>
+                  {testEmailResult && (
+                    <div className={`flex items-start gap-2 text-sm rounded p-2 ${testEmailResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                      {testEmailResult.success
+                        ? <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0" />
+                        : <XCircle className="h-4 w-4 mt-0.5 shrink-0" />}
+                      {testEmailResult.message}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Com domínio de testes (onboarding@resend.dev) só é possível enviar para <strong>novitahealth@gmail.com</strong>
+                  </p>
+                </div>
 
                 <Button onClick={handleSaveIntegrations} disabled={saving}>
                   {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}

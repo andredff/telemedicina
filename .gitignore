@@ -44,4 +44,4 @@ novita.migrai.com.br
 *.agents
 *.claude
 .agents/
-.claude/
+.claude/CREDENCIAIS.md

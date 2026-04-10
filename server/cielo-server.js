@@ -234,7 +234,7 @@ const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
 const emailTemplates = require("./notifications/templates");
 
-const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY || process.env.NODE_ENV === "development";
+const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY;
 dispatcher.init(process.env.RESEND_API_KEY, RESEND_MOCK_MODE);
 
 // Inicia o scheduler de lembretes de consulta (só se Supabase disponível)
@@ -782,33 +782,41 @@ loadResendKeyFromDB();
 
 // ─── Endpoint: testar conexão Resend ────────────────────────────────────────
 app.post("/api/integrations/resend/test", requireAuth, requireAdmin, async (req, res) => {
-  const { apiKey } = req.body;
+  const { apiKey, to, from: fromOverride } = req.body;
   const keyToTest = apiKey || resendApiKey;
+  const toEmail   = to || "novitahealth@gmail.com";
+  const fromEmail = fromOverride || resendFrom;
 
   if (!keyToTest) {
     return res.status(400).json({ success: false, error: "Nenhuma API key fornecida" });
   }
 
   try {
-    const response = await fetch("https://api.resend.com/domains", {
-      method: "GET",
-      headers: { "Authorization": `Bearer ${keyToTest}` },
+    const response = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${keyToTest}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        from: fromEmail,
+        to: [toEmail],
+        subject: "Teste de Email — Novità Telemedicina",
+        html: `<p>Email de teste enviado com sucesso pelo painel admin da Novità Telemedicina.</p><p><small>Enviado em: ${new Date().toLocaleString("pt-BR")}</small></p>`,
+      }),
     });
 
+    const body = await response.json().catch(() => ({}));
+
     if (response.status === 401) {
-      return res.json({ success: false, error: "API key inválida" });
+      return res.json({ success: false, error: "API key inválida ou sem permissão de envio" });
     }
 
     if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
       return res.json({ success: false, error: body.message || `Erro HTTP ${response.status}` });
     }
 
-    const data = await response.json();
-    return res.json({
-      success: true,
-      domains: (data.data || []).map((d) => ({ name: d.name, status: d.status })),
-    });
+    return res.json({ success: true, id: body.id, to: toEmail });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }
@@ -829,8 +837,8 @@ app.get("/api/integrations/resend/status", requireAuth, requireAdmin, (_req, res
 app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_req, res) => {
   await loadResendKeyFromDB();
 
-  // Reinicializa o dispatcher com a nova chave
-  const mockMode = !resendApiKey || process.env.NODE_ENV === "development";
+  // Reinicializa o dispatcher com a nova chave (nunca mock se tiver chave)
+  const mockMode = !resendApiKey;
   dispatcher.init(resendApiKey, mockMode);
 
   res.json({ success: true, configured: Boolean(resendApiKey) });
