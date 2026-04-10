@@ -15,7 +15,7 @@ DECLARE
 BEGIN
   -- Admin user (legacy)
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (admin_id, 'authenticated', 'authenticated', 'admin@novita.com', crypt('Admin#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Admin Novita"}'::jsonb, now(), now())
+  VALUES (admin_id, 'authenticated', 'authenticated', 'admin@novita.com', crypt('Admin123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Admin Novita"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
 
   -- Novo Admin user (primary admin account)
@@ -37,7 +37,7 @@ BEGIN
 
   -- Doctor 1
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (doctor1_id, 'authenticated', 'authenticated', 'doctor1@novita.com', crypt('Doctor#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Dr. Carlos Silva"}'::jsonb, now(), now())
+  VALUES (doctor1_id, 'authenticated', 'authenticated', 'doctor1@novita.com', crypt('Doctor123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Dr. Carlos Silva"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
@@ -48,7 +48,7 @@ BEGIN
 
   -- Doctor 2
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (doctor2_id, 'authenticated', 'authenticated', 'doctor2@novita.com', crypt('Doctor#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Dra. Ana Costa"}'::jsonb, now(), now())
+  VALUES (doctor2_id, 'authenticated', 'authenticated', 'doctor2@novita.com', crypt('Doctor123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Dra. Ana Costa"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
@@ -59,7 +59,7 @@ BEGIN
 
   -- Support 1
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (support1_id, 'authenticated', 'authenticated', 'support1@novita.com', crypt('Support#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Suporte Novita 1"}'::jsonb, now(), now())
+  VALUES (support1_id, 'authenticated', 'authenticated', 'support1@novita.com', crypt('Support123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Suporte Novita 1"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
@@ -70,7 +70,7 @@ BEGIN
 
   -- Support 2
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (support2_id, 'authenticated', 'authenticated', 'support2@novita.com', crypt('Support#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Suporte Novita 2"}'::jsonb, now(), now())
+  VALUES (support2_id, 'authenticated', 'authenticated', 'support2@novita.com', crypt('Support123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Suporte Novita 2"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)
@@ -88,7 +88,7 @@ DECLARE
   patient_id uuid := gen_random_uuid();
 BEGIN
   INSERT INTO auth.users (id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
-  VALUES (patient_id, 'authenticated', 'authenticated', 'paciente@novita.com', crypt('Paciente#123', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Paciente Teste"}'::jsonb, now(), now())
+  VALUES (patient_id, 'authenticated', 'authenticated', 'paciente@novita.com', crypt('Paciente123!', gen_salt('bf', 10)), now(), '{"provider":"email","providers":["email"]}'::jsonb, '{"full_name":"Paciente Teste"}'::jsonb, now(), now())
   ON CONFLICT DO NOTHING;
   
   INSERT INTO auth.identities (provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at)

@@ -1,0 +1,73 @@
+<iframe id="iframe" height="800px" width="100%" title="Telemedicina" style="border: 0px"
+	allow="camera; microphone; clipboard-write;"></iframe>
+
+<script>
+	//v1.2
+	const iFrame = document.getElementById("iframe");
+	const appBaseUrl = "https://dev-app-assemed.azurewebsites.net";
+	const plataforma = "novita";
+	const exibirLogo = false;
+
+	function setIframeSource(customPath, customParams = "") {
+		let queryParams = `showLogo=${exibirLogo}&plataforma=${plataforma}`;
+
+		if (customParams)
+			queryParams += (`&${customParams}`);
+
+		iFrame.setAttribute("src", `${appBaseUrl}${customPath}?${queryParams}`);
+	}
+
+	// Recupera os parâmetros para alteração de link do iFrame, se houverem
+	const urlParams = new URLSearchParams(window.location.search);
+	const sala = urlParams.get('sala');
+	const rs = urlParams.get('rs');
+	const pa = urlParams.get('pa');
+	const menu = urlParams.get('menu');
+	const redirectUrl = urlParams.get('redirectUrl');
+	const ad = urlParams.get('ad');
+	const ag = urlParams.get('ag');
+	const vendedor = urlParams.get('vendedor');
+
+	if (redirectUrl != null) // Redireciona para o link fornecido
+		setIframeSource(`/${redirectUrl}`);
+	else if (sala != null) // Redireciona para o link da consulta
+		setIframeSource(`/sala-espera-externa/${sala}`);
+	else if (rs != null) // Redireciona para o link da recuperação de senha
+		setIframeSource(`/authentication/recuperar-senha/${rs}`);
+	else if (pa != null) // Redireciona para o link de ativacao de conta 
+		setIframeSource(`/authentication/bem-vindo/${pa}`);
+	else if (menu === "atendimento") // Redireciona para o a página do parâmetro
+		setIframeSource(`/atendimentos`);
+	else if (menu === "assinaturas") // Redireciona para o a página do parâmetro
+		setIframeSource(`/assinaturas`);
+	else if (menu === "cancelamento-conta") // Redireciona para a página de exclusão de dados
+		setIframeSource(`/editar-perfil/excluir-conta`);
+	else if (ad != null) // Redireciona para o link de detalhe do atendimento 
+		setIframeSource(`/atendimentos/detalhe/${ad}`);
+	else if (ag != null) // Redireciona para o link de detalhe do agendamento 
+		setIframeSource(`/agendamentos`, `ag=${ag}`);
+	else if (vendedor != null) // Redireciona para o link de cadastro do vendedor 
+		setIframeSource(`/authentication/desejo-me-cadastrar`, `idVendedor=${vendedor}`);
+	else { // Redireciona para o último link acessado ou para o link padrão do iFrame
+		const lastIframePath = sessionStorage.getItem("lastIframePath");
+		if (lastIframePath) {
+			setIframeSource(lastIframePath, "");
+		} else {
+			setIframeSource("/authentication/login");
+		}
+	}
+
+	window.addEventListener("message", (event) => {
+		if (event.data?.type === "iframe-url-change" && event.data.href) {
+			const fullUrl = `${event.data.href}`;
+			sessionStorage.setItem("lastIframePath", fullUrl);
+		}
+	});
+	window.addEventListener('message', (event) => {
+		if (event.origin !== appBaseUrl) return;
+
+		if (event.data?.type === 'redirect' && event.data.url) {
+			window.location.href = event.data.url;
+		}
+	});
+</script>

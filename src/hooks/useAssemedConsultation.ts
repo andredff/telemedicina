@@ -488,6 +488,106 @@ export function useAssemedConsultation() {
   );
 
   /**
+   * Fluxo direto de consulta imediata:
+   * 1. Autentica (login ou cadastro)
+   * 2. Cria o atendimento com Clínico Geral (id=1) sem carregar especialidades
+   */
+  const startImmediateConsultation = useCallback(
+    async (
+      cpf: string,
+      profile: ProfileData,
+      respostasAnamnese: AnamneseResposta[] = [],
+      exames: { arquivoBase64: string }[] = []
+    ): Promise<boolean> => {
+      const cleanCpf = cpf.replace(/\D/g, "");
+
+      setState((prev) => ({ ...prev, step: "authenticating", error: null, activeConsultation: null }));
+
+      try {
+        let accessToken: string;
+
+        const currentToken = assemedClient.getAccessToken();
+        if (currentToken && !assemedClient.isTokenExpired(currentToken)) {
+          accessToken = currentToken;
+        } else {
+          try {
+            const loginResponse = await assemedClient.login(cleanCpf);
+            accessToken = loginResponse.accessToken;
+          } catch (loginError: unknown) {
+            const isNotRegistered =
+              (loginError instanceof AssemedApiError &&
+                (loginError.statusCode === 404 ||
+                  loginError.statusCode === 401 ||
+                  (loginError.statusCode === 400 &&
+                    loginError.message.toLowerCase().includes("não cadastrado")))) ||
+              (loginError instanceof Error &&
+                (loginError.message.includes("404") ||
+                  loginError.message.includes("401") ||
+                  loginError.message.toLowerCase().includes("unauthorized") ||
+                  loginError.message.toLowerCase().includes("não cadastrado")));
+
+            if (!isNotRegistered) throw loginError;
+
+            setState((prev) => ({ ...prev, step: "registering" }));
+            const registerData = buildRegisterData(cleanCpf, profile);
+            await assemedClient.registerPatient(registerData);
+
+            try {
+              const { data: { user } } = await supabase.auth.getUser();
+              if (user) {
+                await supabase
+                  .from("profiles")
+                  .update({ email_telemedicina: registerData.email })
+                  .eq("id", user.id);
+              }
+            } catch { /* fire-and-forget */ }
+
+            setState((prev) => ({ ...prev, step: "authenticating" }));
+            const retryLogin = await assemedClient.login(cleanCpf);
+            accessToken = retryLogin.accessToken;
+          }
+
+          assemedClient.setAccessToken(accessToken);
+          assemedClient.setCpfPaciente(cleanCpf);
+        }
+
+        setState((prev) => ({ ...prev, step: "creating_consultation", accessToken }));
+
+        const decoded = assemedClient.decodeToken(accessToken);
+        if (!decoded?.pacienteId) throw new Error("Não foi possível obter o ID do paciente do token.");
+
+        const pacienteId = parseInt(decoded.pacienteId, 10);
+
+        const consultation = await assemedClient.createConsultation({
+          formatoAtendimento: 0,
+          tipoProfissional: 1,
+          especialidadeId: 1,
+          pacienteId,
+          respostasAnamnese,
+          exames,
+          pacienteToken: assemedClient.getGlobalPatientToken() || undefined,
+        });
+
+        if (consultation.pacienteToken) {
+          assemedClient.storePatientToken(consultation.id, consultation.pacienteToken);
+        }
+
+        setState((prev) => ({
+          ...prev,
+          step: "in_consultation",
+          activeConsultation: { ...consultation, especialidadeNome: "Clínico Geral" },
+        }));
+        return true;
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : "Erro ao iniciar consulta imediata";
+        setError(message);
+        return false;
+      }
+    },
+    []
+  );
+
+  /**
    * Carrega profissionais disponíveis para uma especialidade (fluxo de agendamento)
    */
   const loadAvailableProfessionals = useCallback(
@@ -790,6 +890,7 @@ export function useAssemedConsultation() {
     ...state,
     silentAuthenticate,
     startConsultationFlow,
+    startImmediateConsultation,
     createConsultation,
     createSpecialistConsultation,
     createScheduledConsultation,

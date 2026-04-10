@@ -21,11 +21,11 @@ import type { AnamneseResposta } from "@/integrations/assemed/types";
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const SINTOMAS_OPTIONS = [
-  { id: 1, label: "Dor no corpo",      icon: "🤕" },
-  { id: 2, label: "Dores articulares", icon: "🦴" },
-  { id: 3, label: "Dor lombar",        icon: "🔙" },
-  { id: 4, label: "Náuseas",           icon: "🤢" },
-  { id: 5, label: "Dor de garganta",   icon: "😮" },
+  { id: 1, label: "Dor no corpo" },
+  { id: 2, label: "Dores articulares" },
+  { id: 3, label: "Dor lombar" },
+  { id: 4, label: "Náuseas" },
+  { id: 5, label: "Dor de garganta" },
 ];
 
 async function fileToBase64(file: File): Promise<string> {
@@ -231,7 +231,6 @@ export function ConsultaWizardModal({
                             : "border-border bg-card text-foreground hover:border-primary/30 hover:bg-primary/5"
                         }`}
                       >
-                        <span className="text-base">{s.icon}</span>
                         <span className="flex-1 text-xs">{s.label}</span>
                         <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
                           checked ? "border-primary bg-primary" : "border-muted-foreground/30"
@@ -265,7 +264,6 @@ export function ConsultaWizardModal({
                             : "bg-white border-amber-300 text-amber-800 hover:bg-amber-100"
                         }`}
                       >
-                        <span>{s.icon}</span>
                         {s.label}
                       </button>
                     ))}
@@ -420,7 +418,6 @@ export function ConsultaWizardModal({
                       <div className="flex flex-wrap gap-1.5">
                         {sintomasMarcados.map((s) => (
                           <span key={s.id} className="text-xs bg-muted px-2 py-1 rounded-full flex items-center gap-1">
-                            <span>{s.icon}</span>
                             {s.label}
                             {data.sintomaForteId === s.id && (
                               <span className="text-amber-600 font-medium">(principal)</span>

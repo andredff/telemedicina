@@ -16,6 +16,7 @@ import {
   RefreshCw,
   Calendar,
   Ban,
+  ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -721,11 +722,6 @@ const Teleconsultas = () => {
   // Mapa de consultationId → URL do receituário (PDF)
   const [receituarioMap, setReceituarioMap] = useState<Record<number, string>>({});
 
-  // Dados coletados no wizard (anamnese + exames) para usar na criação do atendimento
-  const pendingAnamneseRef = useRef<{
-    respostasAnamnese: AnamneseResposta[];
-    exames: { arquivoBase64: string }[];
-  } | null>(null);
   const [selectedSpecialtyName, setSelectedSpecialtyName] = useState<string>("Consulta Imediata");
   const [pendingCreditId, setPendingCreditId] = useState<string | null>(null);
   const [activeConsultationCreditId, setActiveConsultationCreditId] = useState<string | null>(null); // Crédito usado na consulta ativa atual
@@ -783,6 +779,7 @@ const Teleconsultas = () => {
     error,
     silentAuthenticate,
     startConsultationFlow,
+    startImmediateConsultation,
     createConsultation,
     loadConsultations,
     cancelConsultation,
@@ -1346,33 +1343,6 @@ const Teleconsultas = () => {
     navigate("/auth");
   };
 
-  // ── Auto-select clínico geral when specialties are loaded ──────────────────
-  // Used for direct consultation flow (without modal)
-  const [isAutoSelecting, setIsAutoSelecting] = useState(false);
-
-  useEffect(() => {
-    // When specialties are loaded and we started a new consultation flow, auto-select clínico geral
-    if (step === "selecting_specialty" && specialties.length > 0 && isAutoSelecting) {
-      // Find "Clínico Geral" (case insensitive)
-      const clinicoGeral = specialties.find((s) => {
-        const nome = s.nome.toLowerCase();
-        return nome.includes("cl") && nome.includes("geral");
-      });
-
-      const pending = pendingAnamneseRef.current;
-      if (clinicoGeral) {
-        setSelectedSpecialtyName("Clínico Geral");
-        createConsultation({ ...clinicoGeral, id: 1, nome: "Clínico Geral" }, pending?.respostasAnamnese, pending?.exames);
-      } else if (specialties.length > 0) {
-        // Fallback: força id 1 e nome 'Clínico Geral' mesmo se não encontrar
-        setSelectedSpecialtyName("Clínico Geral");
-        createConsultation({ ...specialties[0], id: 1, nome: "Clínico Geral" }, pending?.respostasAnamnese, pending?.exames);
-      }
-      
-      setIsAutoSelecting(false);
-    }
-  }, [step, specialties, isAutoSelecting, createConsultation]);
-
   // Ref para lembrar qual crédito usar quando o wizard completar
   const pendingCreditForWizardRef = useRef<string | null>(null);
 
@@ -1452,8 +1422,6 @@ const Teleconsultas = () => {
   ) => {
     if (!profile) return;
 
-    // Armazena dados da anamnese para uso em createConsultation
-    pendingAnamneseRef.current = { respostasAnamnese, exames };
     setShowWizardModal(false);
 
     const cpf = profile.cpf.replace(/\D/g, "");
@@ -1473,8 +1441,7 @@ const Teleconsultas = () => {
       setAvailableCredits((prev) => prev.filter((c) => c.id !== creditId));
     }
 
-    setIsAutoSelecting(true);
-    await startConsultationFlow(cpf, profile);
+    await startImmediateConsultation(cpf, profile, respostasAnamnese, exames);
   };
 
   // Usa um crédito existente para iniciar consulta — abre o wizard
