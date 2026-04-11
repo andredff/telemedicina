@@ -234,8 +234,13 @@ const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
 const emailTemplates = require("./notifications/templates");
 
-const RESEND_MOCK_MODE = !process.env.RESEND_API_KEY;
-dispatcher.init(process.env.RESEND_API_KEY, RESEND_MOCK_MODE);
+// resendApiKey / resendFrom são declarados em definitivo na seção "Resend Email Proxy"
+// (linha ~756), mas inicializamos o dispatcher aqui com os valores de env para o boot.
+const _bootResendKey  = process.env.RESEND_API_KEY || "";
+const _bootResendFrom = process.env.RESEND_FROM || process.env.VITE_RESEND_FROM || "Novità Telemedicina <onboarding@resend.dev>";
+
+const RESEND_MOCK_MODE = !_bootResendKey;
+dispatcher.init(_bootResendKey, RESEND_MOCK_MODE, _bootResendFrom);
 
 // Inicia o scheduler de lembretes de consulta (só se Supabase disponível)
 if (supabase) {
@@ -839,7 +844,7 @@ app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_r
 
   // Reinicializa o dispatcher com a nova chave (nunca mock se tiver chave)
   const mockMode = !resendApiKey;
-  dispatcher.init(resendApiKey, mockMode);
+  dispatcher.init(resendApiKey, mockMode, resendFrom);
 
   res.json({ success: true, configured: Boolean(resendApiKey) });
 });

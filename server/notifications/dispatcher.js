@@ -57,9 +57,10 @@ let _queue = null;
  * Deve ser chamado uma vez na inicialização do servidor.
  * @param {string}  resendApiKey
  * @param {boolean} [mockMode=false]  true = apenas loga, não envia
+ * @param {string}  [fromAddress]     endereço remetente (sobrescreve RESEND_FROM)
  */
-function init(resendApiKey, mockMode = false) {
-  const senderFn = buildSenderFn(resendApiKey, mockMode);
+function init(resendApiKey, mockMode = false, fromAddress) {
+  const senderFn = buildSenderFn(resendApiKey, mockMode, fromAddress);
   _queue = new EmailQueue(senderFn);
 
   const mode = mockMode || !resendApiKey ? "MOCK" : "RESEND";
@@ -106,8 +107,11 @@ function getQueue() {
 module.exports = { init, dispatch, queueStatus, getQueue };
 
 // ─── Função de envio ──────────────────────────────────────────────────────────
-function buildSenderFn(resendApiKey, mockMode) {
-  const FROM = process.env.RESEND_FROM || "Novità Telemedicina <noreply@novitahomecare.com.br>";
+function buildSenderFn(resendApiKey, mockMode, fromAddress) {
+  const FROM = fromAddress
+    || process.env.RESEND_FROM
+    || process.env.VITE_RESEND_FROM
+    || "Novità Telemedicina <onboarding@resend.dev>";
 
   // Modo Mailpit: env var MAILPIT_SMTP_PORT definida (ou porta padrão do Supabase local)
   const mailpitPort = parseInt(process.env.MAILPIT_SMTP_PORT || "54325", 10);
