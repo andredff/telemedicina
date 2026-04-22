@@ -232,20 +232,20 @@ const CheckoutConsultation = () => {
       <div className="min-h-screen bg-background">
         <Header isAuthenticated onLogout={handleLogout} />
 
-        <main className="container mx-auto px-4 py-8">
+        <main className="container mx-auto px-4 sm:px-6 py-8 sm:py-12">
           <div className="max-w-md mx-auto">
             <Card className={paymentResult.success ? "border-green-200" : "border-red-200"}>
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 px-5 sm:px-6 pb-6">
                 <div className="text-center">
                   {paymentResult.success ? (
-                    <CheckCircle className="h-16 w-16 text-green-500 mx-auto mb-4" />
+                    <CheckCircle className="h-14 w-14 sm:h-16 sm:w-16 text-green-500 mx-auto mb-4" />
                   ) : (
-                    <XCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+                    <XCircle className="h-14 w-14 sm:h-16 sm:w-16 text-red-500 mx-auto mb-4" />
                   )}
-                  <h2 className="text-xl font-heading font-bold mb-2">
+                  <h2 className="text-lg sm:text-xl font-heading font-bold mb-2">
                     {paymentResult.success ? "Pagamento Aprovado!" : "Pagamento Não Aprovado"}
                   </h2>
-                  <p className="text-muted-foreground mb-6">
+                  <p className="text-sm sm:text-base text-muted-foreground mb-6">
                     {paymentResult.message}
                   </p>
                   {paymentResult.success && paymentResult.redirectPath ? (
@@ -280,122 +280,135 @@ const CheckoutConsultation = () => {
     <div className="min-h-screen bg-background">
       <Header isAuthenticated onLogout={handleLogout} />
 
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 sm:px-6 py-6 sm:py-10">
         <BackLink to="/teleconsultas" label="Voltar às Teleconsultas" />
-        <div className="max-w-2xl mx-auto">
-          <div className="mb-8 text-center">
-            <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
+
+        <div className="mx-auto max-w-5xl">
+          <div className="mb-6 sm:mb-10 text-center px-2">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground mb-2 tracking-tight">
               Comprar Consultas Avulsas
             </h1>
-            <p className="text-muted-foreground">
+            <p className="text-sm sm:text-base text-muted-foreground">
               Adquira consultas e use quando precisar
             </p>
           </div>
 
-          <div className="grid gap-6">
-            {/* Resumo da consulta */}
-            <Card>
-              <CardHeader>
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                    {consultationType.id === "clinico_geral" ? (
-                      <Stethoscope className="h-6 w-6 text-primary" />
-                    ) : (
-                      <Video className="h-6 w-6 text-primary" />
-                    )}
-                  </div>
-                  <div>
-                    <CardTitle className="text-lg">{consultationType.name}</CardTitle>
-                    <CardDescription>{consultationType.description}</CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Preço unitário */}
-                <div className="flex justify-between items-center py-2">
-                  <span className="text-muted-foreground">Preço unitário</span>
-                  <span className="font-medium">
-                    R$ {consultationType.price.toFixed(2).replace(".", ",")}
-                  </span>
-                </div>
-                
-                {/* Quantidade */}
-                <div className="flex justify-between items-center py-2 border-t">
-                  <span className="text-muted-foreground">Quantidade</span>
-                  <div className="flex items-center gap-3">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      disabled={quantity <= 1}
+          <div className="grid gap-5 sm:gap-6 lg:grid-cols-[1fr_380px] lg:gap-8 items-start">
+            {/* Coluna: formulário de pagamento */}
+            <div className="order-2 lg:order-1">
+              <Card>
+                <CardHeader className="pb-4">
+                  <CardTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    <CreditCard className="h-5 w-5 shrink-0" />
+                    Pagamento com Cartão
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4 px-4 sm:px-6">
+                  {/* Parcelas */}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Parcelas</label>
+                    <Select
+                      value={installments}
+                      onValueChange={setInstallments}
                     >
-                      <Minus className="h-4 w-4" />
-                    </Button>
-                    <span className="w-8 text-center font-bold text-lg">{quantity}</span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="h-10 w-10"
-                      onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                      disabled={quantity >= 10}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
+                      <SelectTrigger className="w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">
+                          1x de R$ {totalPrice.toFixed(2).replace(".", ",")} (sem juros)
+                        </SelectItem>
+                        <SelectItem value="2">
+                          2x de R$ {(totalPrice / 2).toFixed(2).replace(".", ",")} (sem juros)
+                        </SelectItem>
+                        <SelectItem value="3">
+                          3x de R$ {(totalPrice / 3).toFixed(2).replace(".", ",")} (sem juros)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                </div>
-                
-                {/* Total */}
-                <div className="flex justify-between items-center py-3 border-t bg-muted/50 -mx-6 px-6 rounded-b-lg">
-                  <span className="font-medium">Total</span>
-                  <span className="text-2xl font-bold text-foreground">
+
+                  {/* Formulário do cartão */}
+                  <CreditCardForm
+                    onSubmit={handleCreditCardSubmit}
+                    isLoading={isProcessing}
+                    submitLabel="Confirmar Pagamento"
+                  />
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Coluna: resumo (sticky no desktop) */}
+            <div className="order-1 lg:order-2 lg:sticky lg:top-24">
+              <Card className="overflow-hidden">
+                <CardHeader className="pb-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                      {consultationType.id === "clinico_geral" ? (
+                        <Stethoscope className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                      ) : (
+                        <Video className="h-5 w-5 sm:h-6 sm:w-6 text-primary" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <CardTitle className="text-base sm:text-lg leading-snug break-words">
+                        {consultationType.name}
+                      </CardTitle>
+                      <CardDescription className="text-xs sm:text-sm mt-1">
+                        {consultationType.description}
+                      </CardDescription>
+                    </div>
+                  </div>
+                </CardHeader>
+                <CardContent className="px-4 sm:px-6 pb-0">
+                  {/* Preço unitário */}
+                  <div className="flex justify-between items-center py-3 text-sm sm:text-base">
+                    <span className="text-muted-foreground">Preço unitário</span>
+                    <span className="font-medium">
+                      R$ {consultationType.price.toFixed(2).replace(".", ",")}
+                    </span>
+                  </div>
+
+                  {/* Quantidade */}
+                  <div className="flex justify-between items-center py-3 border-t gap-3">
+                    <span className="text-sm sm:text-base text-muted-foreground">Quantidade</span>
+                    <div className="flex items-center gap-2 sm:gap-3">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 sm:h-10 sm:w-10 shrink-0"
+                        onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                        disabled={quantity <= 1}
+                        aria-label="Diminuir quantidade"
+                      >
+                        <Minus className="h-4 w-4" />
+                      </Button>
+                      <span className="w-6 sm:w-8 text-center font-bold text-base sm:text-lg tabular-nums">
+                        {quantity}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-9 w-9 sm:h-10 sm:w-10 shrink-0"
+                        onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                        disabled={quantity >= 10}
+                        aria-label="Aumentar quantidade"
+                      >
+                        <Plus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+
+                {/* Total — rodapé destacado, sem hack de negative margin */}
+                <div className="flex justify-between items-center gap-3 px-4 sm:px-6 py-4 border-t bg-muted/60">
+                  <span className="text-sm sm:text-base font-medium">Total</span>
+                  <span className="text-xl sm:text-2xl font-bold text-foreground tabular-nums">
                     R$ {totalPrice.toFixed(2).replace(".", ",")}
                   </span>
                 </div>
-              </CardContent>
-            </Card>
-
-            {/* Formulário de pagamento */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <CreditCard className="h-5 w-5" />
-                  Pagamento com Cartão
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Parcelas */}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Parcelas</label>
-                  <Select
-                    value={installments}
-                    onValueChange={setInstallments}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="1">
-                        1x de R$ {totalPrice.toFixed(2).replace(".", ",")} (sem juros)
-                      </SelectItem>
-                      <SelectItem value="2">
-                        2x de R$ {(totalPrice / 2).toFixed(2).replace(".", ",")} (sem juros)
-                      </SelectItem>
-                      <SelectItem value="3">
-                        3x de R$ {(totalPrice / 3).toFixed(2).replace(".", ",")} (sem juros)
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {/* Formulário do cartão */}
-                <CreditCardForm
-                  onSubmit={handleCreditCardSubmit}
-                  isLoading={isProcessing}
-                  submitLabel="Confirmar Pagamento"
-                />
-              </CardContent>
-            </Card>
+              </Card>
+            </div>
           </div>
         </div>
       </main>

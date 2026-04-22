@@ -1747,6 +1747,22 @@ const Teleconsultas = () => {
           </Alert>
         )}
 
+        {/* Loading overlay após o wizard (autenticando/criando consulta) */}
+        {!showSpecialtyModal && (step === "authenticating" || step === "registering" || step === "creating_consultation") && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+              <p className="font-medium text-foreground">
+                {step === "registering" ? "Cadastrando paciente..." :
+                 step === "authenticating" ? "Autenticando..." :
+                 "Iniciando consulta..."}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Specialty selection modal */}
         <Dialog
           open={showSpecialtyModal}
