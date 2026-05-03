@@ -76,15 +76,29 @@ const docsRoutesPlugin = () => ({
   },
   closeBundle() {
     const docsDir = path.resolve(__dirname, "docs");
-    const visualCompareDir = path.join(docsDir, "visual-compare");
     const distDocsDir = path.resolve(__dirname, "dist", "docs");
 
-    copyDocsRouteFiles(docsDir, distDocsDir, new Set([".html"]));
-    copyDocsRouteFiles(
-      visualCompareDir,
-      path.join(distDocsDir, "visual-compare"),
-      new Set([".html", ".png", ".jpg", ".jpeg", ".webp", ".svg"]),
-    );
+    // Copy all files from docs directory recursively
+    const copyAllDocs = (source: string, target: string) => {
+      if (!existsSync(source)) {
+        return;
+      }
+
+      mkdirSync(target, { recursive: true });
+
+      for (const entry of readdirSync(source, { withFileTypes: true })) {
+        const sourcePath = path.join(source, entry.name);
+        const targetPath = path.join(target, entry.name);
+
+        if (entry.isDirectory()) {
+          copyAllDocs(sourcePath, targetPath);
+        } else if (entry.isFile()) {
+          copyFileSync(sourcePath, targetPath);
+        }
+      }
+    };
+
+    copyAllDocs(docsDir, distDocsDir);
   },
 });
 
