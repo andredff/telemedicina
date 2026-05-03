@@ -236,8 +236,10 @@ const emailTemplates = require("./notifications/templates");
 const {
   buildCorreiosConfig,
   getCorreiosTrackingUrl,
+  isCorreiosShippingConfigured,
   isCorreiosTrackingConfigured,
   mapTrackingToOrderStatus,
+  queryCorreiosShippingQuote,
   queryCorreiosTracking,
   validateCorreiosTrackingCode,
 } = require("./tracking/correios");
@@ -861,10 +863,12 @@ app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_r
 app.get("/api/integrations/correios/status", requireAuth, requireAdmin, async (_req, res) => {
   const config = await getCorreiosTrackingSettings();
   const configured = isCorreiosTrackingConfigured(config);
+  const shippingConfigured = isCorreiosShippingConfigured(config);
 
   res.json({
     enabled: config.enabled,
     configured,
+    shippingConfigured,
     source: configured ? config.source : "none",
     apiBaseUrl: config.apiBaseUrl,
     trackingPollMinutes: config.trackingPollMinutes,
@@ -874,7 +878,25 @@ app.get("/api/integrations/correios/status", requireAuth, requireAdmin, async (_
     hasApiPassword: Boolean(config.apiPassword),
     hasPostingCard: Boolean(config.postingCard),
     originCep: config.originCep || "",
+    pacServiceCode: config.pacServiceCode,
+    sedexServiceCode: config.sedexServiceCode,
   });
+});
+
+app.post("/api/correios/shipping-quote", notificationLimiter, requireAuth, async (req, res) => {
+  try {
+    const config = await getCorreiosTrackingSettings();
+    const quote = await queryCorreiosShippingQuote(req.body || {}, config);
+    return res.status(quote.success === false ? 400 : 200).json(quote);
+  } catch (err) {
+    console.error("[Correios] Erro ao calcular frete:", err.message);
+    return res.status(502).json({
+      success: false,
+      configured: true,
+      options: [],
+      message: safeErrorMessage(err),
+    });
+  }
 });
 
 app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
@@ -983,6 +1005,8 @@ async function getCorreiosTrackingSettings() {
     ...envConfig,
     trackingPollMinutes: Number(process.env.CORREIOS_TRACKING_POLL_MINUTES || 60),
     originCep: process.env.CORREIOS_ORIGIN_CEP || "",
+    pacServiceCode: process.env.CORREIOS_PAC_SERVICE_CODE || envConfig.pacServiceCode,
+    sedexServiceCode: process.env.CORREIOS_SEDEX_SERVICE_CODE || envConfig.sedexServiceCode,
     source: isCorreiosTrackingConfigured(envConfig) ? "env" : "none",
   };
 
@@ -1011,6 +1035,8 @@ async function getCorreiosTrackingSettings() {
       trackingResultType: value.trackingResultType || fallback.trackingResultType,
       trackingPollMinutes: Number(value.trackingPollMinutes || fallback.trackingPollMinutes || 60),
       originCep: value.originCep || fallback.originCep,
+      pacServiceCode: value.pacServiceCode || fallback.pacServiceCode,
+      sedexServiceCode: value.sedexServiceCode || fallback.sedexServiceCode,
       source: hasPanelCredentials ? "site_settings" : fallback.source,
     };
 

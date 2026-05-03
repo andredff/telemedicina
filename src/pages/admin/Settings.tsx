@@ -75,6 +75,8 @@ interface SettingsData {
     trackingPollMinutes: number;
     trackingResultType: string;
     originCep: string;
+    pacServiceCode: string;
+    sedexServiceCode: string;
   };
 }
 
@@ -131,6 +133,8 @@ const defaultSettings: SettingsData = {
     trackingPollMinutes: 60,
     trackingResultType: 'T',
     originCep: '',
+    pacServiceCode: '03298',
+    sedexServiceCode: '03220',
   },
 };
 
@@ -155,6 +159,9 @@ export default function AdminSettings() {
     hasApiPassword: boolean;
     hasPostingCard: boolean;
     originCep: string;
+    shippingConfigured: boolean;
+    pacServiceCode: string;
+    sedexServiceCode: string;
   } | null>(null);
   const [testEmailTo, setTestEmailTo] = useState('novitahealth@gmail.com');
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -632,7 +639,7 @@ export default function AdminSettings() {
                 <div className="flex items-center justify-between gap-4">
                   <div>
                     <CardTitle className="flex items-center gap-2">
-                      API Rastro dos Correios
+                      Correios: Preço, Prazo e Rastro
                       {correiosStatus && (
                         correiosStatus.configured ? (
                           <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
@@ -646,7 +653,7 @@ export default function AdminSettings() {
                       )}
                     </CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Credenciais usadas para validar códigos, consultar eventos e atualizar pedidos automaticamente.
+                      Credenciais usadas para calcular frete, validar códigos, consultar eventos e atualizar pedidos automaticamente.
                     </p>
                   </div>
                   <Button variant="outline" size="sm" onClick={fetchCorreiosStatus}>
@@ -665,6 +672,8 @@ export default function AdminSettings() {
                     }
                     <br />
                     <strong>Consulta automática:</strong> {correiosStatus.enabled ? 'habilitada' : 'desabilitada'} · a cada {correiosStatus.trackingPollMinutes || settings.correios.trackingPollMinutes} min
+                    <br />
+                    <strong>Cálculo de frete:</strong> {correiosStatus.shippingConfigured ? 'habilitado' : 'aguardando CEP de origem e credenciais'}
                   </div>
                 )}
 
@@ -789,6 +798,26 @@ export default function AdminSettings() {
                       value={settings.correios.originCep}
                       onChange={(e) => updateSetting('correios', 'originCep', e.target.value.replace(/\D/g, '').slice(0, 8))}
                       placeholder="00000000"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosPacServiceCode">Código PAC</Label>
+                    <Input
+                      id="correiosPacServiceCode"
+                      value={settings.correios.pacServiceCode}
+                      onChange={(e) => updateSetting('correios', 'pacServiceCode', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="03298"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosSedexServiceCode">Código SEDEX</Label>
+                    <Input
+                      id="correiosSedexServiceCode"
+                      value={settings.correios.sedexServiceCode}
+                      onChange={(e) => updateSetting('correios', 'sedexServiceCode', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="03220"
                       inputMode="numeric"
                     />
                   </div>

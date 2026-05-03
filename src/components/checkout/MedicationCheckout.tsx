@@ -89,6 +89,10 @@ export function MedicationCheckout({
   // Calculate shipping based on selected option and admin config
   const shipping = selectedShipping && shippingConfig ? applyFreeShipping(selectedShipping.price, subtotal, shippingConfig) : 0;
   const total = subtotal + shipping;
+  const getShippingDeadlineLabel = (option: ShippingOption) => {
+    if (option.deadline <= 1) return "1 dia útil";
+    return `${option.deadline} dias úteis`;
+  };
 
   // Calculate shipping when address is set
   useEffect(() => {
@@ -105,11 +109,15 @@ export function MedicationCheckout({
           setShippingConfig(config);
 
           // Auto-select first option or cheapest
-          if (options.length > 0 && !selectedShipping) {
+          if (options.length > 0) {
             const cheapest = options.reduce((prev, curr) =>
               curr.price < prev.price ? curr : prev
             );
-            setSelectedShipping(cheapest);
+            setSelectedShipping((current) =>
+              current && options.some((option) => option.id === current.id)
+                ? current
+                : cheapest
+            );
           }
         } catch (error) {
           logger.error("Error calculating shipping:", error);
@@ -121,7 +129,7 @@ export function MedicationCheckout({
     };
 
     fetchShipping();
-  }, [deliveryAddress, items.length, subtotal]);
+  }, [deliveryAddress, allItems.length, subtotal]);
 
   const generateOrderId = () => {
     return `MED-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -583,7 +591,7 @@ export function MedicationCheckout({
                                   <span>
                                     <span className="font-medium">{option.name}</span>
                                     <span className="text-muted-foreground text-xs ml-1">
-                                      ({shippingConfig ? `${shippingConfig.minDeliveryDays} a ${shippingConfig.maxDeliveryDays}` : "1 a 2"} dias úteis)
+                                      ({getShippingDeadlineLabel(option)})
                                     </span>
                                   </span>
                                   <span className={finalPrice === 0 ? "text-green-600 font-medium" : ""}>
@@ -692,7 +700,7 @@ export function MedicationCheckout({
                       <div>
                         <span className="font-medium">{selectedShipping.name}</span>
                         <span className="text-muted-foreground text-xs ml-1">
-                          ({shippingConfig ? `${shippingConfig.minDeliveryDays} a ${shippingConfig.maxDeliveryDays}` : "1 a 2"} dias úteis)
+                          ({getShippingDeadlineLabel(selectedShipping)})
                         </span>
                       </div>
                     </div>

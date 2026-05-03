@@ -105,13 +105,16 @@ export default function AdminReports() {
       [''],
       ['Métricas Financeiras'],
       ['MRR', formatCurrency(financialMetrics?.mrr || 0)],
+      ['Receita Avulsa de Pedidos', formatCurrency(financialMetrics?.oneOffRevenue || 0)],
+      ['Receita Consolidada', formatCurrency(financialMetrics?.totalRevenue || 0)],
       ['ARR', formatCurrency(financialMetrics?.arr || 0)],
-      ['Ticket Médio', formatCurrency(financialMetrics?.averageTicket || 0)],
+      ['Ticket Médio Consolidado', formatCurrency(financialMetrics?.averageTicket || 0)],
+      ['Ticket Médio de Pedido', formatCurrency(financialMetrics?.averageOrderTicket || 0)],
       ['Taxa de Churn', formatPercent(financialMetrics?.churnRate || 0)],
       [''],
       ['Histórico Mensal'],
-      ['Mês', 'MRR', 'Assinantes', 'Churn (%)', 'Novos Assinantes'],
-      ...monthlyHistory.map(m => [m.month, m.mrr, m.subscribers, m.churn, m.newSubscribers])
+      ['Mês', 'MRR', 'Pedidos Avulsos (R$)', 'Receita Total (R$)', 'Pedidos', 'Assinantes', 'Churn (%)', 'Novos Assinantes'],
+      ...monthlyHistory.map(m => [m.month, m.mrr, m.oneOffRevenue, m.totalRevenue, m.orders, m.subscribers, m.churn, m.newSubscribers])
     ].map(row => row.join(',')).join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv' });
@@ -135,7 +138,7 @@ export default function AdminReports() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Painel Financeiro</h1>
-        <p className="text-gray-600">Acompanhe MRR, churn, inadimplência, ticket médio e distribuição de planos</p>
+        <p className="text-gray-600">Acompanhe MRR, pedidos avulsos, churn, inadimplência, ticket médio e distribuição de planos</p>
       </div>
 
       {/* Controls */}
@@ -197,11 +200,11 @@ export default function AdminReports() {
         
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Receita Total (MRR)</CardTitle>
+            <CardTitle className="text-sm font-medium">Receita Consolidada</CardTitle>
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(financialMetrics?.mrr || 0)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(financialMetrics?.totalRevenue || 0)}</div>
             <p className="text-xs text-muted-foreground">
               {financialMetrics && (financialMetrics.mrrGrowth >= 0 ? (
                 <span className="text-green-600 flex items-center gap-1">
@@ -213,7 +216,7 @@ export default function AdminReports() {
                   <TrendingDown className="h-3 w-3" />
                   {formatPercent(financialMetrics.mrrGrowth)}
                 </span>
-              ))} vs mês anterior
+              ))} MRR vs mês anterior
             </p>
           </CardContent>
         </Card>
@@ -223,7 +226,7 @@ export default function AdminReports() {
       <div className="grid gap-6 md:grid-cols-2">
         <Card>
           <CardHeader>
-            <CardTitle>Evolução do MRR</CardTitle>
+            <CardTitle>Evolução da Receita</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="h-[300px]">
@@ -234,11 +237,22 @@ export default function AdminReports() {
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="colorOneOffRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis tickFormatter={(value) => `R$${(value / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(value: number) => [formatCurrency(value), 'MRR']} />
+                  <Tooltip formatter={(value: number, name: string) => [formatCurrency(value), name]} />
+                  <Area
+                    type="monotone"
+                    dataKey="totalRevenue"
+                    stroke="#0f172a"
+                    fillOpacity={0}
+                    name="Receita total"
+                  />
                   <Area
                     type="monotone"
                     dataKey="mrr"
@@ -246,6 +260,14 @@ export default function AdminReports() {
                     fillOpacity={1}
                     fill="url(#colorMrr)"
                     name="MRR"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="oneOffRevenue"
+                    stroke="#3b82f6"
+                    fillOpacity={1}
+                    fill="url(#colorOneOffRevenue)"
+                    name="Pedidos avulsos"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -362,7 +384,7 @@ export default function AdminReports() {
               
               <div>
                 <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Ticket Médio</span>
+                  <span className="text-sm font-medium">Ticket Médio Consolidado</span>
                   <span className="text-sm font-medium">{formatCurrency(financialMetrics?.averageTicket || 0)}</span>
                 </div>
                 <div className="w-full bg-gray-200 rounded-full h-3">
@@ -380,7 +402,7 @@ export default function AdminReports() {
           <CardTitle>Resumo Financeiro</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="p-4 bg-green-50 rounded-lg border border-green-200">
               <p className="text-sm text-green-600 font-medium">MRR (Receita Recorrente)</p>
               <p className="text-2xl font-bold text-green-700">{formatCurrency(financialMetrics?.mrr || 0)}</p>
@@ -394,12 +416,18 @@ export default function AdminReports() {
               <p className="text-2xl font-bold text-blue-700">{formatCurrency(financialMetrics?.arr || 0)}</p>
               <p className="text-xs text-blue-600 mt-1">Projeção baseada no MRR</p>
             </div>
+
+            <div className="p-4 bg-sky-50 rounded-lg border border-sky-200">
+              <p className="text-sm text-sky-600 font-medium">Pedidos Avulsos</p>
+              <p className="text-2xl font-bold text-sky-700">{formatCurrency(financialMetrics?.oneOffRevenue || 0)}</p>
+              <p className="text-xs text-sky-600 mt-1">{financialMetrics?.oneOffOrders || 0} pedidos no mês</p>
+            </div>
             
             <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
-              <p className="text-sm text-purple-600 font-medium">Novos Assinantes</p>
-              <p className="text-2xl font-bold text-purple-700">+{financialMetrics?.newSubscribersThisMonth || 0}</p>
+              <p className="text-sm text-purple-600 font-medium">Receita Consolidada</p>
+              <p className="text-2xl font-bold text-purple-700">{formatCurrency(financialMetrics?.totalRevenue || 0)}</p>
               <p className="text-xs text-purple-600 mt-1">
-                Crescimento líquido: {financialMetrics?.netGrowth || 0}
+                MRR + pedidos avulsos do mês
               </p>
             </div>
           </div>

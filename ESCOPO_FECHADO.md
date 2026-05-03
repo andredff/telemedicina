@@ -116,7 +116,7 @@ Modulo Medicamento em Casa
 
 Painel administrativo de gestao
 
-- Dashboard financeiro: READY (painel dedicado em /admin/financeiro; usa Supabase com fallback mock; MRR, churn, inadimplencia, ticket medio, distribuicao de planos e exportacao CSV) (src/pages/admin/Reports.tsx, src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
+- Dashboard financeiro: READY (painel dedicado em /admin/financeiro; usa Supabase com fallback mock; MRR, churn, inadimplencia, pedidos avulsos, receita consolidada, ticket medio, distribuicao de planos e exportacao CSV) (src/pages/admin/Reports.tsx, src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
 - Gestao de pedidos: READY (status persiste via AdminQueries, rastreio/notificacoes funcionais e realtime de status conectado no OrderTracking) (src/pages/admin/Orders.tsx, src/components/OrderTracking.tsx, src/hooks/useOrderSubscription.ts).
 
 Integracoes externas
@@ -124,7 +124,7 @@ Integracoes externas
 - Cielo (pagamentos): READY (mock automatico quando sem credenciais).
 - Assemed (telemedicina): READY (mock automatico quando sem credenciais).
 - Memed (receitas digitais): READY (mock client criado; integracao real a definir quando credenciais disponiveis) (src/integrations/memed/).
-- Correios (CEP): READY (ViaCEP para consulta de endereco) (src/integrations/correios/).
+- Correios (CEP, frete e rastreio): READY (ViaCEP para consulta de endereco; Preco/Prazo/Rastro via backend com credenciais configuraveis no admin e fallback operacional enquanto o cliente nao cadastra as chaves) (src/integrations/correios/, server/tracking/correios.js).
 
 Pontos que dependem de configuracao externa (nao bloqueiam MVP)
 

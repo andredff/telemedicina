@@ -286,8 +286,8 @@ export default function AdminDashboard() {
         {/* Gráfico de MRR ao longo do tempo */}
         <Card>
           <CardHeader>
-            <CardTitle>Evolução do MRR</CardTitle>
-            <CardDescription>Receita recorrente mensal</CardDescription>
+            <CardTitle>Evolução da Receita</CardTitle>
+            <CardDescription>Receita recorrente e pedidos avulsos</CardDescription>
           </CardHeader>
           <CardContent className="pl-2">
             <div className="h-[300px]">
@@ -298,6 +298,10 @@ export default function AdminDashboard() {
                       <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
                       <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
                     </linearGradient>
+                    <linearGradient id="colorOneOffRevenue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                    </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
@@ -305,7 +309,14 @@ export default function AdminDashboard() {
                     tickFormatter={(value) => `R$${(value / 1000).toFixed(0)}k`}
                   />
                   <Tooltip
-                    formatter={(value: number) => [formatCurrency(value), 'MRR']}
+                    formatter={(value: number, name: string) => [formatCurrency(value), name]}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="totalRevenue"
+                    stroke="#0f172a"
+                    fillOpacity={0}
+                    name="Receita total"
                   />
                   <Area
                     type="monotone"
@@ -314,6 +325,14 @@ export default function AdminDashboard() {
                     fillOpacity={1}
                     fill="url(#colorMrr)"
                     name="MRR"
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="oneOffRevenue"
+                    stroke="#3b82f6"
+                    fillOpacity={1}
+                    fill="url(#colorOneOffRevenue)"
+                    name="Pedidos avulsos"
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -392,23 +411,25 @@ export default function AdminDashboard() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
-            <Percent className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Receita Avulsa</CardTitle>
+            <ShoppingCart className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(financialMetrics?.averageTicket || 0)}</div>
-            <p className="text-xs text-muted-foreground">Valor médio por assinante</p>
+            <div className="text-2xl font-bold">{formatCurrency(financialMetrics?.oneOffRevenue || 0)}</div>
+            <p className="text-xs text-muted-foreground">
+              {financialMetrics?.oneOffOrders || 0} pedidos no mês
+            </p>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Assinantes Inativos</CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Ticket Médio</CardTitle>
+            <Percent className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{financialMetrics?.inactiveSubscribers || 0}</div>
-            <p className="text-xs text-muted-foreground">Assinaturas pausadas ou canceladas</p>
+            <div className="text-2xl font-bold">{formatCurrency(financialMetrics?.averageTicket || 0)}</div>
+            <p className="text-xs text-muted-foreground">Assinaturas e pedidos avulsos</p>
           </CardContent>
         </Card>
       </div>

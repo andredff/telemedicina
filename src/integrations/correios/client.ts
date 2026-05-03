@@ -5,6 +5,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { getAuthHeaders } from "@/lib/authHeaders";
 
 export interface ViaCepResponse {
   cep: string;
@@ -37,6 +38,9 @@ export interface ShippingOption {
   price: number;
   deadline: number; // days
   carrier: string;
+  serviceCode?: string;
+  source?: "correios_api" | "admin_config" | "fallback";
+  estimatedDelivery?: string | null;
 }
 
 export interface ShippingCalculationParams {
@@ -57,6 +61,12 @@ export interface PackageDimensions {
 }
 
 const VIA_CEP_BASE_URL = "https://viacep.com.br/ws";
+
+function getApiBaseUrl(): string {
+  return import.meta.env.DEV
+    ? ""
+    : (import.meta.env.VITE_LOCAL_SERVER_URL || "");
+}
 
 // Average package dimensions for medications (in cm)
 const MEDICATION_PACKAGE: PackageDimensions = {
@@ -307,18 +317,47 @@ export async function calculateCartShipping(
   cartValue: number
 ): Promise<{ options: ShippingOption[]; config: ShippingConfig }> {
   const config = await getShippingConfig();
+  const fallbackOption: ShippingOption = {
+    id: 'entrega-propria',
+    name: 'Entrega Própria',
+    description: 'Entrega realizada pela equipe Novità',
+    price: config.shippingCost,
+    deadline: config.maxDeliveryDays,
+    carrier: 'Novità',
+    source: 'admin_config',
+  };
+
+  if (!isValidCepFormat(zipCode)) {
+    return { options: [fallbackOption], config };
+  }
+
+  try {
+    const dimensions = calculatePackageDimensions(Math.max(itemCount, 1));
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${getApiBaseUrl()}/api/correios/shipping-quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...authHeaders },
+      body: JSON.stringify({
+        destinationCep: zipCode,
+        itemCount,
+        cartValue,
+        ...dimensions,
+      }),
+    });
+
+    const result = await response.json().catch(() => ({}));
+    if (response.ok && Array.isArray(result.options) && result.options.length > 0) {
+      return {
+        options: result.options as ShippingOption[],
+        config,
+      };
+    }
+  } catch {
+    // Mantém o checkout funcionando com entrega própria quando o backend/API externa não estiver disponível.
+  }
 
   return {
-    options: [
-      {
-        id: 'entrega-propria',
-        name: 'Entrega Própria',
-        description: 'Entrega realizada pela equipe Novità',
-        price: config.shippingCost,
-        deadline: config.maxDeliveryDays,
-        carrier: 'Novità',
-      },
-    ],
+    options: [fallbackOption],
     config,
   };
 }

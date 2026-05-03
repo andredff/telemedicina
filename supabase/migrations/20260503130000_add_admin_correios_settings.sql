@@ -14,7 +14,9 @@ values (
     "contractDr": "",
     "trackingPollMinutes": 60,
     "trackingResultType": "T",
-    "originCep": ""
+    "originCep": "",
+    "pacServiceCode": "03298",
+    "sedexServiceCode": "03220"
   }'::jsonb,
   'Configurações da API Rastro dos Correios'
 )

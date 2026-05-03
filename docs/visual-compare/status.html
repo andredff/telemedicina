@@ -1,0 +1,794 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Auditoria Pedidos & Logística · Novità</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&family=Roboto:wght@400;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#EDAF00; --secondary:#CC9B00; --text:#4B4B4B; --accent:#A67705;
+    --highlight:#CAB772; --gray:#B1B1B1; --bg:#F9F9F9; --white:#FFFFFF; --ink:#1a1a1a;
+    --ok:#0F7A35; --ok-bg:#E8F8EE; --ok-bd:#BFE9CB;
+    --bad:#B42318; --bad-bg:#FEE4E2; --bad-bd:#FDA29B;
+    --warn:#B54708; --warn-bg:#FFFAEB; --warn-bd:#FEDF89;
+    --info:#1849A9; --info-bg:#EFF4FF; --info-bd:#B2CCFF;
+    --purple:#5925DC; --purple-bg:#F4F3FF; --purple-bd:#D9D6FE;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Poppins',sans-serif;color:var(--text);
+    background:
+      radial-gradient(1400px 700px at 110% -10%, #FFF6DC 0%, transparent 60%),
+      radial-gradient(1000px 600px at -10% 110%, #FFF0C2 0%, transparent 55%),
+      var(--bg);
+    line-height:1.6;padding:48px 24px 96px;min-height:100vh;
+  }
+  .wrap{max-width:1280px;margin:0 auto}
+
+  /* Header */
+  header.top{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    padding-bottom:24px;border-bottom:3px solid var(--primary);margin-bottom:36px;flex-wrap:wrap;
+  }
+  .eyebrow{font-size:11px;color:var(--accent);font-weight:700;letter-spacing:.18em;
+    text-transform:uppercase;margin-bottom:10px;display:inline-flex;align-items:center;gap:8px;}
+  .eyebrow::before{content:"";width:24px;height:2px;background:var(--primary)}
+  h1{font-family:'Roboto',sans-serif;font-weight:800;font-size:clamp(30px,4.2vw,46px);
+    color:var(--ink);letter-spacing:-0.02em;line-height:1.05;}
+  h1 .accent{color:var(--primary)}
+  h1 small{display:block;font-family:'Poppins',sans-serif;font-weight:500;font-size:14px;color:var(--gray);
+    letter-spacing:0;margin-top:8px;text-transform:none;line-height:1.4;max-width:680px}
+  .meta-pill{display:inline-flex;align-items:center;gap:10px;padding:10px 18px;border-radius:999px;
+    background:var(--white);color:var(--ink);font-weight:600;font-size:13px;
+    border:1px solid #ECECEC;box-shadow:0 2px 10px rgba(0,0,0,.04);}
+  .meta-pill .dot{width:8px;height:8px;border-radius:50%;background:#1AAE4D;box-shadow:0 0 0 4px rgba(26,174,77,.25)}
+
+  /* TOC */
+  .toc{
+    background:var(--white);border:1px solid #EFEFEF;border-radius:12px;padding:14px 22px;
+    margin-bottom:32px;display:flex;gap:24px;align-items:center;flex-wrap:wrap;font-size:12.5px;
+    box-shadow:0 2px 10px rgba(0,0,0,.03);
+  }
+  .toc strong{color:var(--ink);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.1em}
+  .toc a{color:var(--accent);text-decoration:none;font-weight:600;padding:4px 10px;border-radius:6px;transition:all .15s}
+  .toc a:hover{background:var(--primary);color:#fff}
+
+  /* Score */
+  .score-row{display:grid;grid-template-columns:340px 1fr;gap:28px;margin-bottom:44px;align-items:stretch}
+  .score-card{
+    background:var(--white);border-radius:18px;padding:28px;border:1px solid #EFEFEF;
+    box-shadow:0 6px 28px rgba(75,75,75,.08);position:relative;overflow:hidden;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .donut{
+    --pct:55;
+    width:180px;height:180px;border-radius:50%;
+    background:conic-gradient(var(--primary) calc(var(--pct)*1%), #F0EBD8 0);
+    display:flex;align-items:center;justify-content:center;position:relative;
+  }
+  .donut::before{content:"";position:absolute;inset:14px;background:var(--white);border-radius:50%}
+  .donut .v{position:relative;font-family:'Roboto',sans-serif;font-weight:800;font-size:42px;color:var(--ink);letter-spacing:-0.02em}
+  .donut .v small{font-size:18px;color:var(--gray);font-weight:700}
+  .score-card .lbl{font-size:11px;font-weight:700;color:var(--gray);letter-spacing:.14em;text-transform:uppercase;margin-top:14px}
+  .score-card .desc{font-size:13px;color:var(--text);text-align:center;margin-top:6px;max-width:240px}
+
+  .kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+  .kpi{background:var(--white);border-radius:16px;padding:22px 24px;border:1px solid #EFEFEF;
+    box-shadow:0 4px 20px rgba(75,75,75,.05);position:relative;overflow:hidden;}
+  .kpi::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:var(--ok);}
+  .kpi.warn::before{background:var(--warn)}
+  .kpi.bad::before{background:var(--bad)}
+  .kpi .num{font-family:'Roboto',sans-serif;font-weight:800;font-size:46px;color:var(--ink);line-height:1;letter-spacing:-0.02em;display:flex;align-items:baseline;gap:8px}
+  .kpi .num em{font-size:18px;color:var(--gray);font-style:normal;font-weight:600}
+  .kpi .label{font-size:11px;font-weight:700;color:var(--gray);letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
+  .kpi .sub{font-size:12px;color:var(--gray);margin-top:8px;line-height:1.45}
+
+  /* Sections */
+  section{margin-bottom:56px;scroll-margin-top:24px}
+  h2{font-family:'Roboto',sans-serif;font-weight:800;font-size:24px;color:var(--ink);
+    margin-bottom:20px;padding-left:14px;border-left:4px solid var(--primary);
+    display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h2 .count{font-size:12px;font-weight:600;color:var(--gray);background:var(--white);padding:4px 10px;border-radius:999px;border:1px solid #ECECEC;letter-spacing:0;text-transform:none}
+  .lede{font-size:14px;color:var(--text);max-width:780px;margin-bottom:20px;line-height:1.65}
+  .lede code{font-family:'JetBrains Mono',monospace;font-size:12.5px;background:#F2F0EA;color:var(--accent);padding:2px 6px;border-radius:4px}
+
+  /* Status table */
+  .table-card{background:var(--white);border-radius:14px;overflow:hidden;
+    box-shadow:0 4px 24px rgba(75,75,75,.06);border:1px solid #EFEFEF;}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  thead th{background:linear-gradient(180deg,#FAFAFA,#F5F5F5);padding:16px 20px;text-align:left;
+    font-weight:700;color:var(--ink);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    border-bottom:1px solid #EBEBEB;}
+  thead th:first-child{width:42px;text-align:center}
+  thead th:nth-child(3){width:170px;text-align:center}
+  thead th:nth-child(4){width:42%}
+  td{padding:18px 20px;border-bottom:1px solid #F4F4F4;vertical-align:top}
+  tr:last-child td{border-bottom:0}
+  tr:hover td{background:#FFFCF1}
+  td.idx{text-align:center;font-family:'Roboto',sans-serif;font-weight:800;color:var(--gray);font-size:14px}
+  td.feature{font-weight:600;color:var(--ink)}
+  td.detail{color:var(--text);font-size:13px;line-height:1.55}
+  td.detail code, .file code{font-family:'JetBrains Mono',monospace;font-size:11.5px;background:#F2F0EA;color:var(--accent);padding:2px 6px;border-radius:4px}
+  td.detail .src{display:block;margin-top:8px;font-family:'JetBrains Mono',monospace;font-size:10.5px;color:var(--gray);line-height:1.5}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;
+    font-size:12px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+  .pill.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+  .pill.bad{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-bd)}
+  .pill.warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bd)}
+  .pill .ic{font-size:13px;line-height:1}
+
+  /* Trigger callout + flow */
+  .callout{
+    background:linear-gradient(135deg, #FFFBEF 0%, #FFF3CC 100%);
+    border:1px solid var(--warn-bd);border-radius:18px;padding:30px 36px;
+    display:grid;grid-template-columns:auto 1fr;gap:28px;align-items:center;
+  }
+  .callout .icn{width:64px;height:64px;border-radius:16px;background:var(--primary);
+    display:flex;align-items:center;justify-content:center;color:#fff;
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:30px;
+    box-shadow:0 6px 20px rgba(237,175,0,.4);}
+  .callout h3{font-family:'Roboto',sans-serif;font-weight:800;font-size:20px;color:var(--ink);margin-bottom:8px}
+  .callout p{font-size:14px;line-height:1.65;color:var(--text)}
+  .callout p code{font-family:'JetBrains Mono',monospace;font-size:13px;background:rgba(166,119,5,.14);color:var(--accent);padding:2px 8px;border-radius:5px;font-weight:600}
+  .callout .arrow{color:var(--primary);font-weight:800;margin:0 4px;font-size:16px}
+  .flow{margin-top:24px;display:grid;grid-template-columns:repeat(5,1fr);gap:8px;align-items:stretch}
+  .flow-step{background:var(--white);border:1px solid #ECECEC;border-radius:10px;padding:12px 10px;
+    text-align:center;font-size:11px;font-weight:600;color:var(--ink);position:relative}
+  .flow-step .st{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--gray);display:block;margin-top:4px}
+  .flow-step.trigger{background:var(--primary);color:#fff;border-color:var(--primary)}
+  .flow-step.trigger .st{color:rgba(255,255,255,.85)}
+  .flow-step .actions{margin-top:6px;display:flex;flex-direction:column;gap:3px;font-size:10px;color:var(--accent);font-weight:600}
+  .flow-step.trigger .actions{color:#fff}
+
+  /* Risk diffs */
+  .diffs{display:grid;grid-template-columns:repeat(2,1fr);gap:16px}
+  .diff{background:var(--white);border-radius:14px;padding:24px;
+    border:1px solid #EFEFEF;border-left:4px solid var(--bad);
+    box-shadow:0 2px 12px rgba(0,0,0,.03);}
+  .diff.warn{border-left-color:var(--warn)}
+  .diff.info{border-left-color:var(--info)}
+  .diff h4{font-family:'Roboto',sans-serif;font-weight:800;font-size:15px;color:var(--ink);margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .diff h4 .tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.05em}
+  .diff h4 .tag.crit{background:var(--bad-bg);color:var(--bad)}
+  .diff h4 .tag.bug{background:var(--warn-bg);color:var(--warn)}
+  .diff h4 .tag.fix{background:var(--info-bg);color:var(--info)}
+  .diff p{font-size:13px;line-height:1.6;color:var(--text)}
+  .diff .file{margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:11px;
+    color:var(--accent);background:#F8F6EE;padding:6px 10px;border-radius:6px;display:inline-block;}
+
+  /* === SYSTEM EXPLAINERS ============================================== */
+  .system-card{
+    background:var(--white);border-radius:18px;border:1px solid #EFEFEF;
+    box-shadow:0 6px 32px rgba(75,75,75,.07);overflow:hidden;
+  }
+  .system-head{
+    padding:22px 28px;background:linear-gradient(135deg, var(--purple-bg) 0%, #ECEAFE 100%);
+    border-bottom:1px solid var(--purple-bd);display:flex;align-items:center;gap:18px;
+  }
+  .system-head.gold{background:linear-gradient(135deg, #FFF6DC 0%, #FFEFC2 100%);border-bottom-color:var(--warn-bd)}
+  .system-head .badge{
+    width:54px;height:54px;border-radius:14px;background:var(--purple);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:24px;
+    box-shadow:0 6px 18px rgba(89,37,220,.3);
+  }
+  .system-head.gold .badge{background:var(--primary);box-shadow:0 6px 18px rgba(237,175,0,.4)}
+  .system-head h3{font-family:'Roboto',sans-serif;font-weight:800;font-size:20px;color:var(--ink);margin-bottom:4px}
+  .system-head .meta{font-size:12.5px;color:var(--text);font-weight:500}
+  .system-body{padding:28px}
+
+  /* Flow diagram with boxes & arrows */
+  .pipe{
+    display:grid;grid-template-columns:1fr;gap:0;
+  }
+  .pipe-row{
+    display:grid;grid-template-columns:200px 1fr;gap:0;align-items:stretch;
+    position:relative;
+  }
+  .pipe-row + .pipe-row{margin-top:0}
+  .pipe-stage{
+    background:#FAFAFA;border-radius:10px 0 0 10px;padding:18px 20px;
+    border:1px solid #ECECEC;border-right:none;
+    display:flex;flex-direction:column;justify-content:center;
+  }
+  .pipe-stage .num{
+    width:28px;height:28px;border-radius:8px;background:var(--ink);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:13px;margin-bottom:8px;
+  }
+  .pipe-stage .nm{font-family:'Roboto',sans-serif;font-weight:800;font-size:14px;color:var(--ink)}
+  .pipe-stage .who{font-size:11px;color:var(--gray);margin-top:2px;font-weight:500}
+  .pipe-content{
+    background:var(--white);border:1px solid #ECECEC;border-radius:0 10px 10px 0;
+    padding:18px 22px;
+  }
+  .pipe-content .what{font-size:13.5px;color:var(--text);line-height:1.6;margin-bottom:10px}
+  .pipe-content .what strong{color:var(--ink);font-weight:700}
+  .pipe-content .src{
+    font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--accent);
+    background:#F8F6EE;padding:4px 9px;border-radius:5px;display:inline-block;
+  }
+  .pipe-content .src + .src{margin-left:6px}
+  .pipe-row.ok .pipe-stage{border-left:4px solid var(--ok)}
+  .pipe-row.warn .pipe-stage{border-left:4px solid var(--warn)}
+  .pipe-row.bad .pipe-stage{border-left:4px solid var(--bad)}
+  .pipe-row.ok .pipe-stage .num{background:var(--ok)}
+  .pipe-row.warn .pipe-stage .num{background:var(--warn)}
+  .pipe-row.bad .pipe-stage .num{background:var(--bad)}
+  /* Connector arrow between rows */
+  .pipe-row::after{
+    content:"";position:absolute;left:106px;bottom:-14px;width:2px;height:14px;background:#D8D8D8;z-index:1;
+  }
+  .pipe-row:last-child::after{display:none}
+  .pipe-row::before{
+    content:"";position:absolute;left:101px;bottom:-15px;width:12px;height:12px;
+    border-right:2px solid #D8D8D8;border-bottom:2px solid #D8D8D8;
+    transform:rotate(45deg);z-index:2;
+  }
+  .pipe-row:last-child::before{display:none}
+
+  .pipe-content.broken{border-color:var(--bad-bd);background:linear-gradient(180deg,#FFF7F6 0%, var(--white) 100%)}
+  .pipe-content.broken .what::before{content:"⚠ ";color:var(--bad);font-weight:800}
+  .pipe-content.weak{border-color:var(--warn-bd);background:linear-gradient(180deg,#FFFBF0 0%, var(--white) 100%)}
+
+  /* Architecture diagram for system 2 */
+  .arch{
+    display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px;
+  }
+  .arch-col{
+    background:#FAFAFA;border:1px solid #EFEFEF;border-radius:12px;padding:20px;
+  }
+  .arch-col h5{
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:12px;color:var(--ink);
+    text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px;
+    padding-bottom:10px;border-bottom:2px solid var(--primary);display:flex;align-items:center;gap:8px;
+  }
+  .arch-col h5 .icn{font-size:14px}
+  .arch-item{
+    background:var(--white);border:1px solid #ECECEC;border-radius:8px;padding:12px 14px;margin-bottom:8px;
+    display:flex;justify-content:space-between;align-items:flex-start;gap:10px;
+  }
+  .arch-item:last-child{margin-bottom:0}
+  .arch-item .nm{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--accent);font-weight:700;line-height:1.5}
+  .arch-item .role{font-size:11px;color:var(--gray);margin-top:3px;line-height:1.4;font-family:'Poppins',sans-serif;font-weight:500}
+  .arch-item .badge-status{
+    flex-shrink:0;font-size:9px;font-weight:700;padding:2px 6px;border-radius:3px;
+    text-transform:uppercase;letter-spacing:.05em;line-height:1.4;height:fit-content;
+  }
+  .badge-status.ok{background:var(--ok-bg);color:var(--ok);border:1px solid var(--ok-bd)}
+  .badge-status.warn{background:var(--warn-bg);color:var(--warn);border:1px solid var(--warn-bd)}
+  .badge-status.bad{background:var(--bad-bg);color:var(--bad);border:1px solid var(--bad-bd)}
+
+  .data-layer{
+    background:linear-gradient(180deg, #F8F6EE 0%, #FAFAFA 100%);
+    border:1px dashed var(--accent);border-radius:12px;padding:18px 20px;margin-bottom:20px;
+  }
+  .data-layer h5{font-family:'Roboto',sans-serif;font-weight:800;font-size:11px;color:var(--accent);
+    text-transform:uppercase;letter-spacing:.12em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .data-layer .tables{display:flex;gap:10px;flex-wrap:wrap}
+  .data-layer .tbl{
+    background:var(--white);border:1px solid var(--accent);border-radius:6px;padding:8px 14px;
+    font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--accent);font-weight:700;
+  }
+
+  /* Gap callout inside system card */
+  .gap-callout{
+    background:linear-gradient(135deg,#FEE4E2 0%, #FFF3F2 100%);
+    border:1px solid var(--bad-bd);border-radius:12px;padding:16px 20px;
+    margin-top:18px;display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:flex-start;
+  }
+  .gap-callout .icn{
+    width:32px;height:32px;border-radius:8px;background:var(--bad);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;flex-shrink:0;
+  }
+  .gap-callout h5{font-family:'Roboto',sans-serif;font-weight:800;font-size:13px;color:var(--bad);margin-bottom:4px}
+  .gap-callout p{font-size:12.5px;color:var(--text);line-height:1.55}
+  .gap-callout p code{font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(180,35,24,.1);color:var(--bad);padding:2px 6px;border-radius:4px;font-weight:600}
+
+  .who-sees{
+    margin-top:18px;display:grid;grid-template-columns:1fr 1fr;gap:14px;
+  }
+  .who-card{background:var(--white);border:1px solid #ECECEC;border-radius:10px;padding:16px 18px}
+  .who-card .role{font-size:10px;font-weight:700;color:var(--gray);letter-spacing:.1em;text-transform:uppercase;margin-bottom:8px}
+  .who-card .name{font-family:'Roboto',sans-serif;font-weight:800;font-size:14px;color:var(--ink);margin-bottom:8px}
+  .who-card ul{list-style:none;font-size:12.5px;color:var(--text);line-height:1.7}
+  .who-card li{padding-left:18px;position:relative}
+  .who-card li::before{content:"→";position:absolute;left:0;color:var(--accent);font-weight:700}
+
+  footer{margin-top:48px;text-align:center;font-size:12px;color:var(--gray)}
+  footer code{font-family:'JetBrains Mono',monospace;color:var(--accent)}
+
+  @media (max-width:980px){
+    .score-row{grid-template-columns:1fr}
+    .kpis{grid-template-columns:repeat(3,1fr)}
+    .flow{grid-template-columns:repeat(2,1fr)}
+    .diffs{grid-template-columns:1fr}
+    .callout{grid-template-columns:1fr;text-align:left}
+    .arch{grid-template-columns:1fr}
+    .pipe-row{grid-template-columns:1fr}
+    .pipe-stage{border-radius:10px 10px 0 0;border-right:1px solid #ECECEC;border-bottom:none}
+    .pipe-content{border-radius:0 0 10px 10px;border-top:none}
+    .pipe-row::after, .pipe-row::before{display:none}
+    .who-sees{grid-template-columns:1fr}
+  }
+  @media (max-width:560px){
+    .kpis{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">Auditoria refeita · Pedidos & Logística</div>
+      <h1>O que <span class="accent">existe</span> vs. o que <span class="accent">parece</span><small>11 recursos verificados linha a linha + 2 sistemas explicados visualmente para resolver as dúvidas levantadas</small></h1>
+    </div>
+    <span class="meta-pill"><span class="dot"></span> Verificado em código fonte</span>
+  </header>
+
+  <nav class="toc">
+    <strong>Ir para</strong>
+    <a href="#score">Score geral</a>
+    <a href="#status">Status item a item</a>
+    <a href="#trigger">Gatilho compartilhado</a>
+    <a href="#riscos">Riscos priorizados</a>
+    <a href="#sis-os" style="color:var(--purple);font-weight:700">▸ Sistema 1: OS de logística</a>
+    <a href="#sis-pedidos" style="color:var(--primary);font-weight:700">▸ Sistema 2: Gestão de pedidos</a>
+  </nav>
+
+  <!-- Score + KPIs -->
+  <div id="score" class="score-row">
+    <div class="score-card">
+      <div class="donut" style="--pct:55"><div class="v">55<small>%</small></div></div>
+      <div class="lbl">Ponta a ponta</div>
+      <div class="desc">6 de 11 recursos rodam <strong>de fato</strong> sem ressalvas</div>
+    </div>
+    <div class="kpis">
+      <div class="kpi">
+        <div class="label">Implementado</div>
+        <div class="num">6 <em>/ 11</em></div>
+        <div class="sub">Lógica real ponta a ponta — código + integração externa quando aplicável</div>
+      </div>
+      <div class="kpi warn">
+        <div class="label">Parcial / desconectado</div>
+        <div class="num">3 <em>/ 11</em></div>
+        <div class="sub">Código existe mas não fecha o ciclo (mock, manual ou hook desconectado)</div>
+      </div>
+      <div class="kpi bad">
+        <div class="label">Stub / faltando</div>
+        <div class="num">2 <em>/ 11</em></div>
+        <div class="sub">Apenas log, link externo ou ausente — depende de implementação real</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Status table -->
+  <section id="status">
+    <h2>Status item a item — verificado contra código <span class="count">11 recursos</span></h2>
+    <div class="table-card">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Recurso</th><th>Status</th><th>Evidência verificada</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="idx">01</td>
+            <td class="feature">Status do pedido (5 estados)</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail">Constraint SQL <code>CHECK (status IN ('pending','processing','shipped','delivered','cancelled'))</code>.<span class="src">supabase/migrations/20260128230000_create_orders_table.sql:6 · src/hooks/useOrderSubscription.ts:5-10</span></td>
+          </tr>
+          <tr>
+            <td class="idx">02</td>
+            <td class="feature">Atualização manual pelo admin</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail"><code>handleStatusChange</code> em painel admin chama <code>AdminQueries.updateOrderStatus</code> e atualiza UI imediatamente.<span class="src">src/pages/admin/Orders.tsx:225</span></td>
+          </tr>
+          <tr>
+            <td class="idx">03</td>
+            <td class="feature">Notificação por e-mail (Resend)</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail">POST real para <code>/api/resend/emails</code> com template HTML por status, idempotência de 5 min via tabela <code>order_notifications</code>.<span class="src">src/services/notificationService.ts:40-118 · :138-150</span></td>
+          </tr>
+          <tr>
+            <td class="idx">04</td>
+            <td class="feature">OS de logística persistida em DB</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail">Tabela <code>logistics_service_orders</code> com order_id, customer_*, items, status — insert real.<span class="src">supabase/migrations/20260210190000_admin_rbac_and_logistics.sql:299 · src/services/notificationService.ts:246-258</span></td>
+          </tr>
+          <tr>
+            <td class="idx">05</td>
+            <td class="feature">Envio real da OS pra equipe externa</td>
+            <td style="text-align:center"><span class="pill bad"><span class="ic">●</span>Stub</span></td>
+            <td class="detail"><code>notifyLogisticsTeam</code> faz apenas <code>logger.info</code>. Comentário literal: "Em produção, enviaria para sistema de logística ou equipe via e-mail/webhook".<span class="src">src/services/notificationService.ts:293-304</span></td>
+          </tr>
+          <tr>
+            <td class="idx">06</td>
+            <td class="feature">Captura de código de rastreio</td>
+            <td style="text-align:center"><span class="pill warn"><span class="ic">●</span>Manual</span></td>
+            <td class="detail">Campo livre digitado pelo admin no diálogo de detalhes. Sem máscara ou validação por transportadora.<span class="src">src/pages/admin/Orders.tsx:294, 308-326</span></td>
+          </tr>
+          <tr>
+            <td class="idx">07</td>
+            <td class="feature">Integração API Correios / transportadora</td>
+            <td style="text-align:center"><span class="pill bad"><span class="ic">●</span>Faltando</span></td>
+            <td class="detail">Pasta <code>src/integrations/correios/</code> existe mas chama apenas <strong>ViaCEP</strong> (lookup de endereço por CEP). Nenhum cálculo de frete real, nenhum rastreamento automático. Para o cliente, só link externo.<span class="src">src/integrations/correios/client.ts:1-60 · src/hooks/useOrderSubscription.ts:209-218</span></td>
+          </tr>
+          <tr>
+            <td class="idx">08</td>
+            <td class="feature">Timeline visual pro cliente</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail">Componente <code>OrderTracking</code> renderiza 4-5 etapas (Pago → Separando → Enviado → Entregue) com ícones lucide.<span class="src">src/components/OrderTracking.tsx:17-22 · src/pages/Orders.tsx:124-158</span></td>
+          </tr>
+          <tr>
+            <td class="idx">09</td>
+            <td class="feature">Realtime de status</td>
+            <td style="text-align:center"><span class="pill warn"><span class="ic">●</span>Pronto, desconectado</span></td>
+            <td class="detail">Hook <code>useOrderSubscription</code> tem 140 linhas funcionais (postgres_changes em <code>orders</code>), mas <strong>nenhum componente o invoca</strong> — <code>OrderTracking</code> e <code>OrderDetail</code> só importam o tipo <code>OrderStatus</code>.<span class="src">src/hooks/useOrderSubscription.ts:27-113 · src/components/OrderTracking.tsx:7,29</span></td>
+          </tr>
+          <tr>
+            <td class="idx">10</td>
+            <td class="feature">Estorno automático em rejeição</td>
+            <td style="text-align:center"><span class="pill ok"><span class="ic">●</span>Implementado</span></td>
+            <td class="detail">No <code>handleReview('rejected')</code>: <code>cieloClient.cancelSale(payment_id)</code> + <code>updateOrderPaymentStatus('refunded')</code>. Tem fallback graceful + toast de aviso se falhar.<span class="src">src/pages/admin/Orders.tsx:380-390</span></td>
+          </tr>
+          <tr>
+            <td class="idx">11</td>
+            <td class="feature">Painel financeiro consolidado</td>
+            <td style="text-align:center"><span class="pill warn"><span class="ic">●</span>Parcial</span></td>
+            <td class="detail">Serviço dedicado de 512 linhas (MRR, churn, ticket médio, distribuição de planos, histórico, CSV) renderizado por gráficos Recharts. <strong>Limitação:</strong> cobre só assinaturas — pedidos avulsos da tabela <code>orders</code> ficam de fora; sem conciliação Cielo.<span class="src">src/services/financialMetricsService.ts:81-134 · src/pages/admin/Reports.tsx:53-58</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Trigger callout -->
+  <section id="trigger">
+    <h2>O elo entre os dois sistemas</h2>
+    <div class="callout">
+      <div class="icn">⚡</div>
+      <div>
+        <h3>Os dois sistemas estão amarrados pelo mesmo gatilho</h3>
+        <p>A transição <code>pending</code> <span class="arrow">→</span> <code>processing</code> dispara <strong>simultaneamente</strong> a criação da OS de logística <strong>e</strong> o e-mail ao cliente. As outras 3 transições disparam <strong>apenas</strong> o e-mail. Verificado em <code>src/pages/admin/Orders.tsx:245</code>.</p>
+        <div class="flow">
+          <div class="flow-step"><strong>pending</strong><span class="st">payment OK</span><div class="actions">— sem ação —</div></div>
+          <div class="flow-step trigger"><strong>processing</strong><span class="st">trigger único</span><div class="actions">📧 e-mail<br>📦 OS logística</div></div>
+          <div class="flow-step"><strong>shipped</strong><span class="st">tracking code</span><div class="actions">📧 e-mail</div></div>
+          <div class="flow-step"><strong>delivered</strong><span class="st">entregue</span><div class="actions">📧 e-mail</div></div>
+          <div class="flow-step"><strong>cancelled</strong><span class="st">+ refund</span><div class="actions">📧 e-mail<br>💸 estorno</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Risk areas -->
+  <section id="riscos">
+    <h2>Pontos de risco priorizados <span class="count">requerem ação</span></h2>
+    <div class="diffs">
+      <div class="diff">
+        <h4>OS criada mas ninguém é avisado <span class="tag crit">crítico</span></h4>
+        <p>A OS é gravada no DB, mas <code>notifyLogisticsTeam</code> só faz <code>logger.info</code>. A equipe de logística depende de <strong>checagem manual no painel admin</strong> ou query direta no banco para descobrir pedidos novos.</p>
+        <span class="file">src/services/notificationService.ts:293-304</span>
+      </div>
+      <div class="diff info">
+        <h4>Realtime fácil de religar <span class="tag fix">quick win</span></h4>
+        <p>Hook completo já existe — basta importar em <code>OrderTracking.tsx</code>, passar o <code>orderId</code> e wirear <code>onStatusChange</code>. Antes, investigar a causa do loop de re-render.</p>
+        <span class="file">src/components/OrderTracking.tsx:29</span>
+      </div>
+      <div class="diff">
+        <h4>Sem integração real com transportadora <span class="tag crit">faltando</span></h4>
+        <p>O cliente "correios" só faz lookup de CEP via ViaCEP — não calcula frete nem sincroniza status de entrega. Cliente final só vê <strong>link externo</strong> pra rastrear, sem updates automáticos.</p>
+        <span class="file">src/integrations/correios/client.ts (só ViaCEP)</span>
+      </div>
+      <div class="diff warn">
+        <h4>Painel financeiro só de assinaturas <span class="tag bug">cobertura parcial</span></h4>
+        <p>O <code>financialMetricsService</code> calcula MRR, churn e ticket médio das assinaturas — mas <strong>não consolida pedidos avulsos</strong> de medicamentos. Sem receita total real nem conciliação Cielo.</p>
+        <span class="file">src/services/financialMetricsService.ts:81-134</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- SISTEMA 1 — OS DE LOGÍSTICA                                         -->
+  <!-- =================================================================== -->
+  <section id="sis-os">
+    <h2>Sistema 1 · OS de logística — explicação visual <span class="count">notificação para equipe</span></h2>
+    <p class="lede">O que é, onde mora no código, e <strong>onde quebra</strong>. A OS é "Ordem de Serviço" — uma instrução para a equipe de logística separar e enviar os medicamentos do pedido. O sistema cria o registro no banco, mas <strong>não avisa ninguém de fato</strong>.</p>
+
+    <div class="system-card">
+      <div class="system-head">
+        <div class="badge">📦</div>
+        <div>
+          <h3>Pipeline da OS de logística</h3>
+          <div class="meta">5 etapas — 4 funcionam, a última é <strong>stub</strong> que precisa virar webhook ou e-mail real</div>
+        </div>
+      </div>
+      <div class="system-body">
+
+        <div class="pipe">
+          <!-- Etapa 1 -->
+          <div class="pipe-row ok">
+            <div class="pipe-stage">
+              <div class="num">1</div>
+              <div class="nm">Trigger</div>
+              <div class="who">Admin clica "Em separação"</div>
+            </div>
+            <div class="pipe-content">
+              <div class="what">Admin abre painel de pedidos, escolhe o pedido e altera o status para <strong>processing</strong>. A função <code>handleStatusChange</code> é chamada com o novo status.</div>
+              <span class="src">src/pages/admin/Orders.tsx:216</span>
+            </div>
+          </div>
+
+          <!-- Etapa 2 -->
+          <div class="pipe-row ok">
+            <div class="pipe-stage">
+              <div class="num">2</div>
+              <div class="nm">Detecção</div>
+              <div class="who">Condicional</div>
+            </div>
+            <div class="pipe-content">
+              <div class="what"><code>if (newStatus === 'processing')</code> — só essa transição dispara a OS. As outras (shipped/delivered/cancelled) seguem só com e-mail.</div>
+              <span class="src">src/pages/admin/Orders.tsx:245</span>
+            </div>
+          </div>
+
+          <!-- Etapa 3 -->
+          <div class="pipe-row ok">
+            <div class="pipe-stage">
+              <div class="num">3</div>
+              <div class="nm">Montagem</div>
+              <div class="who">Service layer</div>
+            </div>
+            <div class="pipe-content">
+              <div class="what">Chama <code>sendLogisticsServiceOrder(orderId, customer, items)</code> passando dados do cliente (nome, e-mail, telefone, endereço) e lista de medicamentos.</div>
+              <span class="src">src/services/notificationService.ts:221</span>
+            </div>
+          </div>
+
+          <!-- Etapa 4 -->
+          <div class="pipe-row ok">
+            <div class="pipe-stage">
+              <div class="num">4</div>
+              <div class="nm">Persistência</div>
+              <div class="who">Banco de dados</div>
+            </div>
+            <div class="pipe-content">
+              <div class="what"><strong>INSERT</strong> em <code>logistics_service_orders</code> com order_id, customer_*, delivery_address, items (JSON), status='pending'. Esse registro é a "ordem de serviço" oficial.</div>
+              <span class="src">src/services/notificationService.ts:246-258</span>
+              <span class="src">migration: ...admin_rbac_and_logistics.sql:299</span>
+            </div>
+          </div>
+
+          <!-- Etapa 5 - BROKEN -->
+          <div class="pipe-row bad">
+            <div class="pipe-stage">
+              <div class="num">5</div>
+              <div class="nm">Notificação</div>
+              <div class="who">Equipe externa</div>
+            </div>
+            <div class="pipe-content broken">
+              <div class="what">Chama <code>notifyLogisticsTeam(serviceOrder)</code> — função que <strong>só faz <code>logger.info(...)</code></strong> com os dados. Comentário literal no código: <em>"Em produção, enviaria para sistema de logística ou equipe via e-mail/webhook"</em>. Nenhum HTTP, nenhuma fila, nenhum e-mail.</div>
+              <span class="src">src/services/notificationService.ts:293-304</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="gap-callout">
+          <div class="icn">!</div>
+          <div>
+            <h5>O gap: a equipe nunca é avisada automaticamente</h5>
+            <p>A OS existe no banco. Mas <strong>ninguém na equipe de logística recebe e-mail, notificação push, ticket no sistema deles ou webhook</strong>. Para descobrir pedidos novos, alguém precisa: <code>(a)</code> entrar no painel admin manualmente e olhar a lista, ou <code>(b)</code> rodar <code>SELECT * FROM logistics_service_orders WHERE status='pending'</code> direto no banco.</p>
+          </div>
+        </div>
+
+        <div class="who-sees">
+          <div class="who-card">
+            <div class="role">Quem dispara hoje</div>
+            <div class="name">👤 Admin (operador interno)</div>
+            <ul>
+              <li>Abre o painel <code>/admin/orders</code></li>
+              <li>Acha o pedido pendente</li>
+              <li>Altera dropdown de status</li>
+            </ul>
+          </div>
+          <div class="who-card">
+            <div class="role">Quem deveria receber</div>
+            <div class="name">📦 Equipe de logística (externa)</div>
+            <ul>
+              <li>Hoje: <strong>nada chega automaticamente</strong></li>
+              <li>Falta: e-mail / webhook / ticket</li>
+              <li>Falta: app/painel próprio da equipe</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- =================================================================== -->
+  <!-- SISTEMA 2 — GESTÃO DE PEDIDOS                                       -->
+  <!-- =================================================================== -->
+  <section id="sis-pedidos">
+    <h2>Sistema 2 · Gestão de pedidos — explicação visual <span class="count">status, financeiro & rastreamento</span></h2>
+    <p class="lede">Onde estão as peças do sistema de pedidos, separadas por <strong>quem usa</strong> (cliente vs. admin), <strong>onde mora</strong> (página, componente, serviço, banco) e <strong>o que cada uma faz</strong>. As 3 dimensões do acompanhamento — <code>status</code>, <code>financeiro</code> e <code>rastreio</code> — estão mapeadas em arquivos diferentes.</p>
+
+    <div class="system-card">
+      <div class="system-head gold">
+        <div class="badge">🛒</div>
+        <div>
+          <h3>Mapa do sistema de gestão de pedidos</h3>
+          <div class="meta">Camadas: <strong>Visual (cliente/admin)</strong> → <strong>Serviços</strong> → <strong>Dados</strong></div>
+        </div>
+      </div>
+      <div class="system-body">
+
+        <!-- Visual layer: client vs admin -->
+        <div class="arch">
+          <div class="arch-col">
+            <h5><span class="icn">🙂</span> Cliente final — o que ele vê</h5>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/pages/Orders.tsx</div>
+                <div class="role">Lista todos os pedidos do usuário com status atual e valor</div>
+              </div>
+              <span class="badge-status ok">OK</span>
+            </div>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/pages/OrderDetail.tsx</div>
+                <div class="role">Detalhe de um pedido: itens, valor, endereço, código de rastreio</div>
+              </div>
+              <span class="badge-status ok">OK</span>
+            </div>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/components/OrderTracking.tsx</div>
+                <div class="role">Timeline visual com 4 etapas (Pago → Separando → Enviado → Entregue)</div>
+              </div>
+              <span class="badge-status warn">SEM REALTIME</span>
+            </div>
+          </div>
+          <div class="arch-col">
+            <h5><span class="icn">🛠</span> Admin — gestão e visão financeira</h5>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/pages/admin/Orders.tsx</div>
+                <div class="role">Lista, filtra, muda status, aprova/rejeita pedidos com receita médica, dispara estorno</div>
+              </div>
+              <span class="badge-status ok">OK</span>
+            </div>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/pages/admin/Reports.tsx</div>
+                <div class="role">Gráficos Recharts: MRR, churn, ticket médio, distribuição de planos, exportação CSV</div>
+              </div>
+              <span class="badge-status warn">SÓ ASSINATURAS</span>
+            </div>
+            <div class="arch-item">
+              <div>
+                <div class="nm">src/pages/admin/Dashboard.tsx</div>
+                <div class="role">KPIs gerais: total de pedidos, usuários, prescrições, assinaturas ativas</div>
+              </div>
+              <span class="badge-status ok">OK</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Service layer -->
+        <div class="arch-col" style="background:linear-gradient(180deg,#FFF6DC 0%, #FAFAFA 100%);border-color:var(--warn-bd);margin-bottom:18px">
+          <h5 style="border-bottom-color:var(--warn)"><span class="icn">⚙️</span> Camada de serviços — a lógica</h5>
+          <div class="arch-item">
+            <div>
+              <div class="nm">src/services/notificationService.ts</div>
+              <div class="role"><strong>E-mail (Resend)</strong> + <strong>OS de logística</strong> (insert + log)</div>
+            </div>
+            <span class="badge-status warn">PARCIAL</span>
+          </div>
+          <div class="arch-item">
+            <div>
+              <div class="nm">src/services/financialMetricsService.ts</div>
+              <div class="role">512 linhas: MRR, ARR, churn, inadimplência, ticket médio, histórico mensal</div>
+            </div>
+            <span class="badge-status warn">SÓ ASSINATURAS</span>
+          </div>
+          <div class="arch-item">
+            <div>
+              <div class="nm">src/integrations/cielo/client.ts</div>
+              <div class="role"><code>cancelSale(paymentId)</code> — estorno automático em rejeição de pedido</div>
+            </div>
+            <span class="badge-status ok">OK</span>
+          </div>
+          <div class="arch-item">
+            <div>
+              <div class="nm">src/integrations/correios/client.ts</div>
+              <div class="role">⚠️ Nome enganoso: só faz lookup de CEP via <strong>ViaCEP</strong>, sem cálculo de frete nem rastreamento</div>
+            </div>
+            <span class="badge-status bad">SÓ VIACEP</span>
+          </div>
+          <div class="arch-item">
+            <div>
+              <div class="nm">src/hooks/useOrderSubscription.ts</div>
+              <div class="role">Hook completo de Realtime — postgres_changes em <code>orders</code> — <strong>não invocado por nenhum componente</strong></div>
+            </div>
+            <span class="badge-status warn">DESCONECTADO</span>
+          </div>
+        </div>
+
+        <!-- Data layer -->
+        <div class="data-layer">
+          <h5><span>🗄</span> Camada de dados — tabelas Supabase</h5>
+          <div class="tables">
+            <div class="tbl">orders</div>
+            <div class="tbl">logistics_service_orders</div>
+            <div class="tbl">order_notifications</div>
+            <div class="tbl">subscriptions</div>
+            <div class="tbl">payments</div>
+          </div>
+          <p style="margin-top:12px;font-size:12.5px;color:var(--text);line-height:1.55">A tabela <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(166,119,5,.1);padding:2px 6px;border-radius:4px;color:var(--accent);font-weight:600">orders</code> é a fonte de verdade do <strong>status</strong>. <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(166,119,5,.1);padding:2px 6px;border-radius:4px;color:var(--accent);font-weight:600">logistics_service_orders</code> é o registro da OS. <code style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(166,119,5,.1);padding:2px 6px;border-radius:4px;color:var(--accent);font-weight:600">order_notifications</code> guarda histórico de e-mails enviados (audit + idempotência de 5 min).</p>
+        </div>
+
+        <!-- 3 dimensions of tracking -->
+        <h4 style="font-family:'Roboto',sans-serif;font-weight:800;font-size:16px;color:var(--ink);margin:24px 0 14px;padding-bottom:10px;border-bottom:2px solid #ECECEC">As 3 dimensões do acompanhamento</h4>
+        <div class="who-sees" style="grid-template-columns:repeat(3,1fr)">
+          <div class="who-card" style="border-top:3px solid var(--ok)">
+            <div class="role">Dimensão 1 · Status</div>
+            <div class="name">Onde está o pedido</div>
+            <ul>
+              <li>5 estados em enum SQL</li>
+              <li>Mudança manual pelo admin</li>
+              <li>E-mail em toda transição</li>
+              <li>Timeline visual no app</li>
+              <li>⚠ Sem realtime (hook desconectado)</li>
+            </ul>
+          </div>
+          <div class="who-card" style="border-top:3px solid var(--warn)">
+            <div class="role">Dimensão 2 · Financeiro</div>
+            <div class="name">Quanto entrou / saiu</div>
+            <ul>
+              <li>MRR, churn, ARR de assinaturas</li>
+              <li>Ticket médio por plano</li>
+              <li>Histórico de 6 meses + CSV</li>
+              <li>Estorno via Cielo cancelSale</li>
+              <li>⚠ Não consolida pedidos avulsos</li>
+            </ul>
+          </div>
+          <div class="who-card" style="border-top:3px solid var(--bad)">
+            <div class="role">Dimensão 3 · Rastreio</div>
+            <div class="name">Onde está o pacote</div>
+            <ul>
+              <li>Campo de tracking_code na tabela</li>
+              <li>Digitado à mão pelo admin</li>
+              <li>Cliente vê link externo (Correios)</li>
+              <li>❌ Sem chamada à API real</li>
+              <li>❌ Sem updates automáticos</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="gap-callout" style="background:linear-gradient(135deg,#FFFAEB 0%, #FFF6DC 100%);border-color:var(--warn-bd)">
+          <div class="icn" style="background:var(--warn)">i</div>
+          <div>
+            <h5 style="color:var(--warn)">Resumindo o que você precisa saber</h5>
+            <p>O sistema de gestão <strong>existe e tem todas as peças</strong>: páginas pro cliente, painel pro admin, serviço de e-mail real, gráficos financeiros, integração com Cielo. O que ele <strong>não tem</strong> é: <code>(1)</code> integração de verdade com transportadora, <code>(2)</code> visão financeira que junte assinaturas + pedidos avulsos, e <code>(3)</code> realtime de status (apesar do hook estar pronto). São 3 PRs bem delimitados pra fechar o ciclo.</p>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Auditoria fresca · 11 recursos · ✅ <code>6</code> &nbsp;⚠️ <code>3</code> &nbsp;❌ <code>2</code> · cobertura ponta-a-ponta <code>55%</code><br>
+    Fontes: <code>src/services/notificationService.ts</code> · <code>src/hooks/useOrderSubscription.ts</code> · <code>src/pages/admin/Orders.tsx</code> · <code>src/services/financialMetricsService.ts</code> · <code>src/integrations/correios/client.ts</code> · migrations Supabase
+  </footer>
+
+</div>
+</body>
+</html>

@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Validação visual — Novità</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;700;800&family=Roboto:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --primary:#EDAF00;
+    --secondary:#CC9B00;
+    --text:#4B4B4B;
+    --accent:#A67705;
+    --highlight:#CAB772;
+    --gray:#B1B1B1;
+    --bg:#F9F9F9;
+    --white:#FFFFFF;
+    --ink:#1a1a1a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:'Poppins',sans-serif;
+    color:var(--text);
+    background:var(--bg);
+    line-height:1.6;
+    padding:48px 24px 96px;
+  }
+  .wrap{max-width:1320px;margin:0 auto}
+  .topbar{
+    display:flex;align-items:flex-end;justify-content:space-between;gap:24px;
+    padding-bottom:20px;border-bottom:2px solid var(--primary);margin-bottom:40px;
+  }
+  h1{
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:clamp(28px,4vw,40px);
+    color:var(--ink);letter-spacing:-0.02em;line-height:1.15;
+  }
+  h1 .accent{color:var(--primary)}
+  .subtitle{font-size:14px;color:var(--gray);margin-top:6px;font-weight:500;letter-spacing:.08em;text-transform:uppercase}
+  .badge{
+    display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:999px;
+    background:#E8F8EE;color:#0F7A35;font-weight:600;font-size:13px;
+    border:1px solid #BFE9CB;
+  }
+  .badge::before{content:"";width:8px;height:8px;border-radius:50%;background:#1AAE4D;box-shadow:0 0 0 4px #1AAE4D33}
+
+  /* === Side-by-side === */
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:48px}
+  .card{
+    background:var(--white);border-radius:16px;overflow:hidden;
+    box-shadow:0 4px 20px rgba(75,75,75,.08);
+    border:1px solid #ECECEC;
+  }
+  .card-head{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:14px 18px;border-bottom:1px solid #F0F0F0;
+  }
+  .card-head .name{font-family:'Roboto',sans-serif;font-weight:800;font-size:15px;color:var(--ink)}
+  .card-head .url{font-family:'Poppins',sans-serif;font-size:12px;color:var(--gray)}
+  .tag{font-size:10px;font-weight:700;padding:3px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.06em}
+  .tag.live{background:var(--primary);color:#fff}
+  .tag.app{background:var(--ink);color:#fff}
+  .shot{display:block;width:100%;height:auto;background:#fafafa}
+
+  /* === Token table === */
+  section{margin-bottom:56px}
+  h2{
+    font-family:'Roboto',sans-serif;font-weight:800;font-size:24px;color:var(--ink);
+    margin-bottom:20px;padding-left:12px;border-left:4px solid var(--primary);
+  }
+  table{width:100%;background:var(--white);border-radius:12px;overflow:hidden;
+    box-shadow:0 2px 8px rgba(75,75,75,.06);border-collapse:collapse;font-size:14px}
+  th,td{padding:14px 18px;text-align:left;border-bottom:1px solid #F2F2F2}
+  th{background:#FAFAFA;font-weight:700;color:var(--ink);font-size:12px;letter-spacing:.06em;text-transform:uppercase}
+  tr:last-child td{border-bottom:0}
+  td.swatch{display:flex;align-items:center;gap:10px}
+  td.swatch .chip{width:28px;height:28px;border-radius:6px;border:1px solid rgba(0,0,0,.08);flex-shrink:0}
+  td.swatch code{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--ink)}
+  td.match{text-align:center;font-size:18px}
+
+  /* === Type samples === */
+  .type-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .type-card{background:var(--white);border-radius:12px;padding:24px;border:1px solid #ECECEC}
+  .type-card .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--gray);margin-bottom:12px}
+  .type-card h3{font-family:'Roboto',sans-serif;font-weight:800;font-size:35px;line-height:1.15;color:var(--ink);margin-bottom:8px;letter-spacing:-0.01em}
+  .type-card .meta{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--gray)}
+  .type-card .body{font-family:'Poppins',sans-serif;font-weight:400;font-size:14px;color:var(--text);margin-top:10px}
+
+  /* === Diffs callout === */
+  .notes{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .note{background:var(--white);border-radius:12px;padding:20px;border-left:4px solid var(--primary)}
+  .note.warn{border-left-color:#E8A20B;background:#FFFBEF}
+  .note h4{font-family:'Roboto',sans-serif;font-weight:800;color:var(--ink);font-size:15px;margin-bottom:6px}
+  .note p{font-size:13px;line-height:1.55}
+
+  /* === Palette strip === */
+  .palette{display:grid;grid-template-columns:repeat(8,1fr);gap:8px}
+  .swatch-card{aspect-ratio:1/1.1;border-radius:10px;display:flex;flex-direction:column;justify-content:flex-end;padding:10px;color:#fff;font-size:11px;font-family:ui-monospace,Menlo,monospace;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+  .swatch-card .nm{font-size:10px;opacity:.85;margin-bottom:2px;font-weight:500}
+
+  footer{margin-top:40px;text-align:center;font-size:12px;color:var(--gray)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="topbar">
+    <div>
+      <div class="subtitle">Validação de identidade visual</div>
+      <h1>Site oficial <span class="accent">×</span> Aplicação Novità</h1>
+    </div>
+    <span class="badge">Tokens em conformidade total</span>
+  </header>
+
+  <!-- Side by side screenshots -->
+  <section>
+    <h2>Comparação visual — hero acima da dobra</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="name">Site institucional</div>
+            <div class="url">novitahomecare.com.br</div>
+          </div>
+          <span class="tag live">Referência</span>
+        </div>
+        <img class="shot" src="oficial.png" alt="Hero do site oficial">
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <div>
+            <div class="name">Aplicação Telemedicina</div>
+            <div class="url">localhost:5173</div>
+          </div>
+          <span class="tag app">Em revisão</span>
+        </div>
+        <img class="shot" src="projeto.png" alt="Hero do projeto local">
+      </div>
+    </div>
+  </section>
+
+  <!-- Color palette -->
+  <section>
+    <h2>Paleta de cores — extraída do <code>elementor-kit-7</code></h2>
+    <div class="palette">
+      <div class="swatch-card" style="background:#EDAF00"><span class="nm">primary</span>#EDAF00</div>
+      <div class="swatch-card" style="background:#CC9B00"><span class="nm">secondary</span>#CC9B00</div>
+      <div class="swatch-card" style="background:#A67705"><span class="nm">accent / link</span>#A67705</div>
+      <div class="swatch-card" style="background:#CAB772"><span class="nm">highlight</span>#CAB772</div>
+      <div class="swatch-card" style="background:#4B4B4B"><span class="nm">text</span>#4B4B4B</div>
+      <div class="swatch-card" style="background:#B1B1B1"><span class="nm">gray</span>#B1B1B1</div>
+      <div class="swatch-card" style="background:#F9F9F9;color:#4B4B4B;border:1px solid #ECECEC"><span class="nm" style="opacity:.6">bg-light</span>#F9F9F9</div>
+      <div class="swatch-card" style="background:#FFFFFF;color:#4B4B4B;border:1px solid #ECECEC"><span class="nm" style="opacity:.6">white</span>#FFFFFF</div>
+    </div>
+  </section>
+
+  <!-- Token comparison -->
+  <section>
+    <h2>Tokens de cor — comparação token a token</h2>
+    <table>
+      <thead>
+        <tr><th>Token</th><th>Site oficial</th><th>Aplicação</th><th style="text-align:center">Match</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>primary</td><td class="swatch"><span class="chip" style="background:#EDAF00"></span><code>#EDAF00</code></td><td class="swatch"><span class="chip" style="background:#EDAF00"></span><code>#EDAF00</code></td><td class="match">✅</td></tr>
+        <tr><td>secondary</td><td class="swatch"><span class="chip" style="background:#CC9B00"></span><code>#CC9B00</code></td><td class="swatch"><span class="chip" style="background:#CC9B00"></span><code>#CC9B00</code></td><td class="match">✅</td></tr>
+        <tr><td>text</td><td class="swatch"><span class="chip" style="background:#4B4B4B"></span><code>#4B4B4B</code></td><td class="swatch"><span class="chip" style="background:#4B4B4B"></span><code>#4B4B4B</code></td><td class="match">✅</td></tr>
+        <tr><td>accent</td><td class="swatch"><span class="chip" style="background:#A67705"></span><code>#A67705</code></td><td class="swatch"><span class="chip" style="background:#A67705"></span><code>#A67705</code></td><td class="match">✅</td></tr>
+        <tr><td>highlight</td><td class="swatch"><span class="chip" style="background:#CAB772"></span><code>#CAB772</code></td><td class="swatch"><span class="chip" style="background:#CAB772"></span><code>#CAB772</code></td><td class="match">✅</td></tr>
+        <tr><td>gray</td><td class="swatch"><span class="chip" style="background:#B1B1B1"></span><code>#B1B1B1</code></td><td class="swatch"><span class="chip" style="background:#B1B1B1"></span><code>#B1B1B1</code></td><td class="match">✅</td></tr>
+        <tr><td>bg-light</td><td class="swatch"><span class="chip" style="background:#F9F9F9;border:1px solid #ddd"></span><code>#F9F9F9</code></td><td class="swatch"><span class="chip" style="background:#F9F9F9;border:1px solid #ddd"></span><code>#F9F9F9</code></td><td class="match">✅</td></tr>
+        <tr><td>white</td><td class="swatch"><span class="chip" style="background:#FFFFFF;border:1px solid #ddd"></span><code>#FFFFFF</code></td><td class="swatch"><span class="chip" style="background:#FFFFFF;border:1px solid #ddd"></span><code>#FFFFFF</code></td><td class="match">✅</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Typography -->
+  <section>
+    <h2>Tipografia — Roboto + Poppins (Google Fonts)</h2>
+    <div class="type-grid">
+      <div class="type-card">
+        <div class="label">Heading primary — Roboto 800 / 35px</div>
+        <h3>Sejam bem-vindos à <span style="color:#EDAF00">NOVITÀ HOME CARE!</span></h3>
+        <div class="meta">font-family: 'Roboto', sans-serif &nbsp;·&nbsp; weight 800 &nbsp;·&nbsp; line-height 1.2</div>
+      </div>
+      <div class="type-card">
+        <div class="label">Body text — Poppins 400 / 14px</div>
+        <p class="body">Para saber mais a respeito da Novità, entre em contato conosco. Será um prazer atendê-lo(a)!</p>
+        <div class="meta" style="margin-top:14px">font-family: 'Poppins', sans-serif &nbsp;·&nbsp; weight 400 &nbsp;·&nbsp; line-height 1.65</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Notes / observations -->
+  <section>
+    <h2>Observações da comparação visual</h2>
+    <div class="notes">
+      <div class="note">
+        <h4>✅ Logotipo coerente</h4>
+        <p>Marca <strong>NVT</strong> + wordmark <strong>Novità</strong> com o subtítulo descritivo. Mesma família visual em ambos os produtos.</p>
+      </div>
+      <div class="note">
+        <h4>✅ Hero com profissional de saúde</h4>
+        <p>Ambos posicionam fotografia de profissional de saúde à direita do bloco textual, com CTA dourado primário abaixo do copy.</p>
+      </div>
+      <div class="note">
+        <h4>✅ Paleta dourada dominante</h4>
+        <p>O dourado <code>#EDAF00</code> é usado consistentemente em CTAs, links de navegação e palavras-chave dos títulos.</p>
+      </div>
+      <div class="note warn">
+        <h4>⚠️ Diferenças esperadas (não-bloqueantes)</h4>
+        <p>O site institucional é uma <strong>landing</strong> (5 itens de menu). A aplicação é um <strong>SaaS de telemedicina</strong> com menu funcional (Telemedicina, Planos, Medicamentos, Blog, Entrar) e CTA "Iniciar agora".</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Tokens validados em <code>wp-content/uploads/elementor/css/post-7.css</code> · screenshots @ 1440×900 · headless Chrome
+  </footer>
+</div>
+</body>
+</html>

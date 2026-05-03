@@ -15,7 +15,12 @@ export interface FinancialMetrics {
   // Métricas Financeiras
   mrr: number; // Monthly Recurring Revenue
   arr: number; // Annual Recurring Revenue
+  subscriptionRevenue: number;
+  oneOffRevenue: number;
+  totalRevenue: number;
   averageTicket: number;
+  averageOrderTicket: number;
+  oneOffOrders: number;
 
   // Inadimplência
   delinquentSubscribers: number;
@@ -45,6 +50,9 @@ export interface FinancialMetrics {
 export interface MonthlyMetrics {
   month: string;
   mrr: number;
+  oneOffRevenue: number;
+  totalRevenue: number;
+  orders: number;
   subscribers: number;
   churn: number;
   newSubscribers: number;
@@ -60,6 +68,13 @@ const PLAN_PRICES: Record<string, number> = {
 };
 
 type NormalizedPlanKey = "bronze" | "prata" | "ouro" | "diamante" | "coletivo";
+type PlanData = { type?: string | null; price_monthly?: number | null; price?: number | null };
+type SubscriptionWithPlan = {
+  plan?: PlanData | PlanData[] | null;
+  subscription_plans?: PlanData | PlanData[] | null;
+};
+
+const PAID_ORDER_STATUSES = new Set(["processing", "shipped", "delivered"]);
 
 const normalizePlanType = (type: string | null | undefined): NormalizedPlanKey | null => {
   if (!type) return null;
@@ -75,22 +90,39 @@ const resolvePlanPrice = (planType: string | null | undefined, planPrice?: numbe
   return PLAN_PRICES[planType] || 0;
 };
 
+const roundCurrency = (value: number) => Math.round(value * 100) / 100;
+
+const getPlanData = (subscription: SubscriptionWithPlan): PlanData | undefined => {
+  const plan = subscription.plan ?? subscription.subscription_plans;
+  return Array.isArray(plan) ? plan[0] : plan || undefined;
+};
+
+const calculateSubscriptionRevenue = (subscriptions: SubscriptionWithPlan[]) => roundCurrency(
+  subscriptions.reduce((sum, subscription) => {
+    const planData = getPlanData(subscription);
+    const normalized = normalizePlanType(planData?.type);
+    const planKey = normalized || "coletivo";
+    return sum + resolvePlanPrice(planKey, planData?.price_monthly ?? planData?.price);
+  }, 0)
+);
+
 /**
  * Busca métricas financeiras completas do dashboard
  */
 export async function getFinancialMetrics(): Promise<FinancialMetrics> {
   try {
-    // Busca dados de assinaturas
-    const subscriptionData = await fetchSubscriptionData();
-
-    // Busca dados de inadimplência
-    const delinquencyData = await fetchDelinquencyData();
-
-    // Busca dados de churn
-    const churnData = await fetchChurnData();
+    const [subscriptionData, delinquencyData, churnData, orderRevenueData] = await Promise.all([
+      fetchSubscriptionData(),
+      fetchDelinquencyData(),
+      fetchChurnData(),
+      fetchOrderRevenueData(),
+    ]);
 
     // Calcula MRR
     const mrr = subscriptionData.activeRevenue;
+    const oneOffRevenue = orderRevenueData.currentMonthRevenue;
+    const totalRevenue = roundCurrency(mrr + oneOffRevenue);
+    const paidUnits = subscriptionData.active + orderRevenueData.currentMonthOrders;
 
     // Monta objeto de métricas
     const metrics: FinancialMetrics = {
@@ -102,7 +134,12 @@ export async function getFinancialMetrics(): Promise<FinancialMetrics> {
       // Financeiro
       mrr,
       arr: mrr * 12,
-      averageTicket: subscriptionData.active > 0 ? mrr / subscriptionData.active : 0,
+      subscriptionRevenue: mrr,
+      oneOffRevenue,
+      totalRevenue,
+      averageTicket: paidUnits > 0 ? roundCurrency(totalRevenue / paidUnits) : 0,
+      averageOrderTicket: orderRevenueData.averageOrderTicket,
+      oneOffOrders: orderRevenueData.currentMonthOrders,
 
       // Inadimplência
       delinquentSubscribers: delinquencyData.count,
@@ -352,6 +389,73 @@ async function fetchChurnData(): Promise<{
   }
 }
 
+async function fetchOrderRevenueData(): Promise<{
+  currentMonthRevenue: number;
+  currentMonthOrders: number;
+  totalRevenue: number;
+  totalOrders: number;
+  averageOrderTicket: number;
+}> {
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    const { data, error } = await supabase
+      .from("orders")
+      .select("id, total, subtotal, shipping_cost, status, date, created_at");
+
+    if (error) {
+      if (error.code === "42P01") {
+        return getMockOrderRevenueData();
+      }
+      throw error;
+    }
+
+    const revenueOrders = ((data || []) as Array<{
+      total?: number | string | null;
+      subtotal?: number | string | null;
+      shipping_cost?: number | string | null;
+      status?: string | null;
+      date?: string | null;
+      created_at?: string | null;
+    }>).filter((order) => PAID_ORDER_STATUSES.has(order.status || ""));
+
+    const orderTotal = (order: {
+      total?: number | string | null;
+      subtotal?: number | string | null;
+      shipping_cost?: number | string | null;
+    }) => {
+      const total = Number(order.total);
+      if (Number.isFinite(total)) return total;
+      const subtotal = Number(order.subtotal) || 0;
+      const shipping = Number(order.shipping_cost) || 0;
+      return subtotal + shipping;
+    };
+
+    const currentMonthOrders = revenueOrders.filter((order) => {
+      const orderDate = order.date || order.created_at;
+      if (!orderDate) return false;
+      const date = new Date(orderDate);
+      return date >= monthStart && date < nextMonth;
+    });
+
+    const totalRevenue = revenueOrders.reduce((sum, order) => sum + orderTotal(order), 0);
+    const currentMonthRevenue = currentMonthOrders.reduce((sum, order) => sum + orderTotal(order), 0);
+
+    return {
+      currentMonthRevenue: roundCurrency(currentMonthRevenue),
+      currentMonthOrders: currentMonthOrders.length,
+      totalRevenue: roundCurrency(totalRevenue),
+      totalOrders: revenueOrders.length,
+      averageOrderTicket: revenueOrders.length > 0 ? roundCurrency(totalRevenue / revenueOrders.length) : 0,
+    };
+  } catch (error) {
+    logger.warn("Usando dados mock para pedidos avulsos:", error);
+    return getMockOrderRevenueData();
+  }
+}
+
 /**
  * Calcula MRR baseado nos assinantes ativos por plano
  */
@@ -382,50 +486,74 @@ export async function getMonthlyMetricsHistory(months: number = 6): Promise<Mont
       const monthStart = date.toISOString();
       const monthEnd = nextMonth.toISOString();
 
-      // Busca novos assinantes no mês
-      const { count: newSubscribers } = await supabase
-        .from("user_subscriptions")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", monthStart)
-        .lt("created_at", monthEnd);
+      const [
+        newSubscribersResult,
+        cancelledResult,
+        totalSubscribersResult,
+        activeSubscriptionsResult,
+        ordersResult,
+      ] = await Promise.all([
+        supabase
+          .from("user_subscriptions")
+          .select("*", { count: "exact", head: true })
+          .gte("created_at", monthStart)
+          .lt("created_at", monthEnd),
+        supabase
+          .from("user_subscriptions")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "cancelled")
+          .gte("updated_at", monthStart)
+          .lt("updated_at", monthEnd),
+        supabase
+          .from("user_subscriptions")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "active")
+          .lt("created_at", monthEnd),
+        supabase
+          .from("user_subscriptions")
+          .select("plan:subscription_plans(type, price_monthly)")
+          .eq("status", "active")
+          .lt("created_at", monthEnd),
+        supabase
+          .from("orders")
+          .select("total, subtotal, shipping_cost, status, date, created_at")
+          .gte("date", monthStart)
+          .lt("date", monthEnd),
+      ]);
 
-      // Busca cancelamentos no mês
-      const { count: cancelledCount } = await supabase
-        .from("user_subscriptions")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "cancelled")
-        .gte("updated_at", monthStart)
-        .lt("updated_at", monthEnd);
-
-      // Busca total de assinantes ativos até o final do mês
-      const { count: totalSubscribers } = await supabase
-        .from("user_subscriptions")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "active")
-        .lt("created_at", monthEnd);
+      const newSubscribers = newSubscribersResult.count || 0;
+      const cancelledCount = cancelledResult.count || 0;
+      const totalSubscribers = totalSubscribersResult.count || 0;
 
       // Calcula churn rate
-      const activeAtStart = (totalSubscribers || 0) + (cancelledCount || 0) - (newSubscribers || 0);
-      const churnRate = activeAtStart > 0 ? ((cancelledCount || 0) / activeAtStart) * 100 : 0;
+      const activeAtStart = totalSubscribers + cancelledCount - newSubscribers;
+      const churnRate = activeAtStart > 0 ? (cancelledCount / activeAtStart) * 100 : 0;
 
-      // Busca MRR do mês (soma dos preços dos planos ativos)
-      const { data: activeSubscriptions } = await supabase
-        .from("user_subscriptions")
-        .select("subscription_plans(price)")
-        .eq("status", "active")
-        .lt("created_at", monthEnd);
-
-      const mrr = activeSubscriptions?.reduce((sum, sub) => {
-        const price = (sub.subscription_plans as any)?.price || 0;
-        return sum + price;
-      }, 0) || 0;
+      const mrr = calculateSubscriptionRevenue(
+        (activeSubscriptionsResult.data || []) as SubscriptionWithPlan[]
+      );
+      const orderRows = (ordersResult.data || []) as Array<{
+        total?: number | string | null;
+        subtotal?: number | string | null;
+        shipping_cost?: number | string | null;
+        status?: string | null;
+      }>;
+      const revenueOrders = orderRows.filter((order) => PAID_ORDER_STATUSES.has(order.status || ""));
+      const oneOffRevenue = roundCurrency(revenueOrders.reduce((sum, order) => {
+        const total = Number(order.total);
+        if (Number.isFinite(total)) return sum + total;
+        return sum + (Number(order.subtotal) || 0) + (Number(order.shipping_cost) || 0);
+      }, 0));
 
       history.push({
         month: monthName.charAt(0).toUpperCase() + monthName.slice(1),
         mrr,
-        subscribers: totalSubscribers || 0,
+        oneOffRevenue,
+        totalRevenue: roundCurrency(mrr + oneOffRevenue),
+        orders: revenueOrders.length,
+        subscribers: totalSubscribers,
         churn: Math.round(churnRate * 10) / 10,
-        newSubscribers: newSubscribers || 0,
+        newSubscribers,
       });
     }
 
@@ -479,6 +607,16 @@ function getMockChurnData() {
   };
 }
 
+function getMockOrderRevenueData() {
+  return {
+    currentMonthRevenue: 18472.35,
+    currentMonthOrders: 96,
+    totalRevenue: 148920.50,
+    totalOrders: 812,
+    averageOrderTicket: 183.40,
+  };
+}
+
 function getEmptyMetrics(): FinancialMetrics {
   return {
     totalSubscribers: 0,
@@ -486,7 +624,12 @@ function getEmptyMetrics(): FinancialMetrics {
     inactiveSubscribers: 0,
     mrr: 0,
     arr: 0,
+    subscriptionRevenue: 0,
+    oneOffRevenue: 0,
+    totalRevenue: 0,
     averageTicket: 0,
+    averageOrderTicket: 0,
+    oneOffOrders: 0,
     delinquentSubscribers: 0,
     delinquencyRate: 0,
     delinquentAmount: 0,
