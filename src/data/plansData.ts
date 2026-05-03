@@ -23,15 +23,16 @@ export const ANNUAL_DISCOUNT = 0.10;
 // Preços de consultas avulsas
 export const SINGLE_CONSULTATION_PRICES = {
   clinico_geral: 59.90,
-  especialista: 119.90,
+  especialista: 149.90,
 };
 
 // Benefícios base do Bronze (comum a todos os planos)
 const BASE_BRONZE_FEATURES = [
-  'Consultas ilimitadas com clínico geral, 24H',
-  'Receitas, atestados e pedidos de exames digitais',
-  'Descontos em medicamentos',
-  'Programa "Medicamento em Casa" (DF e entorno)',
+  'Consultas ilimitadas com clínico geral, sem agendamento',
+  'Atendimento 24h por dia, 7 dias por semana',
+  'Receitas e atestados médicos digitais com certificação validada pelo Conselho Federal de Medicina',
+  'Descontos em medicamentos e exames',
+  'Programa "Medicamento em Casa" (*)',
 ];
 
 // Planos Individuais
@@ -72,18 +73,18 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     name: 'Ouro',
     type: 'ouro',
     category: 'individual',
-    description: 'Maiores cuidados em saúde',
-    shortDescription: 'Maiores cuidados em saúde',
-    price_monthly: 79.90,
-    price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
-    specialist_consultations_per_year: 2,
+    description: 'Maiores cuidados em saúde, com check up gratuito',
+    shortDescription: 'Maiores cuidados em saúde, com check up gratuito',
+    price_monthly: 69.90,
+    price_yearly: 69.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 754,92/ano = R$ 62,91/mês
+    specialist_consultations_per_year: 1,
     checkups_per_year: 1,
     max_dependents: 0,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
-      '2 consultas com médico especialista por ano',
-      '1 check-up anual',
+      '1 consulta com médico especialista por ano',
+      '1 check up anual (mulher, homem ou criança)',
     ],
   },
   {
@@ -93,15 +94,15 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     category: 'individual',
     description: 'Melhor e mais avançado controle da saúde',
     shortDescription: 'Melhor e mais avançado controle da saúde',
-    price_monthly: 99.90,
-    price_yearly: 99.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.078,92/ano = R$ 89,91/mês
-    specialist_consultations_per_year: 4,
+    price_monthly: 89.90,
+    price_yearly: 89.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 970,92/ano = R$ 80,91/mês
+    specialist_consultations_per_year: 2,
     checkups_per_year: 1,
     max_dependents: 0,
     features: [
       ...BASE_BRONZE_FEATURES,
-      '4 consultas com médico especialista por ano',
-      'Inclui 1 check-up anual',
+      '2 consultas com médico especialista por ano',
+      '1 check up anual (mulher, homem ou criança)',
     ],
   },
 ];
@@ -113,8 +114,8 @@ export const COLETIVO_PLANS: PlanData[] = [
     name: 'Bronze Familiar',
     type: 'bronze-coletivo',
     category: 'coletivo',
-    description: 'Consultas médicas ilimitadas para toda a família',
-    shortDescription: 'Consultas ilimitadas - até 3 pessoas',
+    description: 'Consultas médicas ilimitadas para até 3 vidas no total',
+    shortDescription: 'Até 3 vidas no total',
     price_monthly: 79.90,
     price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
     specialist_consultations_per_year: 0,
@@ -122,7 +123,7 @@ export const COLETIVO_PLANS: PlanData[] = [
     max_dependents: 2, // titular + 2 dependentes = 3 vidas
     features: [
       ...BASE_BRONZE_FEATURES,
-      'Até 3 beneficiários (titular + 2 dependentes)',
+      'Até 3 beneficiários no total',
     ],
   },
   {
@@ -132,15 +133,15 @@ export const COLETIVO_PLANS: PlanData[] = [
     category: 'coletivo',
     description: 'Consultas com especialista para toda a família',
     shortDescription: 'Especialista incluído - até 3 pessoas',
-    price_monthly: 129.90,
-    price_yearly: 129.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.186,92/ano = R$ 98,91/mês
-    specialist_consultations_per_year: 4,
+    price_monthly: 139.90,
+    price_yearly: 139.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.510,92/ano = R$ 125,91/mês
+    specialist_consultations_per_year: 2,
     checkups_per_year: 0,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
-      'Inclui 4 consultas com médico especialista por ano',
-      'Até 3 beneficiários (titular + 2 dependentes)',
+      '2 consultas com médico especialista por ano',
+      'Até 3 beneficiários no total',
     ],
   },
   {
@@ -150,18 +151,17 @@ export const COLETIVO_PLANS: PlanData[] = [
     category: 'coletivo',
     description: 'Maiores cuidados em saúde para toda a família',
     shortDescription: 'Check-up incluído - até 3 pessoas',
-    price_monthly: 209.90,
-    price_yearly: 209.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.726,92/ano = R$ 143,91/mês
-    specialist_consultations_per_year: 6,
+    price_monthly: 199.90,
+    price_yearly: 199.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
+    specialist_consultations_per_year: 2,
     checkups_per_year: 2,
     max_dependents: 2,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
-      'Inclui 6 consultas com médico especialista por ano',
+      '2 consultas com médico especialista por ano',
       '2 check-ups anuais',
-      'Até 3 beneficiários (titular + 2 dependentes)',
-
+      'Até 3 beneficiários no total',
     ],
   },
   {
@@ -173,14 +173,14 @@ export const COLETIVO_PLANS: PlanData[] = [
     shortDescription: 'Plano completo - até 3 pessoas',
     price_monthly: 259.90,
     price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
-    specialist_consultations_per_year: 8,
+    specialist_consultations_per_year: 4,
     checkups_per_year: 2,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
-      'Inclui 8 consultas com médico especialista por ano',
+      '4 consultas com médico especialista por ano',
       '2 check-ups anuais',
-      'Até 3 beneficiários (titular + 2 dependentes)',
+      'Até 3 beneficiários no total',
     ],
   },
 ];

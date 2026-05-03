@@ -24,8 +24,8 @@ export const QUEM_SOMOS = {
   paragraphs: [
     `Fundada ainda no primeiro semestre de 2011, a NOVITÀ nasceu da rica experiência em saúde e gestão de seus idealizadores e fundadores, os quais perceberam que o atendimento prestado a pacientes crônicos por muitas vezes carecia de qualidade, atenção e contato pessoal, decidindo focar o negócio essencialmente na gestão de qualidade e na humanização e respeito ao ser humano, de modo que pudéssemos proporcionar um atendimento de excelência e bem-estar aos seus pacientes.`,
     `Nosso negócio é o planejamento, gestão e operacionalização de internações domiciliares e assistência em saúde, atendendo desde pacientes que necessitam de consultas específicas ou pacientes crônicos com prescrição médica recorrente, até pacientes de altíssima complexidade, sejam eles recém-nascidos ou em estágio avançado da vida, traqueostomizados com ou sem ventilação mecânica, em uso de dieta enteral ou parenteral, atuando de modo presencial ou via telemedicina, vinte e quatro horas por dia, sete dias por semana, 365 dias por ano.`,
-    `A NOVITÀ dispõe de médicos especialistas em diversas áreas da saúde, tais como pediatras, nutrólogos e em saúde da família, equipe de enfermagem com vasta experiência em assistência à saúde e internação domiciliar, além de profissionais internos e externos altamente qualificados e capacitados. Oferecemos serviços de abordagem multidisciplinar, com equipe composta por médicos, enfermeiros e técnicos de enfermagem, nutricionistas, psicólogos, fisioterapeutas, fonoaudiólogos e terapeutas ocupacionais.`,
-    `Disponibilizamos todos os recursos, desde mobiliário e equipamentos de suporte à vida, até os materiais e medicamentos necessários à assistência e manutenção da saúde de nossos pacientes, levados regularmente aos seus domicílios por equipe de logística especializada.`,
+    `A NOVITÀ dispõe de médicos clínicos gerais e especialistas em diversas áreas da saúde, incluindo pediatras e nutrólogos, equipe de enfermagem com vasta experiência em assistência à saúde e internação domiciliar, além de profissionais internos e externos altamente qualificados e capacitados. Oferecemos serviços de abordagem multidisciplinar, com equipe composta por médicos, enfermeiros e técnicos de enfermagem, nutricionistas, psicólogos, fisioterapeutas, fonoaudiólogos e terapeutas ocupacionais.`,
+    `Disponibilizamos todos os recursos, desde mobiliário e equipamentos de suporte à vida, até os materiais e medicamentos necessários à assistência e manutenção da saúde de nossos pacientes, levados regularmente aos seus lares por equipe de logística especializada.`,
     `O time interno da NOVITÀ conta com gestores e administradores com formação e experiência comprovadas específicas em sua área de atuação, enquanto que nossa equipe assistencial se encontra devidamente capacitada para atender desde pacientes mais estáveis àqueles que se encontram em quadro de maior complexidade ou, ainda, em cuidados paliativos, priorizando o foco na humanização e a excelência na assistência.`,
   ],
 };
@@ -41,22 +41,27 @@ export const DIFERENCIAIS = {
     {
       icon: 'Clock',
       title: '15 Anos de Experiência',
-      description: '1500+ pacientes assistidos, 30.000+ consultas médicas realizadas, 400.000+ sessões de fisioterapia, fonoaudiologia, psicologia etc.',
+      description: '2000+ pacientes assistidos, 30.000+ consultas médicas realizadas presencialmente e 500.000+ sessões multidisciplinares efetuadas.',
     },
     {
       icon: 'Building',
       title: 'Sede e Farmácia Próprias',
-      description: 'Nova Sede, moderna e com farmácia própria, localizada no coração de Brasília.',
+      description: 'Sede e farmácia próprias e modernizadas.',
+    },
+    {
+      icon: 'Ambulance',
+      title: 'UTI Móvel',
+      description: 'UTI MÓVEL totalmente equipada e identificada, contando com equipamentos de ponta, sendo uma das mais modernas do mercado.',
     },
     {
       icon: 'FileCheck',
-      title: 'Prontuário Eletrônico',
-      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica e pedido de exame via assinatura eletrônica com protocolo ICP-Brasil)',
+      title: 'Prontuário e Prescrição Digital',
+      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica via assinatura eletrônica com protocolo ICP-Brasil).',
     },
     {
       icon: 'Shield',
-      title: 'PPortal de Telemedicina',
-      description: 'Telemedicina avançada, consulta com especialistas e suporte em evidências conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1.348/2022',
+      title: 'Protocolos Clínicos Seguros',
+      description: 'Protocolos clínicos seguros com suporte em evidências, conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1.348/2022.',
     },
     {
       icon: 'Star',
@@ -107,8 +112,8 @@ export const POR_QUE_NOVITA = {
     },
     {
       icon: 'Building2',
-      title: 'Check Up em domicílio',
-      description: 'Check up gratuito (Planos Ouro e Diamante) com coleta de exame de sangue em domicílio por laboratório renomado e especializado, sem você precisar sair de casa.',
+      title: 'Estrutura Consolidada',
+      description: 'Estrutura consolidada, protocolos clínicos bem definidos e 15 anos de experiência em atendimento humanizado a pacientes das mais variadas complexidades',
     },
     {
       icon: 'Heart',
@@ -198,8 +203,24 @@ export const FAQ_ITEMS = [
   },
 ];
 
-// Blog - Placeholder (cliente não preencheu artigos)
-// TODO: Solicitar ao cliente os 3 artigos iniciais
+export const BLOG_ARTICLES = [
+  {
+    title: 'Telemedicina 24h: cuidado médico quando você precisa',
+    excerpt: 'Entenda como o atendimento online facilita o acesso a orientação médica com rapidez, segurança e comodidade.',
+    category: 'Telemedicina',
+  },
+  {
+    title: 'Check up anual: prevenção com acompanhamento profissional',
+    excerpt: 'Saiba por que manter consultas e exames de rotina em dia ajuda no acompanhamento contínuo da saúde.',
+    category: 'Prevenção',
+  },
+  {
+    title: 'Medicamento em Casa: mais adesão e menos deslocamento',
+    excerpt: 'Veja como a entrega de medicamentos prescritos pode facilitar a continuidade do cuidado no DF e entorno.',
+    category: 'Cuidado contínuo',
+  },
+];
+
 export const BLOG_PLACEHOLDER = {
-  message: 'Artigos do blog serão adicionados em breve. O cliente precisa fornecer os 3 primeiros artigos conforme briefing.',
+  message: 'Artigos de saúde com curadoria em fontes especializadas serão publicados no blog.',
 };

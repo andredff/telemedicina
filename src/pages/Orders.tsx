@@ -369,12 +369,7 @@ const Orders = () => {
                     : "Tente selecionar outra categoria."}
                 </p>
               </div>
-              {selectedTab === "all" && (
-                <Button onClick={() => navigate("/farmacias")} className="mt-2">
-                  <Package className="h-4 w-4 mr-2" />
-                  Explorar Farmácias
-                </Button>
-              )}
+  
             </div>
           ) : (
             filteredOrders.map((order) => {

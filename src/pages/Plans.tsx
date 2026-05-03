@@ -77,7 +77,7 @@ const SINGLE_CONSULTATION_OPTIONS = [
   },
   {
     title: "Consulta Avulsa - Especialista",
-    description: "Consulta pontual com médico especialista.",
+    description: "Consulta pontual com médico especialista para assinantes.",
     priceKey: "especialista" as const,
     authParam: "avulsa-especialista",
   },

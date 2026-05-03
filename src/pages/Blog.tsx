@@ -6,6 +6,7 @@ import Footer from "@/components/layout/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Calendar, ArrowRight, Loader2 } from "lucide-react";
+import { BLOG_ARTICLES, BLOG_PLACEHOLDER } from "@/data/landingContent";
 
 interface BlogPost {
   id: string;
@@ -56,6 +57,20 @@ const Blog = () => {
     return images[category] || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=800&q=80';
   };
 
+  const fallbackPosts: BlogPost[] = BLOG_ARTICLES.map((article, index) => ({
+    id: `fallback-${index + 1}`,
+    title: article.title,
+    slug: "",
+    excerpt: article.excerpt,
+    category: article.category,
+    created_at: new Date().toISOString(),
+    published_at: null,
+    featured_image: null,
+    views: 0,
+  }));
+
+  const visiblePosts = posts.length > 0 ? posts : fallbackPosts;
+
   return (
     <div className="min-h-screen bg-background">
       <PublicHeader />
@@ -75,17 +90,23 @@ const Blog = () => {
             <div className="flex justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : posts.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">Nenhum post publicado ainda.</p>
-            </div>
           ) : (
+            <>
+            {posts.length === 0 && (
+              <p className="mb-8 text-center text-sm text-muted-foreground">
+                {BLOG_PLACEHOLDER.message}
+              </p>
+            )}
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
-              {posts.map((post) => (
+              {visiblePosts.map((post) => (
                 <Card 
                   key={post.id} 
-                  className="bg-card border-border/50 hover:shadow-card transition-all cursor-pointer group overflow-hidden"
-                  onClick={() => navigate(`/blog/${post.slug}`)}
+                  className={`bg-card border-border/50 hover:shadow-card transition-all group overflow-hidden ${
+                    post.slug ? "cursor-pointer" : ""
+                  }`}
+                  onClick={() => {
+                    if (post.slug) navigate(`/blog/${post.slug}`);
+                  }}
                 >
                   <div className="h-48 overflow-hidden">
                     <img 
@@ -108,13 +129,14 @@ const Blog = () => {
                         {new Date(post.published_at || post.created_at).toLocaleDateString("pt-BR")}
                       </div>
                       <span className="flex items-center gap-1 text-primary">
-                        Ler mais <ArrowRight className="h-4 w-4" />
+                        {post.slug ? "Ler mais" : "Em breve"} <ArrowRight className="h-4 w-4" />
                       </span>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
+            </>
           )}
         </div>
       </section>
