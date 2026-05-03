@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Docs visuais · Novita Telemedicina</title>
+  <style>
+    :root {
+      --brand: #edaf00;
+      --brand-dark: #a67705;
+      --ink: #1f2937;
+      --muted: #6b7280;
+      --line: #e5e7eb;
+      --bg: #f8fafc;
+      --panel: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--bg);
+    }
+
+    main {
+      width: min(1040px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 56px 0 80px;
+    }
+
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 24px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(30px, 5vw, 54px);
+      line-height: 1;
+      letter-spacing: 0;
+    }
+
+    .kicker {
+      margin: 0 0 12px;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .summary {
+      margin: 14px 0 0;
+      max-width: 680px;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.6;
+    }
+
+    .badge {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      height: 38px;
+      padding: 0 14px;
+      border: 1px solid rgba(237, 175, 0, 0.4);
+      border-radius: 999px;
+      background: #fff7df;
+      color: var(--brand-dark);
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 28px;
+    }
+
+    a.card {
+      display: grid;
+      gap: 14px;
+      min-height: 174px;
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: inherit;
+      text-decoration: none;
+      box-shadow: 0 14px 36px rgba(15, 23, 42, 0.06);
+      transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+    }
+
+    a.card:hover,
+    a.card:focus-visible {
+      transform: translateY(-2px);
+      border-color: rgba(237, 175, 0, 0.7);
+      box-shadow: 0 18px 42px rgba(15, 23, 42, 0.1);
+      outline: none;
+    }
+
+    .label {
+      display: inline-flex;
+      width: fit-content;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .card p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .path {
+      margin-top: auto;
+      color: var(--brand-dark);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        width: min(100% - 28px, 1040px);
+        padding-top: 32px;
+      }
+
+      header {
+        display: block;
+      }
+
+      .badge {
+        margin-top: 18px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <p class="kicker">Documentacao visual</p>
+        <h1>Validacoes e comparativos</h1>
+        <p class="summary">Atalhos para os arquivos HTML publicados junto com o build estatico do projeto.</p>
+      </div>
+      <span class="badge">/docs</span>
+    </header>
+
+    <section class="grid" aria-label="Arquivos disponiveis">
+      <a class="card" href="/docs/VALIDACAO_VISUAL_ESCOPO_MVP.html">
+        <span class="label">Escopo</span>
+        <h2>Validacao visual do MVP</h2>
+        <p>Apresentacao visual para conferir o escopo fechado, os modulos previstos e os criterios de aceite.</p>
+        <span class="path">/docs/VALIDACAO_VISUAL_ESCOPO_MVP.html</span>
+      </a>
+
+      <a class="card" href="/docs/VALIDACAO_VISUAL_LOGISTICA_PEDIDOS.html">
+        <span class="label">Logistica</span>
+        <h2>Pedidos, status e rastreio</h2>
+        <p>Material visual para explicar notificacao de OS, acompanhamento de pedidos, financeiro e rastreamento.</p>
+        <span class="path">/docs/VALIDACAO_VISUAL_LOGISTICA_PEDIDOS.html</span>
+      </a>
+
+      <a class="card" href="/docs/visual-compare/index.html">
+        <span class="label">Comparativo</span>
+        <h2>Comparacao visual</h2>
+        <p>Comparativo lado a lado entre a referencia oficial e o projeto implementado.</p>
+        <span class="path">/docs/visual-compare/index.html</span>
+      </a>
+
+      <a class="card" href="/docs/visual-compare/status.html">
+        <span class="label">Auditoria</span>
+        <h2>Status da auditoria visual</h2>
+        <p>Painel visual com o estado dos pontos auditados e a leitura de prontidao.</p>
+        <span class="path">/docs/visual-compare/status.html</span>
+      </a>
+    </section>
+  </main>
+</body>
+</html>

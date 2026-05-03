@@ -41,17 +41,18 @@ Este documento consolida o escopo fechado do MVP conforme contrato e serve como 
 ## 4. Integracoes e dependencias
 
 - Supabase: Auth, Database, Storage (dados de perfis, prescricoes, pedidos e assinaturas).
-- Cielo: pagamento recorrente e avulso (cartao). Modo mock quando nao configurado.
-- Assemed (telemedicina): login, cadastro de paciente, consulta e sala de espera.
+- Cielo: pagamento recorrente e avulso (cartao), configurado para producao no backend.
+- Assemed (telemedicina): login, cadastro de paciente, consulta e sala de espera, configurado para producao.
 - Email/logistica: notificacoes e ordem de servico (integracao real a definir; hoje simulado).
 
 ### Variaveis de ambiente minimas
 
 - VITE_SUPABASE_URL
 - VITE_SUPABASE_PUBLISHABLE_KEY
-- VITE_CIELO_MERCHANT_ID (opcional, usa mock se ausente)
-- VITE_CIELO_MERCHANT_KEY (opcional, usa mock se ausente)
-- VITE_CIELO_SANDBOX (opcional)
+- CIELO_MERCHANT_ID (server-side; opcional, usa mock se ausente)
+- CIELO_MERCHANT_KEY (server-side; opcional, usa mock se ausente)
+- CIELO_SANDBOX (server-side; opcional)
+- CIELO_WEBHOOK_SECRET (server-side; recomendado para webhook Cielo)
 
 ## 5. Dados e tabelas minimas
 
@@ -98,13 +99,13 @@ Portal do paciente e venda de planos
 
 - Landing page institucional: READY (src/pages/Index.tsx).
 - Pagina de planos e CTA de assinatura: READY (src/pages/Plans.tsx). Planos renomeados de Diamante para Platina conforme contrato.
-- Checkout recorrente (cartao): READY (cartao via Cielo com mock; depende credenciais em producao) (src/pages/CheckoutSubscription.tsx, src/components/checkout/SubscriptionCheckout.tsx).
+- Checkout recorrente (cartao): READY (cartao via Cielo no backend; credenciais server-side e webhook configurados para producao) (src/pages/CheckoutSubscription.tsx, src/components/checkout/SubscriptionCheckout.tsx, server/cielo-server.js).
 - Area do usuario com gestao de dados e plano: READY (dashboard com plano ativo, edicao de perfil completa) (src/pages/Dashboard.tsx, src/pages/ProfileSettings.tsx).
 
 Core telemedicina integrada
 
 - Controle de acesso por assinatura: READY (checa assinatura ativa e expiracao; inadimplencia real depende dados de pagamento via webhook Cielo) (src/services/telemedicineService.ts, src/pages/Telemedicine.tsx).
-- Integracao white label via iFrame: READY (integ Assemed completa; depende credenciais externas em producao) (src/pages/Telemedicine.tsx, src/services/telemedicineService.ts).
+- Integracao white label via iFrame: READY (integracao Assemed completa; credenciais e apontamento de producao configurados) (src/pages/Telemedicine.tsx, src/services/telemedicineService.ts, src/integrations/assemed/config.ts).
 
 Modulo Medicamento em Casa
 
@@ -121,14 +122,12 @@ Painel administrativo de gestao
 
 Integracoes externas
 
-- Cielo (pagamentos): READY (mock automatico quando sem credenciais).
-- Assemed (telemedicina): READY (mock automatico quando sem credenciais).
+- Cielo (pagamentos): READY (backend com credenciais server-side e webhook configurados para producao).
+- Assemed (telemedicina): READY (credenciais e ambiente de producao configurados).
 - Memed (receitas digitais): READY (mock client criado; integracao real a definir quando credenciais disponiveis) (src/integrations/memed/).
 - Correios (CEP, frete e rastreio): READY (ViaCEP para consulta de endereco; Preco/Prazo/Rastro via backend com credenciais configuraveis no admin e fallback operacional enquanto o cliente nao cadastra as chaves) (src/integrations/correios/, server/tracking/correios.js).
 
 Pontos que dependem de configuracao externa (nao bloqueiam MVP)
 
-- Credenciais Cielo de producao para pagamentos reais.
-- Credenciais Assemed para telemedicina em producao.
 - Credenciais Memed para receitas digitais reais.
 - Servico de email (SendGrid/AWS SES) para notificacoes reais.

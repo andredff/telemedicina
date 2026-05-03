@@ -1,7 +1,92 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { copyFileSync, createReadStream, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
+
+const copyDocsRouteFiles = (sourceDir: string, targetDir: string, extensions: Set<string>) => {
+  if (!existsSync(sourceDir)) {
+    return;
+  }
+
+  mkdirSync(targetDir, { recursive: true });
+
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    const extension = path.extname(entry.name).toLowerCase();
+    if (!extensions.has(extension)) {
+      continue;
+    }
+
+    copyFileSync(path.join(sourceDir, entry.name), path.join(targetDir, entry.name));
+  }
+};
+
+const docsMimeTypes: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+};
+
+const resolveDocsRouteFile = (requestUrl: string, docsDir: string) => {
+  const pathname = decodeURIComponent(requestUrl.split("?")[0] ?? "");
+
+  if (pathname === "/docs" || pathname === "/docs/") {
+    return path.join(docsDir, "index.html");
+  }
+
+  if (pathname === "/docs/visual-compare" || pathname === "/docs/visual-compare/") {
+    return path.join(docsDir, "visual-compare", "index.html");
+  }
+
+  if (!pathname.startsWith("/docs/")) {
+    return null;
+  }
+
+  const candidate = path.resolve(docsDir, pathname.slice("/docs/".length));
+  if (!candidate.startsWith(`${docsDir}${path.sep}`)) {
+    return null;
+  }
+
+  return candidate;
+};
+
+const docsRoutesPlugin = () => ({
+  name: "docs-routes",
+  configureServer(server) {
+    const docsDir = path.resolve(__dirname, "docs");
+
+    server.middlewares.use((request, response, next) => {
+      const filePath = resolveDocsRouteFile(request.url ?? "", docsDir);
+      if (!filePath || !existsSync(filePath) || !statSync(filePath).isFile()) {
+        next();
+        return;
+      }
+
+      response.statusCode = 200;
+      response.setHeader("Content-Type", docsMimeTypes[path.extname(filePath).toLowerCase()] ?? "application/octet-stream");
+      createReadStream(filePath).pipe(response);
+    });
+  },
+  closeBundle() {
+    const docsDir = path.resolve(__dirname, "docs");
+    const visualCompareDir = path.join(docsDir, "visual-compare");
+    const distDocsDir = path.resolve(__dirname, "dist", "docs");
+
+    copyDocsRouteFiles(docsDir, distDocsDir, new Set([".html"]));
+    copyDocsRouteFiles(
+      visualCompareDir,
+      path.join(distDocsDir, "visual-compare"),
+      new Set([".html", ".png", ".jpg", ".jpeg", ".webp", ".svg"]),
+    );
+  },
+});
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
@@ -72,7 +157,7 @@ export default defineConfig(({ mode }) => {
         },
       },
     },
-    plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
+    plugins: [react(), docsRoutesPlugin(), mode === "development" && componentTagger()].filter(Boolean),
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),

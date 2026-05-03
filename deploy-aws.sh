@@ -18,6 +18,13 @@ NC='\033[0m' # No Color
 BUCKET_NAME="novita.migrai.com.br"
 REGION="us-east-1"
 DIST_FOLDER="dist"
+POLICY_FILE="./.deploy-s3-policy.json"
+CLOUDFRONT_CONFIG_FILE="./.deploy-cloudfront-config.json"
+
+cleanup() {
+    rm -f "$POLICY_FILE"
+}
+trap cleanup EXIT
 
 echo -e "${YELLOW}Step 1: Verificando build...${NC}"
 if [ ! -d "$DIST_FOLDER" ]; then
@@ -40,7 +47,7 @@ echo -e "${GREEN}✓ Static website configurado${NC}"
 
 echo ""
 echo -e "${YELLOW}Step 4: Aplicando policy de acesso público...${NC}"
-cat > /tmp/s3-policy.json << 'EOF'
+cat > "$POLICY_FILE" << 'EOF'
 {
     "Version": "2012-10-17",
     "Statement": [
@@ -54,7 +61,7 @@ cat > /tmp/s3-policy.json << 'EOF'
     ]
 }
 EOF
-aws s3api put-bucket-policy --bucket $BUCKET_NAME --policy file:///tmp/s3-policy.json
+aws s3api put-bucket-policy --bucket $BUCKET_NAME --policy file://$POLICY_FILE
 echo -e "${GREEN}✓ Policy aplicada${NC}"
 
 echo ""
@@ -74,7 +81,7 @@ echo -e "${YELLOW}Step 6: Configurando CloudFront...${NC}"
 echo "Criando distribuição CloudFront..."
 
 # Criar distribuição CloudFront
-cat > /tmp/cloudfront-config.json << EOF
+cat > "$CLOUDFRONT_CONFIG_FILE" << EOF
 {
     "CallerReference": "$(date +%s)",
     "Origins": {
@@ -132,7 +139,7 @@ EOF
 
 echo -e "${GREEN}✓ Configuração CloudFront criada${NC}"
 echo -e "${YELLOW}Para criar a distribuição, execute:${NC}"
-echo "aws cloudfront create-distribution --distribution-config file:///tmp/cloudfront-config.json"
+echo "aws cloudfront create-distribution --distribution-config file://$CLOUDFRONT_CONFIG_FILE"
 
 echo ""
 echo -e "${GREEN}🎉 Deploy para S3 concluído!${NC}"

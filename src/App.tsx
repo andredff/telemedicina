@@ -59,6 +59,14 @@ const ScrollToTop = () => {
   return null;
 };
 
+const StaticHtmlRedirect = ({ to }: { to: string }) => {
+  useEffect(() => {
+    window.location.replace(to);
+  }, [to]);
+
+  return null;
+};
+
 const App = () => (
   <ErrorBoundary>
     <QueryClientProvider client={queryClient}>
@@ -97,6 +105,9 @@ const App = () => (
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/cancelamento" element={<Cancellation />} />
           <Route path="/suporte" element={<Support />} />
+          <Route path="/docs" element={<StaticHtmlRedirect to="/docs/index.html" />} />
+          <Route path="/docs/visual-compare" element={<StaticHtmlRedirect to="/docs/visual-compare/index.html" />} />
+          <Route path="/docs/visual-compare/" element={<StaticHtmlRedirect to="/docs/visual-compare/index.html" />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>
