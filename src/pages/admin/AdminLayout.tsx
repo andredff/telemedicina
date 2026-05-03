@@ -8,11 +8,11 @@ import {
   Users,
   ShoppingCart,
   BookOpen,
-  BarChart2,
   Settings,
   LifeBuoy,
   LogOut,
   Pill,
+  DollarSign,
 } from 'lucide-react';
 
 export default function AdminLayout() {
@@ -63,7 +63,7 @@ export default function AdminLayout() {
     { id: 'medications', icon: <Pill className="h-5 w-5" />, label: 'Medicamentos', path: '/admin/medicamentos' },
 
     { id: 'content', icon: <BookOpen className="h-5 w-5" />, label: 'Conteúdo', path: '/admin/conteudo' },
-    { id: 'reports', icon: <BarChart2 className="h-5 w-5" />, label: 'Relatórios', path: '/admin/relatorios' },
+    { id: 'finance', icon: <DollarSign className="h-5 w-5" />, label: 'Financeiro', path: '/admin/financeiro' },
     { id: 'settings', icon: <Settings className="h-5 w-5" />, label: 'Configurações', path: '/admin/configuracoes' },
     { id: 'support', icon: <LifeBuoy className="h-5 w-5" />, label: 'Suporte', path: '/admin/suporte' }
   ];

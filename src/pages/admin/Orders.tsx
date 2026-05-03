@@ -7,6 +7,12 @@ import {
   type OrderStatus
 } from '@/services/notificationService';
 import { logger } from "@/lib/logger";
+import {
+  normalizeCorreiosTrackingCode,
+  saveOrderTracking,
+  validateCorreiosTrackingCode,
+  type TrackingEvent,
+} from '@/services/trackingService';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -84,6 +90,13 @@ interface Order {
   items: OrderItem[];
   prescription_id?: string;
   tracking_code?: string;
+  tracking_carrier?: string | null;
+  tracking_status?: string | null;
+  tracking_status_label?: string | null;
+  tracking_last_event_at?: string | null;
+  tracking_last_checked_at?: string | null;
+  tracking_estimated_delivery?: string | null;
+  tracking_events?: TrackingEvent[] | null;
   receita_id?: string;
   receita_url_pdf?: string;
   consulta_id?: string;
@@ -159,6 +172,13 @@ export default function AdminOrders() {
           items: itemsData as OrderItem[],
           prescription_id: order.prescription_id as string,
           tracking_code: order.tracking_code as string,
+          tracking_carrier: order.tracking_carrier as string | null,
+          tracking_status: order.tracking_status as string | null,
+          tracking_status_label: order.tracking_status_label as string | null,
+          tracking_last_event_at: order.tracking_last_event_at as string | null,
+          tracking_last_checked_at: order.tracking_last_checked_at as string | null,
+          tracking_estimated_delivery: order.tracking_estimated_delivery as string | null,
+          tracking_events: (order.tracking_events as TrackingEvent[] | null) || [],
           receita_id: order.receita_id as string | undefined,
           receita_url_pdf: order.receita_url_pdf as string | undefined,
           consulta_id: order.consulta_id as string | undefined,
@@ -188,6 +208,9 @@ export default function AdminOrders() {
     const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+  const trackingValidation = trackingCode
+    ? validateCorreiosTrackingCode(trackingCode)
+    : { valid: true, code: '', message: '' };
 
   const getStatusBadge = (status: string, reviewStatus?: string | null) => {
     // Pedido pendente com receita e ainda não revisado → badge especial
@@ -283,16 +306,67 @@ export default function AdminOrders() {
   const handleSendNotification = async () => {
     if (!selectedOrder) return;
 
+    const pendingTrackingValidation = trackingCode.trim()
+      ? validateCorreiosTrackingCode(trackingCode)
+      : null;
+
+    if (pendingTrackingValidation && !pendingTrackingValidation.valid) {
+      toast({
+        title: 'Código de rastreio inválido',
+        description: pendingTrackingValidation.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setSendingNotification(true);
 
     try {
+      let trackingCodeToSend = selectedOrder.tracking_code;
+      let estimatedDeliveryToSend = estimatedDelivery;
+      let statusToSend = selectedOrder.status as OrderStatus;
+
+      if (pendingTrackingValidation?.valid) {
+        const trackingResult = await saveOrderTracking(selectedOrder.id, pendingTrackingValidation.code);
+        trackingCodeToSend = trackingResult.tracking.trackingCode;
+        estimatedDeliveryToSend =
+          estimatedDelivery ||
+          trackingResult.tracking.trackingEstimatedDelivery ||
+          '';
+
+        const orderPatch: Partial<Order> = {
+          tracking_code: trackingResult.order.tracking_code || trackingCodeToSend,
+          tracking_carrier: trackingResult.order.tracking_carrier,
+          tracking_status: trackingResult.order.tracking_status,
+          tracking_status_label: trackingResult.order.tracking_status_label,
+          tracking_last_event_at: trackingResult.order.tracking_last_event_at,
+          tracking_last_checked_at: trackingResult.order.tracking_last_checked_at,
+          tracking_estimated_delivery: trackingResult.order.tracking_estimated_delivery,
+          tracking_events: trackingResult.order.tracking_events,
+          status: trackingResult.order.status || selectedOrder.status,
+        };
+        statusToSend = (trackingResult.order.status || selectedOrder.status) as OrderStatus;
+
+        setOrders(orders.map(o =>
+          o.id === selectedOrder.id ? { ...o, ...orderPatch } : o
+        ));
+        setSelectedOrder({ ...selectedOrder, ...orderPatch });
+
+        if (!trackingResult.configured) {
+          toast({
+            title: 'Rastreio salvo',
+            description: 'Código validado. A consulta automática aguardará as credenciais da API Rastro dos Correios.',
+          });
+        }
+      }
+
       const result = await sendOrderStatusNotification({
         orderId: selectedOrder.id,
         customerEmail: selectedOrder.customer_email || 'email@exemplo.com',
         customerName: selectedOrder.customer,
-        status: selectedOrder.status as OrderStatus,
-        trackingCode: trackingCode || selectedOrder.tracking_code,
-        estimatedDelivery: estimatedDelivery,
+        status: statusToSend,
+        trackingCode: trackingCodeToSend || undefined,
+        estimatedDelivery: estimatedDeliveryToSend || undefined,
       });
 
       if (result.success) {
@@ -304,26 +378,6 @@ export default function AdminOrders() {
         // Atualiza histórico
         const history = await getOrderNotificationHistory(selectedOrder.id);
         setNotificationHistory(history);
-
-        // Atualiza tracking code no pedido se informado
-        if (trackingCode) {
-          const { error: trackingError } = await AdminQueries.updateOrderTracking(
-            selectedOrder.id,
-            trackingCode
-          );
-
-          if (!trackingError) {
-            setOrders(orders.map(o =>
-              o.id === selectedOrder.id ? { ...o, tracking_code: trackingCode } : o
-            ));
-          } else {
-            toast({
-              title: 'Erro',
-              description: 'Não foi possível salvar o código de rastreio no banco.',
-              variant: 'destructive',
-            });
-          }
-        }
       } else {
         toast({
           title: 'Erro',
@@ -676,6 +730,16 @@ export default function AdminOrders() {
                   <div className="col-span-2">
                     <Label className="text-muted-foreground">Código de Rastreio</Label>
                     <p className="font-mono font-medium">{selectedOrder.tracking_code}</p>
+                    {selectedOrder.tracking_status_label && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Correios: {selectedOrder.tracking_status_label}
+                      </p>
+                    )}
+                    {selectedOrder.tracking_last_checked_at && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Consultado em {new Date(selectedOrder.tracking_last_checked_at).toLocaleString('pt-BR')}
+                      </p>
+                    )}
                   </div>
                 )}
                 {(selectedOrder.receita_id || selectedOrder.consulta_id) && (
@@ -751,7 +815,10 @@ export default function AdminOrders() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setShowNotificationDialog(true)}
+                    onClick={() => {
+                      setTrackingCode(selectedOrder.tracking_code || '');
+                      setShowNotificationDialog(true);
+                    }}
                   >
                     <Bell className="h-4 w-4 mr-2" />
                     Enviar Notificação
@@ -1035,13 +1102,24 @@ export default function AdminOrders() {
               </div>
 
               <div>
-                <Label htmlFor="tracking">Código de Rastreamento (opcional)</Label>
+                <Label htmlFor="tracking">Código de Rastreamento Correios (opcional)</Label>
                 <Input
                   id="tracking"
                   value={trackingCode}
-                  onChange={(e) => setTrackingCode(e.target.value)}
-                  placeholder={selectedOrder.tracking_code || 'Código de rastreamento'}
+                  onChange={(e) => setTrackingCode(normalizeCorreiosTrackingCode(e.target.value))}
+                  placeholder={selectedOrder.tracking_code || 'DG049186226BR'}
+                  className="font-mono uppercase"
                 />
+                {trackingCode && (
+                  <p className={`text-xs mt-1 ${trackingValidation.valid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    {trackingValidation.message}
+                  </p>
+                )}
+                {selectedOrder.tracking_status_label && !trackingCode && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Status atual nos Correios: {selectedOrder.tracking_status_label}
+                  </p>
+                )}
               </div>
 
               <div>
@@ -1060,7 +1138,7 @@ export default function AdminOrders() {
             <Button variant="outline" onClick={() => setShowNotificationDialog(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSendNotification} disabled={sendingNotification}>
+            <Button onClick={handleSendNotification} disabled={sendingNotification || !trackingValidation.valid}>
               {sendingNotification ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

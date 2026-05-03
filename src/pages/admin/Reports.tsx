@@ -134,8 +134,8 @@ export default function AdminReports() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Relatórios e Analytics</h1>
-        <p className="text-gray-600">Visualize dados e gere relatórios da plataforma</p>
+        <h1 className="text-2xl font-bold">Painel Financeiro</h1>
+        <p className="text-gray-600">Acompanhe MRR, churn, inadimplência, ticket médio e distribuição de planos</p>
       </div>
 
       {/* Controls */}

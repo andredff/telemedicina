@@ -1,15 +1,28 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ExternalLink, Copy, CheckCircle, Clock, Package, Truck, Home, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { supabase } from '@/integrations/supabase/client';
-import { formatOrderStatus, getStatusColor, type OrderStatus } from '@/hooks/useOrderSubscription';
+import {
+  formatOrderStatus,
+  getStatusColor,
+  useOrderSubscription,
+  type OrderStatus,
+  type OrderUpdate,
+} from '@/hooks/useOrderSubscription';
+import {
+  getCorreiosTrackingUrl,
+  refreshOrderTracking,
+  type TrackingEvent,
+} from '@/services/trackingService';
 import { toast } from 'sonner';
 
 interface OrderTrackingProps {
   orderId: string;
   trackingCode?: string | null;
+  trackingStatusLabel?: string | null;
+  trackingLastCheckedAt?: string | null;
+  trackingEvents?: TrackingEvent[] | null;
   status: OrderStatus;
   onStatusChange?: (newStatus: OrderStatus) => void;
 }
@@ -21,45 +34,72 @@ const statusSteps: { status: OrderStatus; label: string; icon: typeof Clock }[] 
   { status: 'delivered', label: 'Pedido Entregue', icon: Home },
 ];
 
-export function OrderTracking({ orderId, trackingCode, status, onStatusChange }: OrderTrackingProps) {
+export function OrderTracking({
+  orderId,
+  trackingCode,
+  trackingStatusLabel,
+  trackingLastCheckedAt,
+  trackingEvents,
+  status,
+  onStatusChange,
+}: OrderTrackingProps) {
   const [copied, setCopied] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
+  const [lastUpdate, setLastUpdate] = useState<Date>(
+    trackingLastCheckedAt ? new Date(trackingLastCheckedAt) : new Date()
+  );
+  const [correiosStatus, setCorreiosStatus] = useState(trackingStatusLabel || null);
+  const [correiosEvents, setCorreiosEvents] = useState<TrackingEvent[]>(trackingEvents || []);
 
-  // Temporariamente desabilitado: Realtime causando loop de re-renderização
-  // TODO: Investigar e corrigir o problema de subscription infinita
+  const handleRealtimeStatusChange = useCallback((update: OrderUpdate) => {
+    onStatusChange?.(update.status);
+    setLastUpdate(new Date(update.timestamp));
+  }, [onStatusChange]);
 
-  const refreshOrder = async () => {
-    if (!orderId) return null;
-    const { data } = await supabase
-      .from('orders')
-      .select('*')
-      .eq('id', orderId)
-      .single();
-    return data;
-  };
+  const { isConnected: isRealtimeConnected } = useOrderSubscription({
+    orderId,
+    currentStatus: status,
+    currentTrackingCode: trackingCode ?? null,
+    onStatusChange: handleRealtimeStatusChange,
+  });
+
+  useEffect(() => {
+    setCorreiosStatus(trackingStatusLabel || null);
+    setCorreiosEvents(trackingEvents || []);
+    if (trackingLastCheckedAt) {
+      setLastUpdate(new Date(trackingLastCheckedAt));
+    }
+  }, [trackingStatusLabel, trackingLastCheckedAt, trackingEvents]);
 
   const handleRefresh = async () => {
+    if (!trackingCode) {
+      toast.error('Pedido ainda sem código de rastreio');
+      return;
+    }
+
     setRefreshing(true);
     try {
-      const data = await refreshOrder();
-      console.log('🔄 Refresh data:', data);
-      if (data) {
-        console.log('📦 Status do servidor:', data.status);
-        const normalizedStatus =
-          data.status === 'in_transit'
-            ? 'shipped'
-            : data.status === 'confirmed'
-              ? 'processing'
-              : (data.status as OrderStatus);
-        onStatusChange?.(normalizedStatus);
-        setLastUpdate(new Date());
-        toast.success('Status atualizado!');
-      } else {
-        toast.error('Não foi possível buscar os dados do pedido');
+      const result = await refreshOrderTracking(orderId);
+      const newStatus = result.order.status as OrderStatus | undefined;
+
+      if (newStatus) {
+        onStatusChange?.(newStatus);
       }
-    } catch (error) {
-      console.error('❌ Erro ao atualizar:', error);
+
+      setCorreiosStatus(result.tracking.trackingStatusLabel);
+      setCorreiosEvents(result.tracking.trackingEvents);
+      setLastUpdate(
+        result.order.tracking_last_checked_at
+          ? new Date(result.order.tracking_last_checked_at)
+          : new Date()
+      );
+
+      if (result.configured) {
+        toast.success('Rastreio atualizado pelos Correios');
+      } else {
+        toast.message('Código válido. Consulta automática aguardando credenciais dos Correios.');
+      }
+    } catch {
       toast.error('Erro ao atualizar status');
     } finally {
       setRefreshing(false);
@@ -85,10 +125,7 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
   // Função para rastrear external (abre site dos correios)
   const trackExternal = () => {
     if (trackingCode) {
-      window.open(
-        `https://rastreamento.correios.com.br/sede/${trackingCode}`,
-        '_blank'
-      );
+      window.open(getCorreiosTrackingUrl(trackingCode), '_blank');
     }
   };
 
@@ -132,6 +169,12 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
                 )}
               </Button>
             </div>
+            {correiosStatus && (
+              <div className="rounded-md bg-muted/50 p-3">
+                <p className="text-xs text-muted-foreground">Status Correios</p>
+                <p className="text-sm font-medium">{correiosStatus}</p>
+              </div>
+            )}
           </div>
         ) : (
           <div className="p-4 border rounded-lg bg-muted/50">
@@ -200,13 +243,37 @@ export function OrderTracking({ orderId, trackingCode, status, onStatusChange }:
           </div>
         </div>
 
+        {correiosEvents.length > 0 && (
+          <div className="space-y-3">
+            <h4 className="text-sm font-medium">Eventos dos Correios</h4>
+            <div className="space-y-3">
+              {correiosEvents.slice(0, 4).map((event, index) => (
+                <div key={`${event.createdAt}-${index}`} className="border-l-2 border-primary/30 pl-3">
+                  <p className="text-sm font-medium">{event.description}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {[event.location, event.createdAt ? new Date(event.createdAt).toLocaleString('pt-BR') : null]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Última atualização e botão de refresh */}
         <div className="flex items-center justify-between pt-4 border-t">
-          <span className="text-xs text-muted-foreground">
-            {lastUpdate 
-              ? `Última atualização: ${lastUpdate.toLocaleString('pt-BR')}`
-              : 'Carregando...'}
-          </span>
+          <div className="space-y-1">
+            <span className="block text-xs text-muted-foreground">
+              {lastUpdate
+                ? `Última atualização: ${lastUpdate.toLocaleString('pt-BR')}`
+                : 'Carregando...'}
+            </span>
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <span className={`h-2 w-2 rounded-full ${isRealtimeConnected ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
+              {isRealtimeConnected ? 'Tempo real ativo' : 'Tempo real aguardando conexão'}
+            </span>
+          </div>
           <Button 
             variant="ghost" 
             size="sm" 

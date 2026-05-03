@@ -390,7 +390,15 @@ export type Database = {
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
           total: number
+          tracking_carrier: string | null
           tracking_code: string | null
+          tracking_estimated_delivery: string | null
+          tracking_events: Json
+          tracking_last_checked_at: string | null
+          tracking_last_event_at: string | null
+          tracking_status: string | null
+          tracking_status_label: string | null
+          tracking_url: string | null
           updated_at: string
           user_id: string | null
         }
@@ -411,7 +419,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
+          tracking_carrier?: string | null
           tracking_code?: string | null
+          tracking_estimated_delivery?: string | null
+          tracking_events?: Json
+          tracking_last_checked_at?: string | null
+          tracking_last_event_at?: string | null
+          tracking_status?: string | null
+          tracking_status_label?: string | null
+          tracking_url?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -432,7 +448,15 @@ export type Database = {
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
           total?: number
+          tracking_carrier?: string | null
           tracking_code?: string | null
+          tracking_estimated_delivery?: string | null
+          tracking_events?: Json
+          tracking_last_checked_at?: string | null
+          tracking_last_event_at?: string | null
+          tracking_status?: string | null
+          tracking_status_label?: string | null
+          tracking_url?: string | null
           updated_at?: string
           user_id?: string | null
         }
@@ -504,7 +528,15 @@ export type Database = {
           status: string
           subtotal: number
           total: number
+          tracking_carrier: string | null
           tracking_code: string | null
+          tracking_estimated_delivery: string | null
+          tracking_events: Json
+          tracking_last_checked_at: string | null
+          tracking_last_event_at: string | null
+          tracking_status: string | null
+          tracking_status_label: string | null
+          tracking_url: string | null
           user_id: string
         }
         Insert: {
@@ -520,7 +552,15 @@ export type Database = {
           status?: string
           subtotal?: number
           total?: number
+          tracking_carrier?: string | null
           tracking_code?: string | null
+          tracking_estimated_delivery?: string | null
+          tracking_events?: Json
+          tracking_last_checked_at?: string | null
+          tracking_last_event_at?: string | null
+          tracking_status?: string | null
+          tracking_status_label?: string | null
+          tracking_url?: string | null
           user_id: string
         }
         Update: {
@@ -536,7 +576,15 @@ export type Database = {
           status?: string
           subtotal?: number
           total?: number
+          tracking_carrier?: string | null
           tracking_code?: string | null
+          tracking_estimated_delivery?: string | null
+          tracking_events?: Json
+          tracking_last_checked_at?: string | null
+          tracking_last_event_at?: string | null
+          tracking_status?: string | null
+          tracking_status_label?: string | null
+          tracking_url?: string | null
           user_id?: string
         }
         Relationships: [

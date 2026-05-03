@@ -276,12 +276,16 @@ export function MedicationCheckout({
         items: allItems.map((i) => ({ name: i.name, quantity: i.quantity })),
       });
 
-      await sendLogisticsServiceOrder(orderId, {
+      const logisticsResult = await sendLogisticsServiceOrder(orderId, {
         name: customer.name,
         email: customer.email || "",
         phone: "",
         address: addressString,
       }, allItems.map((i) => ({ name: i.name, quantity: i.quantity })));
+
+      if (!logisticsResult.success) {
+        logger.error("[LOGISTICS] Pedido salvo, mas a notificação da OS falhou:", logisticsResult.message);
+      }
     } catch (err) {
       logger.warn("Falha ao enviar notificações de logística (não bloqueante):", err);
     }

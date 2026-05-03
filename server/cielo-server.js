@@ -233,6 +233,14 @@ app.use("/api/receitas", receitasRouter);
 const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
 const emailTemplates = require("./notifications/templates");
+const {
+  buildCorreiosConfig,
+  getCorreiosTrackingUrl,
+  isCorreiosTrackingConfigured,
+  mapTrackingToOrderStatus,
+  queryCorreiosTracking,
+  validateCorreiosTrackingCode,
+} = require("./tracking/correios");
 
 // resendApiKey / resendFrom são declarados em definitivo na seção "Resend Email Proxy"
 // (linha ~756), mas inicializamos o dispatcher aqui com os valores de env para o boot.
@@ -849,6 +857,26 @@ app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_r
   res.json({ success: true, configured: Boolean(resendApiKey) });
 });
 
+// ─── Endpoint: status da integração Correios ─────────────────────────────────
+app.get("/api/integrations/correios/status", requireAuth, requireAdmin, async (_req, res) => {
+  const config = await getCorreiosTrackingSettings();
+  const configured = isCorreiosTrackingConfigured(config);
+
+  res.json({
+    enabled: config.enabled,
+    configured,
+    source: configured ? config.source : "none",
+    apiBaseUrl: config.apiBaseUrl,
+    trackingPollMinutes: config.trackingPollMinutes,
+    trackingResultType: config.trackingResultType,
+    hasApiToken: Boolean(config.apiToken),
+    hasApiUsername: Boolean(config.apiUsername),
+    hasApiPassword: Boolean(config.apiPassword),
+    hasPostingCard: Boolean(config.postingCard),
+    originCep: config.originCep || "",
+  });
+});
+
 app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
   const { to, subject, html, from } = req.body;
 
@@ -891,6 +919,439 @@ app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
   } catch (err) {
     console.error("[Resend] Falha na requisição:", err.message);
     return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+// ─── Logistics — service order notification ──────────────────────────────────
+// Cria/garante a OS e envia e-mail operacional para a equipe configurada.
+
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizeEmailList(value) {
+  return String(value || "")
+    .split(/[;,]/)
+    .map((email) => email.trim())
+    .filter(Boolean);
+}
+
+async function getLogisticsNotificationSettings() {
+  const envRecipients = normalizeEmailList(
+    process.env.LOGISTICS_NOTIFICATION_EMAIL ||
+    process.env.NOTIFICATION_EMAIL ||
+    ""
+  );
+
+  const fallback = {
+    enabled: true,
+    recipients: envRecipients,
+    source: envRecipients.length > 0 ? "env" : "none",
+  };
+
+  if (!supabase) return fallback;
+
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "notifications")
+      .single();
+
+    if (error || !data?.value) return fallback;
+
+    const recipients = normalizeEmailList(data.value.logisticsEmail || data.value.notificationEmail);
+    return {
+      enabled: data.value.enableEmailNotifications !== false,
+      recipients: recipients.length > 0 ? recipients : envRecipients,
+      source: recipients.length > 0 ? "site_settings" : fallback.source,
+    };
+  } catch (err) {
+    console.warn("[Logistics] Não foi possível carregar configurações de notificação:", err.message);
+    return fallback;
+  }
+}
+
+async function getCorreiosTrackingSettings() {
+  const envConfig = buildCorreiosConfig();
+  const fallback = {
+    ...envConfig,
+    trackingPollMinutes: Number(process.env.CORREIOS_TRACKING_POLL_MINUTES || 60),
+    originCep: process.env.CORREIOS_ORIGIN_CEP || "",
+    source: isCorreiosTrackingConfigured(envConfig) ? "env" : "none",
+  };
+
+  if (!supabase) return fallback;
+
+  try {
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "correios")
+      .maybeSingle();
+
+    if (error || !data?.value) return fallback;
+
+    const value = data.value || {};
+    const hasPanelCredentials = Boolean(value.apiToken || value.apiUsername || value.apiPassword || value.postingCard);
+    const config = {
+      enabled: value.enabled !== false,
+      apiBaseUrl: value.apiBaseUrl || fallback.apiBaseUrl,
+      apiToken: value.apiToken || fallback.apiToken,
+      apiUsername: value.apiUsername || fallback.apiUsername,
+      apiPassword: value.apiPassword || fallback.apiPassword,
+      postingCard: value.postingCard || fallback.postingCard,
+      contractNumber: value.contractNumber || fallback.contractNumber,
+      contractDr: value.contractDr || fallback.contractDr,
+      trackingResultType: value.trackingResultType || fallback.trackingResultType,
+      trackingPollMinutes: Number(value.trackingPollMinutes || fallback.trackingPollMinutes || 60),
+      originCep: value.originCep || fallback.originCep,
+      source: hasPanelCredentials ? "site_settings" : fallback.source,
+    };
+
+    return config;
+  } catch (err) {
+    console.warn("[Tracking] Não foi possível carregar configurações dos Correios:", err.message);
+    return fallback;
+  }
+}
+
+function renderLogisticsServiceOrderEmail(serviceOrder) {
+  const itemRows = serviceOrder.items.map((item) => `
+    <tr>
+      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(item.name)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb; text-align: center;">${Number(item.quantity || 0)}</td>
+      <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${escapeHtml(item.prescriptionId || "-")}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <div style="font-family: Arial, sans-serif; color: #111827; line-height: 1.5;">
+      <h1 style="margin: 0 0 12px; color: #0f766e;">Nova ordem de serviço logística</h1>
+      <p style="margin: 0 0 20px;">Um novo pedido de medicamentos foi confirmado e precisa de separação/entrega.</p>
+
+      <div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+        <p style="margin: 0 0 8px;"><strong>Pedido:</strong> ${escapeHtml(serviceOrder.orderId)}</p>
+        <p style="margin: 0 0 8px;"><strong>Criado em:</strong> ${escapeHtml(new Date(serviceOrder.createdAt).toLocaleString("pt-BR"))}</p>
+        <p style="margin: 0;"><strong>Prioridade:</strong> ${escapeHtml(serviceOrder.priority || "normal")}</p>
+      </div>
+
+      <h2 style="font-size: 18px; margin: 0 0 8px;">Paciente</h2>
+      <p style="margin: 0 0 4px;"><strong>Nome:</strong> ${escapeHtml(serviceOrder.customer.name)}</p>
+      <p style="margin: 0 0 4px;"><strong>E-mail:</strong> ${escapeHtml(serviceOrder.customer.email || "-")}</p>
+      <p style="margin: 0 0 16px;"><strong>Telefone:</strong> ${escapeHtml(serviceOrder.customer.phone || "-")}</p>
+
+      <h2 style="font-size: 18px; margin: 0 0 8px;">Entrega</h2>
+      <p style="margin: 0 0 16px;">${escapeHtml(serviceOrder.customer.address)}</p>
+
+      <h2 style="font-size: 18px; margin: 0 0 8px;">Itens</h2>
+      <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb;">
+        <thead>
+          <tr style="background: #ecfdf5;">
+            <th align="left" style="padding: 10px; border-bottom: 1px solid #e5e7eb;">Medicamento</th>
+            <th align="center" style="padding: 10px; border-bottom: 1px solid #e5e7eb;">Qtd.</th>
+            <th align="left" style="padding: 10px; border-bottom: 1px solid #e5e7eb;">Receita</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+
+      <p style="margin: 16px 0 0;"><strong>Observações:</strong> ${escapeHtml(serviceOrder.notes || "-")}</p>
+    </div>
+  `;
+}
+
+async function sendLogisticsEmail({ to, subject, html }) {
+  if (!resendApiKey) {
+    console.warn("[Logistics] RESEND_API_KEY não configurada — e-mail de OS não enviado");
+    return {
+      emailSent: false,
+      message: "OS criada, mas e-mail não enviado: Resend não configurado",
+    };
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${resendApiKey}`,
+    },
+    body: JSON.stringify({
+      from: resendFrom,
+      to,
+      subject,
+      html,
+    }),
+  });
+
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    console.error("[Logistics] Resend erro:", data);
+    return {
+      emailSent: false,
+      message: data?.message || `OS criada, mas e-mail não enviado: HTTP ${response.status}`,
+    };
+  }
+
+  return {
+    emailSent: true,
+    emailId: data.id,
+    message: "OS criada e e-mail enviado para logística",
+  };
+}
+
+app.post("/api/logistics/service-orders", notificationLimiter, requireAuth, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const serviceOrder = req.body || {};
+  const orderId = String(serviceOrder.orderId || "").trim();
+  const customer = serviceOrder.customer || {};
+  const items = Array.isArray(serviceOrder.items) ? serviceOrder.items : [];
+
+  if (!orderId || !customer.name || !customer.address || items.length === 0) {
+    return res.status(400).json({
+      error: "Campos obrigatórios: orderId, customer.name, customer.address, items",
+    });
+  }
+
+  try {
+    const now = new Date().toISOString();
+    const createdAt = serviceOrder.createdAt || now;
+
+    const { data: order, error: orderError } = await supabase
+      .from("orders")
+      .select("id, user_id")
+      .eq("id", orderId)
+      .single();
+
+    if (orderError || !order) {
+      return res.status(404).json({ error: "Pedido não encontrado para criação da OS" });
+    }
+
+    if (order.user_id && req.user?.id && order.user_id !== req.user.id) {
+      return res.status(403).json({ error: "Pedido não pertence ao usuário autenticado" });
+    }
+
+    const orderRecord = {
+      order_id: orderId,
+      customer_name: customer.name,
+      customer_email: customer.email || null,
+      customer_phone: customer.phone || null,
+      delivery_address: customer.address,
+      items,
+      status: "pending",
+      created_at: createdAt,
+      updated_at: now,
+    };
+
+    const { data: existing } = await supabase
+      .from("logistics_service_orders")
+      .select("id")
+      .eq("order_id", orderId)
+      .limit(1);
+
+    let serviceOrderId = existing?.[0]?.id;
+
+    if (serviceOrderId) {
+      const { error: updateError } = await supabase
+        .from("logistics_service_orders")
+        .update(orderRecord)
+        .eq("id", serviceOrderId);
+
+      if (updateError) throw updateError;
+    } else {
+      const { data, error } = await supabase
+        .from("logistics_service_orders")
+        .insert(orderRecord)
+        .select("id")
+        .single();
+
+      if (error) throw error;
+      serviceOrderId = data?.id;
+    }
+
+    const settings = await getLogisticsNotificationSettings();
+    if (!settings.enabled) {
+      return res.status(201).json({
+        success: true,
+        serviceOrderId,
+        emailSent: false,
+        message: "OS criada, mas notificações por e-mail estão desativadas",
+      });
+    }
+
+    if (settings.recipients.length === 0) {
+      return res.status(201).json({
+        success: true,
+        serviceOrderId,
+        emailSent: false,
+        message: "OS criada, mas nenhum e-mail de logística está configurado",
+      });
+    }
+
+    const subject = `Nova OS de medicamentos - Pedido ${orderId}`;
+    const html = renderLogisticsServiceOrderEmail({
+      ...serviceOrder,
+      orderId,
+      createdAt,
+      customer,
+      items,
+      priority: serviceOrder.priority || "normal",
+      notes: serviceOrder.notes || "Medicamentos controlados - requer assinatura na entrega",
+    });
+
+    const emailResult = await sendLogisticsEmail({
+      to: settings.recipients,
+      subject,
+      html,
+    });
+
+    return res.status(201).json({
+      success: true,
+      serviceOrderId,
+      notificationTo: settings.recipients,
+      notificationSource: settings.source,
+      ...emailResult,
+    });
+  } catch (err) {
+    console.error("[Logistics] Erro ao criar/notificar OS:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+// ─── Correios tracking ────────────────────────────────────────────────────────
+
+function buildTrackingUpdate(trackingResult, currentStatus) {
+  const normalizedCurrentStatus =
+    currentStatus === "confirmed"
+      ? "processing"
+      : currentStatus === "in_transit"
+        ? "shipped"
+        : currentStatus;
+
+  return {
+    tracking_carrier: trackingResult.carrier || "correios",
+    tracking_code: trackingResult.trackingCode,
+    tracking_status: trackingResult.trackingStatus,
+    tracking_status_label: trackingResult.trackingStatusLabel,
+    tracking_last_event_at: trackingResult.trackingLastEventAt,
+    tracking_last_checked_at: new Date().toISOString(),
+    tracking_estimated_delivery: trackingResult.trackingEstimatedDelivery,
+    tracking_url: trackingResult.trackingUrl || getCorreiosTrackingUrl(trackingResult.trackingCode),
+    tracking_events: trackingResult.trackingEvents || [],
+    status: mapTrackingToOrderStatus(normalizedCurrentStatus, trackingResult.trackingStatus),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+async function fetchOrderForTracking(orderId) {
+  const { data, error } = await supabase
+    .from("orders")
+    .select("id, user_id, status, customer_email, customer_name, tracking_code, items")
+    .eq("id", orderId)
+    .single();
+
+  if (error || !data) return null;
+  return data;
+}
+
+async function isAdminUser(userId) {
+  if (!userId || !supabase) return false;
+  const { data } = await supabase
+    .from("profiles")
+    .select("role")
+    .eq("id", userId)
+    .single();
+  return data?.role === "admin";
+}
+
+async function applyTrackingToOrder(order, trackingCode, correiosConfig) {
+  const validation = validateCorreiosTrackingCode(trackingCode);
+  if (!validation.valid) {
+    const err = new Error(validation.message);
+    err.statusCode = 400;
+    throw err;
+  }
+
+  const tracking = await queryCorreiosTracking(
+    validation.code,
+    correiosConfig || await getCorreiosTrackingSettings()
+  );
+  const update = buildTrackingUpdate(tracking, order.status);
+
+  const { data, error } = await supabase
+    .from("orders")
+    .update(update)
+    .eq("id", order.id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+
+  return {
+    tracking,
+    order: data,
+    statusChanged: data.status !== order.status,
+  };
+}
+
+function trackingResponsePayload(result) {
+  return {
+    success: true,
+    configured: result.tracking.configured,
+    message: result.tracking.trackingStatusLabel,
+    tracking: result.tracking,
+    order: result.order,
+  };
+}
+
+app.post("/api/orders/:id/tracking", notificationLimiter, requireAuth, requireAdmin, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const order = await fetchOrderForTracking(req.params.id);
+  if (!order) return res.status(404).json({ error: "Pedido não encontrado" });
+
+  try {
+    const result = await applyTrackingToOrder(order, req.body?.trackingCode);
+    return res.json(trackingResponsePayload(result));
+  } catch (err) {
+    console.error("[Tracking] Erro ao salvar rastreio:", err.message);
+    return res.status(err.statusCode || 500).json({
+      error: err.statusCode && err.statusCode < 500 ? err.message : safeErrorMessage(err),
+    });
+  }
+});
+
+app.post("/api/orders/:id/tracking/refresh", notificationLimiter, requireAuth, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const order = await fetchOrderForTracking(req.params.id);
+  if (!order) return res.status(404).json({ error: "Pedido não encontrado" });
+
+  const allowed = order.user_id === req.user?.id || await isAdminUser(req.user?.id);
+  if (!allowed) return res.status(403).json({ error: "Pedido não pertence ao usuário autenticado" });
+  if (!order.tracking_code) return res.status(400).json({ error: "Pedido sem código de rastreio" });
+
+  try {
+    const result = await applyTrackingToOrder(order, order.tracking_code);
+    return res.json(trackingResponsePayload(result));
+  } catch (err) {
+    console.error("[Tracking] Erro ao atualizar rastreio:", err.message);
+    return res.status(err.statusCode || 500).json({
+      error: err.statusCode && err.statusCode < 500 ? err.message : safeErrorMessage(err),
+    });
   }
 });
 
@@ -969,6 +1430,65 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     trackingCode: trackingCode || undefined,
   });
   console.log(`[Notificação] 📧 Email enfileirado → ${email} (pedido ${pedidoId})`);
+}
+
+async function refreshTrackedOrdersBatch() {
+  if (!supabase) return;
+
+  const correiosConfig = await getCorreiosTrackingSettings();
+  if (!isCorreiosTrackingConfigured(correiosConfig)) return;
+
+  const pollMinutes = Math.max(Number(correiosConfig.trackingPollMinutes || 60), 10);
+  const staleBefore = new Date(Date.now() - pollMinutes * 60 * 1000).toISOString();
+
+  const { data: orders, error } = await supabase
+    .from("orders")
+    .select("id, user_id, status, customer_email, customer_name, tracking_code, items, tracking_last_checked_at")
+    .not("tracking_code", "is", null)
+    .not("status", "in", "(delivered,cancelled)")
+    .or(`tracking_last_checked_at.is.null,tracking_last_checked_at.lt.${staleBefore}`)
+    .order("tracking_last_checked_at", { ascending: true, nullsFirst: true })
+    .limit(25);
+
+  if (error) {
+    console.error("[Tracking] Erro ao buscar pedidos para atualização:", error.message);
+    return;
+  }
+
+  for (const order of orders || []) {
+    try {
+      const result = await applyTrackingToOrder(order, order.tracking_code, correiosConfig);
+
+      if (result.statusChanged && ["shipped", "delivered"].includes(result.order.status)) {
+        await dispararNotificacaoPedido({
+          pedidoId: order.id,
+          email: order.customer_email || "",
+          nomeUsuario: order.customer_name || "Cliente",
+          statusAnterior: order.status,
+          novoStatus: result.order.status,
+          trackingCode: result.order.tracking_code,
+          items: order.items || [],
+        });
+      }
+    } catch (err) {
+      console.error(`[Tracking] Falha ao atualizar pedido ${order.id}:`, err.message);
+    }
+  }
+}
+
+function startOrderTrackingScheduler() {
+  if (!supabase) return;
+
+  const intervalMinutes = Number(process.env.CORREIOS_TRACKING_SCHEDULER_MINUTES || 10);
+  if (!intervalMinutes || intervalMinutes <= 0) {
+    console.log("[Tracking] Scheduler desativado por configuração");
+    return;
+  }
+
+  const intervalMs = Math.max(intervalMinutes, 10) * 60 * 1000;
+  setTimeout(() => refreshTrackedOrdersBatch().catch(err => console.error("[Tracking] Scheduler erro:", err.message)), 15_000);
+  setInterval(() => refreshTrackedOrdersBatch().catch(err => console.error("[Tracking] Scheduler erro:", err.message)), intervalMs);
+  console.log(`[Tracking] Scheduler Correios ativo a cada ${Math.max(intervalMinutes, 10)} min; credenciais via painel/env`);
 }
 
 // ─── Admin: reset de senha ────────────────────────────────────────────────────
@@ -1380,8 +1900,11 @@ app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
+startOrderTrackingScheduler();
+
 app.listen(PORT, '0.0.0.0', () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
+  const trackingMode = isCorreiosTrackingConfigured() ? "CORREIOS API (env)" : "painel/env";
   const groqStatus  = process.env.GROQ_API_KEY        ? "configurado" : "não configurado";
   const ollamaInfo  = "ver /api/receitas/status";
   console.log(`
@@ -1391,6 +1914,7 @@ app.listen(PORT, '0.0.0.0', () => {
 ║                                                          ║
 ║  Pagamentos: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${MERCHANT_ID ? MERCHANT_ID.substring(0, 8) + "..." : "não configurado"}          ║
 ║  E-mails:    ${emailMode.padEnd(32)}║
+║  Rastreio:   ${trackingMode.padEnd(32)}║
 ║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║
 ║                                                          ║
 ║  Receitas — OCR + IA + Matching:                         ║

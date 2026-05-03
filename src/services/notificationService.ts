@@ -30,6 +30,30 @@ export interface NotificationResult {
   notificationId?: string;
 }
 
+interface LogisticsServiceOrder {
+  orderId: string;
+  createdAt: string;
+  customer: {
+    name: string;
+    email: string;
+    phone: string;
+    address: string;
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    prescriptionId?: string;
+  }>;
+  priority: "normal";
+  notes: string;
+}
+
+function getApiBaseUrl(): string {
+  return import.meta.env.DEV
+    ? ""
+    : (import.meta.env.VITE_LOCAL_SERVER_URL || "");
+}
+
 /**
  * Envia notificação de alteração de status do pedido
  */
@@ -131,9 +155,7 @@ async function sendEmailViaResend(emailContent: {
 
   // Em dev: usa URL relativa → proxy Vite (/api/resend → api.resend.com) sem precisar do Express
   // Em prod: usa VITE_LOCAL_SERVER_URL → backend Express que expõe /api/resend/emails
-  const baseUrl = import.meta.env.DEV
-    ? ""
-    : (import.meta.env.VITE_LOCAL_SERVER_URL || "");
+  const baseUrl = getApiBaseUrl();
 
   try {
     const authHeaders = await getAuthHeaders();
@@ -233,7 +255,7 @@ export async function sendLogisticsServiceOrder(
   }>
 ): Promise<NotificationResult> {
   try {
-    const serviceOrder = {
+    const serviceOrder: LogisticsServiceOrder = {
       orderId,
       createdAt: new Date().toISOString(),
       customer: customerData,
@@ -242,42 +264,7 @@ export async function sendLogisticsServiceOrder(
       notes: "Medicamentos controlados - requer assinatura na entrega",
     };
 
-    // Registra a ordem de serviço
-    const { error } = await supabase
-      .from("logistics_service_orders")
-      .insert({
-        order_id: orderId,
-        customer_name: customerData.name,
-        customer_email: customerData.email,
-        customer_phone: customerData.phone,
-        delivery_address: customerData.address,
-        items: items,
-        status: "pending",
-        created_at: serviceOrder.createdAt,
-      });
-
-    if (error) {
-      // Se a tabela não existir, loga mas não falha
-      if (error.code === "42P01") {
-        logger.warn("Tabela logistics_service_orders não existe. OS registrada apenas em log.");
-        logger.info("Ordem de Serviço Logística:", serviceOrder);
-        return {
-          success: true,
-          message: "Ordem de serviço registrada (modo fallback)",
-        };
-      }
-      throw error;
-    }
-
-    logger.info(`[LOGISTICS] Ordem de serviço criada para pedido #${orderId}`);
-
-    // Envia notificação para equipe de logística (simulado)
-    await notifyLogisticsTeam(serviceOrder);
-
-    return {
-      success: true,
-      message: `Ordem de serviço criada para pedido #${orderId}`,
-    };
+    return await notifyLogisticsTeam(serviceOrder);
   } catch (error) {
     logger.error("Erro ao criar ordem de serviço:", error);
     return {
@@ -288,19 +275,90 @@ export async function sendLogisticsServiceOrder(
 }
 
 /**
- * Notifica equipe de logística (simulado)
+ * Cria a OS no backend e envia e-mail real para a logística.
  */
-async function notifyLogisticsTeam(serviceOrder: {
-  orderId: string;
-  customer: { name: string; address: string };
-  items: Array<{ name: string; quantity: number }>;
-}): Promise<void> {
-  // Em produção, enviaria para sistema de logística ou equipe via e-mail/webhook
-  logger.info(`[LOGISTICS TEAM] Nova ordem de serviço:`, {
-    orderId: serviceOrder.orderId,
-    customer: serviceOrder.customer.name,
-    itemCount: serviceOrder.items.length,
-  });
+async function notifyLogisticsTeam(
+  serviceOrder: LogisticsServiceOrder
+): Promise<NotificationResult> {
+  const baseUrl = getApiBaseUrl();
+
+  try {
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${baseUrl}/api/logistics/service-orders`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify(serviceOrder),
+    });
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+      throw new Error(
+        result?.message || result?.error || `Falha ao notificar logística: ${response.status}`
+      );
+    }
+
+    logger.info("[LOGISTICS] OS criada e notificação processada", {
+      orderId: serviceOrder.orderId,
+      emailSent: result.emailSent,
+      notificationTo: result.notificationTo,
+    });
+
+    return {
+      success: Boolean(result.emailSent),
+      message: result.message || `Ordem de serviço criada para pedido #${serviceOrder.orderId}`,
+    };
+  } catch (error) {
+    logger.error("[LOGISTICS] Falha ao notificar equipe pelo backend:", error);
+    return createLogisticsServiceOrderFallback(serviceOrder, error);
+  }
+}
+
+async function createLogisticsServiceOrderFallback(
+  serviceOrder: LogisticsServiceOrder,
+  originalError: unknown
+): Promise<NotificationResult> {
+  const { data: existing } = await supabase
+    .from("logistics_service_orders")
+    .select("id")
+    .eq("order_id", serviceOrder.orderId)
+    .limit(1);
+
+  if (existing && existing.length > 0) {
+    const reason = originalError instanceof Error ? originalError.message : "erro desconhecido";
+    return {
+      success: false,
+      message: `OS já registrada, mas a notificação da logística não foi enviada: ${reason}`,
+    };
+  }
+
+  const { error } = await supabase
+    .from("logistics_service_orders")
+    .insert({
+      order_id: serviceOrder.orderId,
+      customer_name: serviceOrder.customer.name,
+      customer_email: serviceOrder.customer.email,
+      customer_phone: serviceOrder.customer.phone,
+      delivery_address: serviceOrder.customer.address,
+      items: serviceOrder.items,
+      status: "pending",
+      created_at: serviceOrder.createdAt,
+    });
+
+  if (error && error.code !== "23505") {
+    if (error.code === "42P01") {
+      logger.warn("Tabela logistics_service_orders não existe. OS registrada apenas em log.");
+      logger.info("Ordem de Serviço Logística:", serviceOrder);
+    } else {
+      throw error;
+    }
+  }
+
+  const reason = originalError instanceof Error ? originalError.message : "erro desconhecido";
+  return {
+    success: false,
+    message: `OS registrada, mas a notificação da logística não foi enviada: ${reason}`,
+  };
 }
 
 export default {

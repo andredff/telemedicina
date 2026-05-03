@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 
@@ -20,6 +20,8 @@ export interface OrderUpdate {
 interface UseOrderSubscriptionOptions {
   orderId?: string;
   userId?: string;
+  currentStatus?: OrderStatus | string | null;
+  currentTrackingCode?: string | null;
   onStatusChange?: (update: OrderUpdate) => void;
   onTrackingUpdate?: (trackingCode: string) => void;
 }
@@ -27,6 +29,8 @@ interface UseOrderSubscriptionOptions {
 export function useOrderSubscription({
   orderId,
   userId,
+  currentStatus,
+  currentTrackingCode,
   onStatusChange,
   onTrackingUpdate,
 }: UseOrderSubscriptionOptions) {
@@ -34,12 +38,16 @@ export function useOrderSubscription({
   const [lastUpdate, setLastUpdate] = useState<OrderUpdate | null>(null);
   const { toast } = useToast();
 
-  const normalizeStatus = (status: string | null | undefined): OrderStatus => {
+  const normalizeStatus = useCallback((status: string | null | undefined): OrderStatus => {
     if (!status) return "pending";
     if (status === "in_transit") return "shipped";
     if (status === "confirmed") return "processing";
     return status as OrderStatus;
-  };
+  }, []);
+  const lastKnownStatusRef = useRef<OrderStatus | null>(
+    currentStatus ? normalizeStatus(currentStatus) : null
+  );
+  const lastKnownTrackingRef = useRef<string | null>(currentTrackingCode ?? null);
 
   const showNotification = useCallback((update: OrderUpdate) => {
     const statusLabels: Record<OrderStatus, string> = {
@@ -64,6 +72,15 @@ export function useOrderSubscription({
   }, [onStatusChange, onTrackingUpdate, toast]);
 
   useEffect(() => {
+    if (currentStatus) {
+      lastKnownStatusRef.current = normalizeStatus(currentStatus);
+    }
+    if (currentTrackingCode || !lastKnownTrackingRef.current) {
+      lastKnownTrackingRef.current = currentTrackingCode ?? null;
+    }
+  }, [currentStatus, currentTrackingCode, normalizeStatus]);
+
+  useEffect(() => {
     if (!orderId) {
       setIsConnected(false);
       return;
@@ -85,19 +102,35 @@ export function useOrderSubscription({
         (payload) => {
           console.log('📦 Atualização recebida:', payload);
           
-          const newStatus = payload.new.status as OrderStatus;
-          const oldStatus = payload.old?.status as OrderStatus | undefined;
+          const newStatus = normalizeStatus(payload.new.status as string);
+          const oldStatus = payload.old?.status
+            ? normalizeStatus(payload.old.status as string)
+            : lastKnownStatusRef.current || undefined;
+          const trackingCode = payload.new.tracking_code as string | null;
+          const statusChanged = !oldStatus || newStatus !== oldStatus;
+          const trackingChanged = trackingCode !== lastKnownTrackingRef.current;
+
+          if (!statusChanged && !trackingChanged) {
+            return;
+          }
           
           const update: OrderUpdate = {
             id: payload.new.id as string,
-            status: normalizeStatus(newStatus),
-            tracking_code: payload.new.tracking_code as string | null,
-            previousStatus: oldStatus ? normalizeStatus(oldStatus) : undefined,
+            status: newStatus,
+            tracking_code: trackingCode,
+            previousStatus: oldStatus,
             timestamp: new Date().toISOString(),
           };
 
+          lastKnownStatusRef.current = newStatus;
+          lastKnownTrackingRef.current = trackingCode;
           setLastUpdate(update);
-          showNotification(update);
+
+          if (statusChanged) {
+            showNotification(update);
+          } else if (trackingCode) {
+            onTrackingUpdate?.(trackingCode);
+          }
         }
       )
       .subscribe((status) => {
@@ -110,7 +143,7 @@ export function useOrderSubscription({
       supabase.removeChannel(channel);
       setIsConnected(false);
     };
-  }, [orderId, showNotification]);
+  }, [orderId, normalizeStatus, onTrackingUpdate, showNotification]);
 
   // Função para forçar re-fetch do pedido
   const refreshOrder = useCallback(async () => {
@@ -208,13 +241,13 @@ export function useUserOrdersSubscription({
 // Utility para gerar link de rastreamento
 export function getTrackingLink(carrier: string, trackingCode: string): string {
   const carriers: Record<string, string> = {
-    correios: `https://rastreamento.correios.com.br/sede/${trackingCode}`,
+    correios: `https://rastreamento.correios.com.br/app/index.php?objetos=${encodeURIComponent(trackingCode)}`,
     jadlog: `https://jadlog.com.br/rastreio/${trackingCode}`,
     shipp: `https://www.shipp.com.br/rastreio/${trackingCode}`,
     loggi: `https://www.loggi.com/rastreio/${trackingCode}`,
   };
 
-  return carriers[carrier.toLowerCase()] || `https://rastreamento.correios.com.br/sede/${trackingCode}`;
+  return carriers[carrier.toLowerCase()] || carriers.correios;
 }
 
 // Utility para formatar status

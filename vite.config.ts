@@ -36,6 +36,16 @@ export default defineConfig(({ mode }) => {
           target: "http://localhost:5174",
           changeOrigin: true,
         },
+        // Logistics OS endpoint -> Express server
+        "/api/logistics": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
+        // Order operations that require backend auth/admin checks
+        "/api/orders": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
         // /api/resend/emails → Express local (que decide entre Mailpit e Resend real)
         "/api/resend/emails": {
           target: "http://localhost:5174",

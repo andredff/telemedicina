@@ -116,8 +116,8 @@ Modulo Medicamento em Casa
 
 Painel administrativo de gestao
 
-- Dashboard financeiro: READY (usa supabase com fallback mock; MRR, churn, inadimplencia, distribuicao de planos) (src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
-- Gestao de pedidos: READY (status persiste via AdminQueries, rastreio e notificacoes funcionais) (src/pages/admin/Orders.tsx).
+- Dashboard financeiro: READY (painel dedicado em /admin/financeiro; usa Supabase com fallback mock; MRR, churn, inadimplencia, ticket medio, distribuicao de planos e exportacao CSV) (src/pages/admin/Reports.tsx, src/pages/admin/Dashboard.tsx, src/services/financialMetricsService.ts).
+- Gestao de pedidos: READY (status persiste via AdminQueries, rastreio/notificacoes funcionais e realtime de status conectado no OrderTracking) (src/pages/admin/Orders.tsx, src/components/OrderTracking.tsx, src/hooks/useOrderSubscription.ts).
 
 Integracoes externas
 

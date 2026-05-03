@@ -26,6 +26,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
+import { getCorreiosTrackingUrl, type TrackingEvent } from "@/services/trackingService";
 
 interface Order {
   id: string;
@@ -35,6 +36,9 @@ interface Order {
   items: { name: string; quantity: number; price: number }[];
   delivery_address: string;
   tracking_code: string | null;
+  tracking_status_label?: string | null;
+  tracking_last_checked_at?: string | null;
+  tracking_events?: TrackingEvent[] | null;
   payment_id: string | null;
   payment_method: string | null;
   installments: number | null;
@@ -497,10 +501,17 @@ const Orders = () => {
                       )}
 
                       {order.tracking_code && (
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-start gap-1.5">
                           <Truck className="h-3.5 w-3.5 shrink-0" />
-                          <span>Rastreio:</span>
-                          <span className="font-mono text-primary font-medium">{order.tracking_code}</span>
+                          <div>
+                            <span>Rastreio: </span>
+                            <span className="font-mono text-primary font-medium">{order.tracking_code}</span>
+                            {order.tracking_status_label && (
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {order.tracking_status_label}
+                              </p>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -532,7 +543,7 @@ const Orders = () => {
                           className="flex-1 text-xs h-9"
                           onClick={() =>
                             window.open(
-                              `https://www.google.com/search?q=rastreamento+${order.tracking_code}`,
+                              getCorreiosTrackingUrl(order.tracking_code!),
                               "_blank"
                             )
                           }

@@ -15,7 +15,7 @@ import {
   SelectTrigger, 
   SelectValue 
 } from '@/components/ui/select';
-import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2, Truck, Eye, EyeOff, CheckCircle2, XCircle, RotateCw } from 'lucide-react';
+import { Settings, CreditCard, Bell, Shield, Globe, Save, Loader2, Truck, Eye, EyeOff, CheckCircle2, XCircle, RotateCw, PackageSearch } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { logger } from "@/lib/logger";
 import { getAuthHeaders } from "@/lib/authHeaders";
@@ -34,6 +34,7 @@ interface SettingsData {
   notifications: {
     supportEmail: string;
     notificationEmail: string;
+    logisticsEmail: string;
     enableEmailNotifications: boolean;
     enableSmsNotifications: boolean;
   };
@@ -62,6 +63,19 @@ interface SettingsData {
     freeShippingThreshold: number;
     enableFreeShipping: boolean;
   };
+  correios: {
+    enabled: boolean;
+    apiBaseUrl: string;
+    apiToken: string;
+    apiUsername: string;
+    apiPassword: string;
+    postingCard: string;
+    contractNumber: string;
+    contractDr: string;
+    trackingPollMinutes: number;
+    trackingResultType: string;
+    originCep: string;
+  };
 }
 
 const defaultSettings: SettingsData = {
@@ -76,6 +90,7 @@ const defaultSettings: SettingsData = {
   notifications: {
     supportEmail: 'suporte@novita.com',
     notificationEmail: 'notificacoes@novita.com',
+    logisticsEmail: '',
     enableEmailNotifications: true,
     enableSmsNotifications: false,
   },
@@ -104,6 +119,19 @@ const defaultSettings: SettingsData = {
     freeShippingThreshold: 100,
     enableFreeShipping: true,
   },
+  correios: {
+    enabled: true,
+    apiBaseUrl: 'https://api.correios.com.br',
+    apiToken: '',
+    apiUsername: '',
+    apiPassword: '',
+    postingCard: '',
+    contractNumber: '',
+    contractDr: '',
+    trackingPollMinutes: 60,
+    trackingResultType: 'T',
+    originCep: '',
+  },
 };
 
 export default function AdminSettings() {
@@ -111,8 +139,23 @@ export default function AdminSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showResendKey, setShowResendKey] = useState(false);
+  const [showCorreiosToken, setShowCorreiosToken] = useState(false);
+  const [showCorreiosPassword, setShowCorreiosPassword] = useState(false);
   const [testingResend, setTestingResend] = useState(false);
   const [resendStatus, setResendStatus] = useState<{ configured: boolean; from: string; source: string } | null>(null);
+  const [correiosStatus, setCorreiosStatus] = useState<{
+    enabled: boolean;
+    configured: boolean;
+    source: string;
+    apiBaseUrl: string;
+    trackingPollMinutes: number;
+    trackingResultType: string;
+    hasApiToken: boolean;
+    hasApiUsername: boolean;
+    hasApiPassword: boolean;
+    hasPostingCard: boolean;
+    originCep: string;
+  } | null>(null);
   const [testEmailTo, setTestEmailTo] = useState('novitahealth@gmail.com');
   const [testEmailResult, setTestEmailResult] = useState<{ success: boolean; message: string } | null>(null);
 
@@ -152,6 +195,7 @@ export default function AdminSettings() {
   useEffect(() => {
     fetchSettings();
     fetchResendStatus();
+    fetchCorreiosStatus();
   }, []);
 
   const handleSaveSettings = async (category: keyof SettingsData) => {
@@ -206,6 +250,24 @@ export default function AdminSettings() {
     }
   };
 
+  const handleSaveCorreios = async () => {
+    setSaving(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { error } = await AdminQueries.updateSetting('correios', settings.correios, user?.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Sucesso', description: 'Configurações dos Correios salvas' });
+      fetchCorreiosStatus();
+    } catch (error) {
+      logger.error('Error saving Correios settings:', error);
+      toast({ title: 'Erro', description: 'Falha ao salvar configurações dos Correios', variant: 'destructive' });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleTestResend = async () => {
     setTestingResend(true);
     setTestEmailResult(null);
@@ -253,6 +315,20 @@ export default function AdminSettings() {
     }
   };
 
+  const fetchCorreiosStatus = async () => {
+    try {
+      const baseUrl = import.meta.env.DEV ? '' : LOCAL_SERVER_URL;
+      const authHeaders = await getAuthHeaders();
+      const response = await fetch(`${baseUrl}/api/integrations/correios/status`, { headers: authHeaders });
+      if (response.ok) {
+        const data = await response.json();
+        setCorreiosStatus(data);
+      }
+    } catch {
+      // Server may not be running
+    }
+  };
+
   const updateSetting = <K extends keyof SettingsData>(
     category: K,
     field: keyof SettingsData[K],
@@ -283,7 +359,7 @@ export default function AdminSettings() {
       </div>
 
       <Tabs defaultValue="general" className="space-y-4">
-        <TabsList>
+        <TabsList className="h-auto flex flex-wrap justify-start">
           <TabsTrigger value="general">
             <Settings className="h-4 w-4 mr-2" />
             Geral
@@ -295,6 +371,10 @@ export default function AdminSettings() {
           <TabsTrigger value="shipping">
             <Truck className="h-4 w-4 mr-2" />
             Frete
+          </TabsTrigger>
+          <TabsTrigger value="correios">
+            <PackageSearch className="h-4 w-4 mr-2" />
+            Correios
           </TabsTrigger>
           <TabsTrigger value="notifications">
             <Bell className="h-4 w-4 mr-2" />
@@ -544,6 +624,209 @@ export default function AdminSettings() {
           </Card>
         </TabsContent>
 
+        {/* Correios Settings */}
+        <TabsContent value="correios">
+          <div className="space-y-6">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      API Rastro dos Correios
+                      {correiosStatus && (
+                        correiosStatus.configured ? (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                            <CheckCircle2 className="h-3 w-3" /> Configurado
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-xs font-medium bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">
+                            <XCircle className="h-3 w-3" /> Pendente
+                          </span>
+                        )
+                      )}
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Credenciais usadas para validar códigos, consultar eventos e atualizar pedidos automaticamente.
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={fetchCorreiosStatus}>
+                    <RotateCw className="h-4 w-4 mr-2" />
+                    Atualizar status
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {correiosStatus && (
+                  <div className={`rounded-lg p-3 text-sm ${correiosStatus.configured ? 'bg-green-50 border border-green-200 text-green-800' : 'bg-yellow-50 border border-yellow-200 text-yellow-800'}`}>
+                    <strong>Status:</strong>{' '}
+                    {correiosStatus.configured
+                      ? `Integração ativa (fonte: ${correiosStatus.source === 'env' ? 'variável de ambiente' : 'painel admin'})`
+                      : 'Aguardando credenciais válidas dos Correios'
+                    }
+                    <br />
+                    <strong>Consulta automática:</strong> {correiosStatus.enabled ? 'habilitada' : 'desabilitada'} · a cada {correiosStatus.trackingPollMinutes || settings.correios.trackingPollMinutes} min
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between p-4 border rounded-lg">
+                  <div>
+                    <h4 className="font-medium">Ativar rastreio automático</h4>
+                    <p className="text-sm text-muted-foreground">
+                      Permite consultar a API dos Correios e atualizar pedidos com rastreio.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={settings.correios.enabled}
+                    onCheckedChange={(checked) => updateSetting('correios', 'enabled', checked)}
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="correiosApiBaseUrl">URL Base da API</Label>
+                    <Input
+                      id="correiosApiBaseUrl"
+                      value={settings.correios.apiBaseUrl}
+                      onChange={(e) => updateSetting('correios', 'apiBaseUrl', e.target.value)}
+                      placeholder="https://api.correios.com.br"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosTrackingResultType">Resultado do Rastro</Label>
+                    <Select
+                      value={settings.correios.trackingResultType}
+                      onValueChange={(value) => updateSetting('correios', 'trackingResultType', value)}
+                    >
+                      <SelectTrigger id="correiosTrackingResultType">
+                        <SelectValue placeholder="Selecione o retorno" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="T">Todos os eventos</SelectItem>
+                        <SelectItem value="U">Último evento</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosApiToken">Bearer Token / Chave Subdelegada</Label>
+                    <div className="relative">
+                      <Input
+                        id="correiosApiToken"
+                        type={showCorreiosToken ? 'text' : 'password'}
+                        value={settings.correios.apiToken}
+                        onChange={(e) => updateSetting('correios', 'apiToken', e.target.value)}
+                        placeholder="Opcional se usar usuário/senha"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCorreiosToken(!showCorreiosToken)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      >
+                        {showCorreiosToken ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosPostingCard">Cartão de Postagem</Label>
+                    <Input
+                      id="correiosPostingCard"
+                      value={settings.correios.postingCard}
+                      onChange={(e) => updateSetting('correios', 'postingCard', e.target.value)}
+                      placeholder="Número do cartão"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosApiUsername">Usuário Meu Correios</Label>
+                    <Input
+                      id="correiosApiUsername"
+                      value={settings.correios.apiUsername}
+                      onChange={(e) => updateSetting('correios', 'apiUsername', e.target.value)}
+                      placeholder="Login do CWS/Meu Correios"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosApiPassword">Senha / Código de acesso API</Label>
+                    <div className="relative">
+                      <Input
+                        id="correiosApiPassword"
+                        type={showCorreiosPassword ? 'text' : 'password'}
+                        value={settings.correios.apiPassword}
+                        onChange={(e) => updateSetting('correios', 'apiPassword', e.target.value)}
+                        placeholder="Código de acesso gerado no CWS"
+                        className="pr-10"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowCorreiosPassword(!showCorreiosPassword)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600"
+                      >
+                        {showCorreiosPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosContractNumber">Contrato</Label>
+                    <Input
+                      id="correiosContractNumber"
+                      value={settings.correios.contractNumber}
+                      onChange={(e) => updateSetting('correios', 'contractNumber', e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosContractDr">DR / Superintendência</Label>
+                    <Input
+                      id="correiosContractDr"
+                      value={settings.correios.contractDr}
+                      onChange={(e) => updateSetting('correios', 'contractDr', e.target.value)}
+                      placeholder="Opcional"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosOriginCep">CEP de Origem</Label>
+                    <Input
+                      id="correiosOriginCep"
+                      value={settings.correios.originCep}
+                      onChange={(e) => updateSetting('correios', 'originCep', e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      placeholder="00000000"
+                      inputMode="numeric"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="correiosTrackingPollMinutes">Intervalo de Consulta (min)</Label>
+                    <Input
+                      id="correiosTrackingPollMinutes"
+                      type="number"
+                      min="10"
+                      value={settings.correios.trackingPollMinutes}
+                      onChange={(e) => updateSetting('correios', 'trackingPollMinutes', parseInt(e.target.value) || 60)}
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                  {[
+                    ['Token', correiosStatus?.hasApiToken || Boolean(settings.correios.apiToken)],
+                    ['Usuário', correiosStatus?.hasApiUsername || Boolean(settings.correios.apiUsername)],
+                    ['Senha/API', correiosStatus?.hasApiPassword || Boolean(settings.correios.apiPassword)],
+                    ['Cartão', correiosStatus?.hasPostingCard || Boolean(settings.correios.postingCard)],
+                  ].map(([label, ok]) => (
+                    <div key={label as string} className="flex items-center gap-2 rounded-md border p-3 text-sm">
+                      {ok ? <CheckCircle2 className="h-4 w-4 text-green-600" /> : <XCircle className="h-4 w-4 text-yellow-600" />}
+                      <span>{label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <Button onClick={handleSaveCorreios} disabled={saving}>
+                  {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+                  Salvar Configurações dos Correios
+                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         {/* Notification Settings */}
         <TabsContent value="notifications">
           <Card>
@@ -569,6 +852,19 @@ export default function AdminSettings() {
                     onChange={(e) => updateSetting('notifications', 'notificationEmail', e.target.value)}
                     type="email"
                   />
+                </div>
+                <div>
+                  <Label htmlFor="logisticsEmail">Email da Logística</Label>
+                  <Input
+                    id="logisticsEmail"
+                    value={settings.notifications.logisticsEmail}
+                    onChange={(e) => updateSetting('notifications', 'logisticsEmail', e.target.value)}
+                    type="email"
+                    placeholder="logistica@empresa.com.br"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Destino das ordens de serviço de medicamentos. Se vazio, usa o email de notificações.
+                  </p>
                 </div>
               </div>
               
