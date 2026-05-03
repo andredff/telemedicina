@@ -45,6 +45,10 @@ const resolveDocsRouteFile = (requestUrl: string, docsDir: string) => {
     return path.join(docsDir, "visual-compare", "index.html");
   }
 
+  if (pathname === "/docs/compare" || pathname === "/docs/compare/") {
+    return path.join(docsDir, "compare", "index.html");
+  }
+
   if (!pathname.startsWith("/docs/")) {
     return null;
   }
