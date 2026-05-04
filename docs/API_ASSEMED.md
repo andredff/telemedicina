@@ -261,7 +261,7 @@ Retorna todos os detalhes de um atendimento especifico.
 
 #### 6.5 Listar Receituarios/Exames/Atestados
 
-**`GET /api/Atendimentos/v2/{id}/receituario`**
+**`GET /api/Atendimentos/{id}/receituario`**
 
 Retorna links para download dos documentos emitidos durante a consulta (receitas, atestados, exames). Os receituarios sao emitidos pela plataforma Memed e retornados como links.
 
@@ -285,7 +285,7 @@ Utilizado para polling periodico durante a consulta. Se `situacao === "CONCLUIDO
 | 6 | `POST /api/Atendimentos/obter` (listar)       | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 7 | `PUT /api/Atendimentos/{id}/cancelar`         | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 8 | `POST /api/Atendimentos/{id}/avaliar`         | Sim          | `src/integrations/assemed/client.ts`       | OK     |
-| 9 | `GET /api/Atendimentos/v2/{id}/receituario`   | Sim          | `src/integrations/assemed/client.ts`       | OK     |
+| 9 | `GET /api/Atendimentos/{id}/receituario`   | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 10| `GET /api/Atendimentos/{id}/simplificado`     | Sim          | `src/integrations/assemed/client.ts`       | OK     |
 | 11| URL sala de espera externa (incl. WL Novità)   | Sim          | `src/integrations/assemed/config.ts`       | OK     |
 
