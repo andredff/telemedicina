@@ -103,6 +103,11 @@ const docsRoutesPlugin = () => ({
     };
 
     copyAllDocs(docsDir, distDocsDir);
+    copyDocsRouteFiles(
+      path.join(docsDir, "compare"),
+      path.resolve(__dirname, "dist", "compare"),
+      new Set([".html"])
+    );
   },
 });
 
