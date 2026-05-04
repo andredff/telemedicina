@@ -258,7 +258,20 @@ if (supabase) {
 }
 
 // ─── Cielo config ───────────────────────────────────────────────────────────
-const isSandbox = process.env.CIELO_SANDBOX === "true";
+function readEnv(...names) {
+  for (const name of names) {
+    const value = process.env[name];
+    if (typeof value === "string" && value.trim()) return value.trim();
+  }
+  return "";
+}
+
+function envFlag(value) {
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
+const CIELO_SANDBOX_VALUE = readEnv("CIELO_SANDBOX", "VITE_CIELO_SANDBOX");
+const isSandbox = envFlag(CIELO_SANDBOX_VALUE);
 
 const CIELO_URLS = isSandbox
   ? {
@@ -270,8 +283,24 @@ const CIELO_URLS = isSandbox
       query: "https://apiquery.cieloecommerce.cielo.com.br/1/sales",
     };
 
-const MERCHANT_ID  = process.env.CIELO_MERCHANT_ID  || "";
-const MERCHANT_KEY = process.env.CIELO_MERCHANT_KEY || "";
+const MERCHANT_ID = readEnv(
+  "CIELO_MERCHANT_ID",
+  "VITE_CIELO_MERCHANT_ID",
+  "CIELO_MERCHANTID",
+  "MERCHANT_ID"
+);
+const MERCHANT_KEY = readEnv(
+  "CIELO_MERCHANT_KEY",
+  "VITE_CIELO_MERCHANT_KEY",
+  "CIELO_MERCHANTKEY",
+  "MERCHANT_KEY"
+);
+
+const CIELO_ENV_STATUS = {
+  merchantId: Boolean(MERCHANT_ID),
+  merchantKey: Boolean(MERCHANT_KEY),
+  sandboxFlag: CIELO_SANDBOX_VALUE ? CIELO_SANDBOX_VALUE.toLowerCase() : "false",
+};
 
 const cieloHeaders = {
   "Content-Type": "application/json",
@@ -358,7 +387,8 @@ async function callCielo(method, urlPath, body) {
 // Quando CIELO_SANDBOX=true e CIELO_SIMULATE=true, simula resposta da Cielo
 // sem precisar de credenciais de sandbox.
 // Último dígito do cartão: 0,1,4 = autorizado | 2 = negado | 3 = expirado
-const SIMULATE = isSandbox && process.env.CIELO_SIMULATE === "true";
+const CIELO_SIMULATE_VALUE = readEnv("CIELO_SIMULATE", "VITE_CIELO_SIMULATE");
+const SIMULATE = isSandbox && envFlag(CIELO_SIMULATE_VALUE);
 
 function simulatePayment(cardNumber, amountInCents, paymentType) {
   const lastDigit = parseInt(String(cardNumber).replace(/\D/g, "").slice(-1));
@@ -1835,7 +1865,15 @@ app.get("/api/health", (_req, res) => {
     env:           isSandbox ? "sandbox" : "production",
     merchant:      MERCHANT_ID ? `${MERCHANT_ID.substring(0, 8)}...` : "not configured",
     supabase:      supabase ? "connected" : "not configured",
-    cielo:         { transactional: CIELO_URLS.transactional },
+    cielo:         {
+      transactional: CIELO_URLS.transactional,
+      query: CIELO_URLS.query,
+      configured: CIELO_ENV_STATUS.merchantId && CIELO_ENV_STATUS.merchantKey,
+      hasMerchantId: CIELO_ENV_STATUS.merchantId,
+      hasMerchantKey: CIELO_ENV_STATUS.merchantKey,
+      sandbox: isSandbox,
+      simulate: SIMULATE,
+    },
     notifications: {
       modo:    RESEND_MOCK_MODE ? "MOCK" : "RESEND",
       queue:   dispatcher.queueStatus(),
