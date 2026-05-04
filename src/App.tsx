@@ -106,8 +106,11 @@ const App = () => (
           <Route path="/cancelamento" element={<Cancellation />} />
           <Route path="/suporte" element={<Support />} />
           <Route path="/docs" element={<StaticHtmlRedirect to="/docs/index.html" />} />
-          <Route path="/docs/compare" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
-          <Route path="/docs/compare/" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
+          <Route path="/compare" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
+          <Route path="/compare/" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
+          <Route path="/compare/index.html" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
+          <Route path="/compare/status.html" element={<StaticHtmlRedirect to="/docs/compare/status.html" />} />
+          <Route path="/docs/fluxo-os-pedidos" element={<StaticHtmlRedirect to="/docs/APRESENTACAO_FLUXO_OS_PEDIDOS.html" />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>

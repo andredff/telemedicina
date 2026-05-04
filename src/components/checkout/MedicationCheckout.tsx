@@ -249,6 +249,7 @@ export function MedicationCheckout({
   }) => {
     const numGroups = params.orderGroups.length || 1;
     const shippingPerGroup = shipping / numGroups;
+    const savedOrderIds: string[] = [];
 
     for (const group of params.orderGroups) {
       const groupTotal = group.groupSubtotal + shippingPerGroup;
@@ -266,30 +267,36 @@ export function MedicationCheckout({
         receitaId: group.receitaId,
         receitaUrlPdf: group.receitaUrlPdf,
       });
+      savedOrderIds.push(group.orderId);
     }
 
-    return params.orderGroups[0]?.orderId ?? generateOrderId();
+    return savedOrderIds;
   };
 
-  const triggerLogisticsNotifications = async (orderId: string) => {
+  const triggerLogisticsNotifications = async (orderGroup: OrderGroup) => {
     if (!deliveryAddress || !customer) return;
     try {
       const addressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ""}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
+      const notificationItems = orderGroup.orderItems.map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        prescriptionId: item.receitaId,
+      }));
 
       await sendOrderStatusNotification({
-        orderId,
+        orderId: orderGroup.orderId,
         customerEmail: customer.email || "",
         customerName: customer.name,
-        status: "pending",
-        items: allItems.map((i) => ({ name: i.name, quantity: i.quantity })),
+        status: "processing",
+        items: notificationItems,
       });
 
-      const logisticsResult = await sendLogisticsServiceOrder(orderId, {
+      const logisticsResult = await sendLogisticsServiceOrder(orderGroup.orderId, {
         name: customer.name,
         email: customer.email || "",
         phone: "",
         address: addressString,
-      }, allItems.map((i) => ({ name: i.name, quantity: i.quantity })));
+      }, notificationItems);
 
       if (!logisticsResult.success) {
         logger.error("[LOGISTICS] Pedido salvo, mas a notificação da OS falhou:", logisticsResult.message);
@@ -333,7 +340,7 @@ export function MedicationCheckout({
       if (result.success && result.paymentId) {
         // Save one order per prescription group
         try {
-          await saveAllOrders({
+          const savedOrderIds = await saveAllOrders({
             paymentId: result.paymentId,
             userId: user.id,
             deliveryAddress: deliveryAddressString,
@@ -341,14 +348,15 @@ export function MedicationCheckout({
             orderGroups,
           });
 
+          await Promise.all(orderGroups.map(triggerLogisticsNotifications));
+
           setPaymentResult({
             success: true,
             paymentId: result.paymentId,
-            orderId: primaryOrderId,
+            orderId: savedOrderIds[0] ?? primaryOrderId,
             message: result.message,
           });
 
-          await triggerLogisticsNotifications(primaryOrderId);
           const paidReceitaIds = orderGroups
             .map(g => g.receitaId)
             .filter((id): id is string => id !== undefined);
@@ -394,7 +402,7 @@ export function MedicationCheckout({
       const deliveryAddressString = `${deliveryAddress.street}, ${deliveryAddress.number}${deliveryAddress.complement ? ` - ${deliveryAddress.complement}` : ""}, ${deliveryAddress.neighborhood}, ${deliveryAddress.city} - ${deliveryAddress.state}, ${deliveryAddress.zipCode}`;
 
       const orderGroups = buildOrderGroups();
-      const primaryOrderId = await saveAllOrders({
+      const savedOrderIds = await saveAllOrders({
         paymentId: pixPaymentId,
         userId: user.id,
         deliveryAddress: deliveryAddressString,
@@ -403,7 +411,8 @@ export function MedicationCheckout({
         orderGroups,
       });
 
-      await triggerLogisticsNotifications(primaryOrderId);
+      await Promise.all(orderGroups.map(triggerLogisticsNotifications));
+      const primaryOrderId = savedOrderIds[0] ?? orderGroups[0]?.orderId ?? generateOrderId();
 
       const paidReceitaIds = orderGroups
         .map(g => g.receitaId)

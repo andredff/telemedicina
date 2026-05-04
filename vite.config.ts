@@ -41,12 +41,12 @@ const resolveDocsRouteFile = (requestUrl: string, docsDir: string) => {
     return path.join(docsDir, "index.html");
   }
 
-  if (pathname === "/docs/compare" || pathname === "/docs/compare/") {
+  if (pathname === "/compare" || pathname === "/compare/" || pathname === "/compare/index.html") {
     return path.join(docsDir, "compare", "index.html");
   }
 
-  if (pathname === "/docs/compare" || pathname === "/docs/compare/") {
-    return path.join(docsDir, "compare", "index.html");
+  if (pathname === "/compare/status.html") {
+    return path.join(docsDir, "compare", "status.html");
   }
 
   if (!pathname.startsWith("/docs/")) {
