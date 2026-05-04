@@ -1,0 +1,834 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fluxos Base da Aplicacao - Novita Telemedicina</title>
+  <style>
+    :root {
+      --ink: #18211e;
+      --muted: #5e6b65;
+      --paper: #f7f8f3;
+      --surface: #ffffff;
+      --line: #dde5df;
+      --green: #0f8f68;
+      --green-soft: #ddf6e9;
+      --blue: #225fa8;
+      --blue-soft: #e2eefb;
+      --amber: #a66a00;
+      --amber-soft: #fff1d5;
+      --violet: #5e55a5;
+      --violet-soft: #eeeafe;
+      --rose: #b94a48;
+      --rose-soft: #ffe2df;
+      --shadow: 0 20px 64px rgba(24, 33, 30, 0.11);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(15, 143, 104, 0.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(34, 95, 168, 0.05) 1px, transparent 1px),
+        var(--paper);
+      background-size: 44px 44px;
+      font-family: Candara, "Aptos", "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    a {
+      color: inherit;
+    }
+
+    .deck {
+      display: grid;
+      grid-template-columns: 292px 1fr;
+      min-height: 100vh;
+    }
+
+    .rail {
+      position: sticky;
+      top: 0;
+      align-self: start;
+      min-height: 100vh;
+      padding: 28px 22px;
+      border-right: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.9);
+      backdrop-filter: blur(14px);
+    }
+
+    .brand {
+      display: grid;
+      grid-template-columns: 40px 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 30px;
+    }
+
+    .mark {
+      display: grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 8px;
+      background: var(--green);
+      color: white;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .brand strong {
+      display: block;
+      font-size: 16px;
+    }
+
+    .brand span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    nav {
+      display: grid;
+      gap: 8px;
+    }
+
+    nav a {
+      display: block;
+      padding: 10px 12px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      color: var(--muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    nav a:hover,
+    nav a:focus-visible {
+      border-color: rgba(15, 143, 104, 0.35);
+      background: var(--green-soft);
+      color: var(--green);
+      outline: none;
+    }
+
+    .content {
+      padding: 42px min(5vw, 64px) 72px;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 330px;
+      gap: 26px;
+      align-items: end;
+      padding-bottom: 30px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--green);
+      font-size: 13px;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 880px;
+      font-size: clamp(36px, 6vw, 74px);
+      line-height: 0.98;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      margin: 18px 0 0;
+      max-width: 820px;
+      color: var(--muted);
+      font-size: 19px;
+    }
+
+    .status-card {
+      display: grid;
+      gap: 12px;
+      padding: 20px;
+      border: 1px solid rgba(15, 143, 104, 0.35);
+      border-radius: 8px;
+      background: var(--green-soft);
+      box-shadow: var(--shadow);
+    }
+
+    .status-card strong {
+      color: #07583f;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .status-card span {
+      font-size: 28px;
+      font-weight: 900;
+      line-height: 1;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 26px;
+    }
+
+    .metric,
+    .panel,
+    .flow-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 14px 38px rgba(24, 33, 30, 0.07);
+    }
+
+    .metric {
+      padding: 18px;
+    }
+
+    .metric span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .metric strong {
+      display: block;
+      margin-top: 8px;
+      font-size: 26px;
+      line-height: 1;
+    }
+
+    section {
+      margin-top: 28px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      align-items: end;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 30px;
+      letter-spacing: 0;
+    }
+
+    .section-head p {
+      margin: 0;
+      max-width: 620px;
+      color: var(--muted);
+    }
+
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .flow-card {
+      padding: 18px;
+    }
+
+    .flow-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .flow-card h3 {
+      margin: 0;
+      font-size: 23px;
+      letter-spacing: 0;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 70px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      white-space: nowrap;
+    }
+
+    .tag.green {
+      background: var(--green-soft);
+      color: var(--green);
+    }
+
+    .tag.amber {
+      background: var(--amber-soft);
+      color: var(--amber);
+    }
+
+    .tag.violet {
+      background: var(--violet-soft);
+      color: var(--violet);
+    }
+
+    .steps {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .steps li {
+      display: grid;
+      grid-template-columns: 30px 1fr;
+      gap: 10px;
+      align-items: start;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdfb;
+    }
+
+    .num {
+      display: grid;
+      place-items: center;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+      font-size: 13px;
+      font-weight: 900;
+    }
+
+    .steps strong {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .steps span {
+      display: block;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .routes {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 14px;
+    }
+
+    code,
+    .route {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .route {
+      padding: 5px 8px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f7faf8;
+      color: #335047;
+      font-size: 12px;
+    }
+
+    .architecture {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    .panel {
+      padding: 20px;
+    }
+
+    .panel h3 {
+      margin: 0 0 14px;
+      font-size: 23px;
+      letter-spacing: 0;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .stack-row {
+      display: grid;
+      grid-template-columns: 150px 1fr;
+      gap: 12px;
+      align-items: center;
+      padding: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfdfb;
+    }
+
+    .stack-row strong {
+      font-size: 14px;
+    }
+
+    .stack-row span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .system-map {
+      display: grid;
+      gap: 10px;
+    }
+
+    .system-node {
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: #fbfdfb;
+    }
+
+    .system-node strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    .system-node span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .connector {
+      color: var(--muted);
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .mini {
+      min-height: 126px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+    }
+
+    .mini strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .mini span {
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .note {
+      margin-top: 16px;
+      padding: 16px 18px;
+      border: 1px solid rgba(166, 106, 0, 0.3);
+      border-radius: 8px;
+      background: var(--amber-soft);
+      color: #654100;
+    }
+
+    .note strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    footer {
+      margin-top: 34px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    @media (max-width: 1080px) {
+      .deck {
+        grid-template-columns: 1fr;
+      }
+
+      .rail {
+        position: static;
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      nav {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .content {
+        padding-inline: min(5vw, 36px);
+      }
+    }
+
+    @media (max-width: 820px) {
+      .hero,
+      .architecture {
+        grid-template-columns: 1fr;
+      }
+
+      .metrics,
+      .flow-grid,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .section-head {
+        display: block;
+      }
+
+      .section-head p {
+        margin-top: 8px;
+      }
+
+      nav {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .content {
+        padding: 28px 14px 56px;
+      }
+
+      .rail {
+        padding: 20px 14px;
+      }
+
+      .stack-row,
+      .steps li {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <aside class="rail">
+      <div class="brand">
+        <div class="mark">N</div>
+        <div>
+          <strong>Novita Telemedicina</strong>
+          <span>Mapa dos fluxos base</span>
+        </div>
+      </div>
+      <nav aria-label="Navegacao do documento">
+        <a href="#visao-geral">Visao geral</a>
+        <a href="#fluxos">Fluxos principais</a>
+        <a href="#arquitetura">Base tecnica</a>
+        <a href="#admin">Admin e operacao</a>
+        <a href="#integracoes">Integracoes</a>
+        <a href="#rotas">Rotas chave</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <header class="hero" id="visao-geral">
+        <div>
+          <p class="kicker">Documento visual</p>
+          <h1>Fluxos base da aplicacao</h1>
+          <p>Mapa de leitura rapida para entender como o usuario entra, assina, usa telemedicina, compra medicamentos, acompanha pedidos e como a operacao administra o MVP.</p>
+        </div>
+        <div class="status-card">
+          <strong>Escopo usado</strong>
+          <span>MVP fechado</span>
+          <small>Fonte: ESCOPO_FECHADO.md e rotas em src/App.tsx</small>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="Resumo dos blocos">
+        <article class="metric">
+          <span>Publico</span>
+          <strong>Entrada</strong>
+        </article>
+        <article class="metric">
+          <span>Paciente</span>
+          <strong>Conta</strong>
+        </article>
+        <article class="metric">
+          <span>Receita</span>
+          <strong>Pedido</strong>
+        </article>
+        <article class="metric">
+          <span>Admin</span>
+          <strong>Operacao</strong>
+        </article>
+      </section>
+
+      <section id="fluxos">
+        <div class="section-head">
+          <h2>Fluxos principais</h2>
+          <p>Os fluxos abaixo sao a base funcional do MVP: conversao, autenticacao, pagamento, acesso ao cuidado, medicamentos e acompanhamento.</p>
+        </div>
+
+        <div class="flow-grid">
+          <article class="flow-card">
+            <div class="flow-top">
+              <h3>1. Conversao e assinatura</h3>
+              <span class="tag green">Paciente</span>
+            </div>
+            <ol class="steps">
+              <li>
+                <span class="num">1</span>
+                <div><strong>Entrada publica</strong><span>Usuario chega na landing, sobre, como funciona ou planos.</span></div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div><strong>Escolha do plano</strong><span>Bronze, Prata, Ouro, Platina ou Coletivo.</span></div>
+              </li>
+              <li>
+                <span class="num">3</span>
+                <div><strong>Autenticacao</strong><span>Login ou cadastro preserva o plano selecionado.</span></div>
+              </li>
+              <li>
+                <span class="num">4</span>
+                <div><strong>Checkout recorrente</strong><span>Pagamento por cartao via backend Cielo em producao.</span></div>
+              </li>
+              <li>
+                <span class="num">5</span>
+                <div><strong>Plano ativo</strong><span>Dashboard e Meu Plano exibem a assinatura do usuario.</span></div>
+              </li>
+            </ol>
+            <div class="routes">
+              <span class="route">/</span>
+              <span class="route">/planos</span>
+              <span class="route">/auth</span>
+              <span class="route">/checkout/subscription</span>
+              <span class="route">/dashboard</span>
+            </div>
+          </article>
+
+          <article class="flow-card">
+            <div class="flow-top">
+              <h3>2. Telemedicina</h3>
+              <span class="tag">Consulta</span>
+            </div>
+            <ol class="steps">
+              <li>
+                <span class="num">1</span>
+                <div><strong>Usuario autenticado</strong><span>Acesso parte da area logada ou menu de teleconsulta.</span></div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div><strong>Validacao de assinatura</strong><span>Assinatura ativa e adimplencia liberam a consulta.</span></div>
+              </li>
+              <li>
+                <span class="num">3</span>
+                <div><strong>Especialidade ou atendimento</strong><span>Fluxo prepara paciente e contexto da consulta.</span></div>
+              </li>
+              <li>
+                <span class="num">4</span>
+                <div><strong>Assemed white label</strong><span>Sala de espera ou consulta abre em integracao externa.</span></div>
+              </li>
+            </ol>
+            <div class="routes">
+              <span class="route">/telemedicina</span>
+              <span class="route">/teleconsultas</span>
+              <span class="route">/especialistas</span>
+              <span class="route">/sala-espera/:id</span>
+            </div>
+          </article>
+
+          <article class="flow-card">
+            <div class="flow-top">
+              <h3>3. Medicamento em casa</h3>
+              <span class="tag amber">Pedido</span>
+            </div>
+            <ol class="steps">
+              <li>
+                <span class="num">1</span>
+                <div><strong>Receita da telemedicina</strong><span>A receita vem da consulta e um script tenta extrair automaticamente os medicamentos do PDF.</span></div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div><strong>Conferencia e selecao</strong><span>Quando o remedio extraido existe no sistema, o usuario pode selecionar o item e colocar no carrinho.</span></div>
+              </li>
+              <li>
+                <span class="num">3</span>
+                <div><strong>Carrinho</strong><span>Usuario ajusta itens, quantidades e dados de entrega.</span></div>
+              </li>
+              <li>
+                <span class="num">4</span>
+                <div><strong>Checkout</strong><span>Cartao via Cielo ou PIX conforme escopo do medicamento.</span></div>
+              </li>
+              <li>
+                <span class="num">5</span>
+                <div><strong>Pedido e logistica</strong><span>Pedido confirmado gera OS, notificacao e acompanhamento.</span></div>
+              </li>
+            </ol>
+            <div class="routes">
+              <span class="route">/medicamentos</span>
+              <span class="route">/prescription/:id</span>
+              <span class="route">/cart</span>
+              <span class="route">/checkout/medication</span>
+              <span class="route">/orders</span>
+            </div>
+          </article>
+
+          <article class="flow-card">
+            <div class="flow-top">
+              <h3>4. Conta e acompanhamento</h3>
+              <span class="tag violet">Area logada</span>
+            </div>
+            <ol class="steps">
+              <li>
+                <span class="num">1</span>
+                <div><strong>Dashboard</strong><span>Resumo do plano, atalhos, prescricoes e pedidos.</span></div>
+              </li>
+              <li>
+                <span class="num">2</span>
+                <div><strong>Perfil</strong><span>Paciente atualiza dados cadastrais e informacoes de contato.</span></div>
+              </li>
+              <li>
+                <span class="num">3</span>
+                <div><strong>Plano</strong><span>Assinatura e status ficam visiveis para o usuario.</span></div>
+              </li>
+              <li>
+                <span class="num">4</span>
+                <div><strong>Pedidos</strong><span>Historico, detalhes, status e rastreio ficam acessiveis.</span></div>
+              </li>
+            </ol>
+            <div class="routes">
+              <span class="route">/dashboard</span>
+              <span class="route">/perfil</span>
+              <span class="route">/meu-plano</span>
+              <span class="route">/prescriptions</span>
+              <span class="route">/order/:id</span>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="arquitetura">
+        <div class="section-head">
+          <h2>Base tecnica</h2>
+          <p>Leitura de alto nivel da aplicacao: interface React, servicos internos, backend seguro e provedores externos.</p>
+        </div>
+
+        <div class="architecture">
+          <article class="panel">
+            <h3>Camadas do produto</h3>
+            <div class="stack">
+              <div class="stack-row"><strong>Interface</strong><span>React + rotas publicas, logadas, checkout e admin.</span></div>
+              <div class="stack-row"><strong>Servicos do app</strong><span>Pagamento, telemedicina, notificacoes, pedidos e metricas.</span></div>
+              <div class="stack-row"><strong>Backend</strong><span>server/cielo-server.js centraliza chamadas sensiveis e integracoes.</span></div>
+              <div class="stack-row"><strong>Dados</strong><span>Supabase Auth, Database e Storage para usuarios, pedidos e assinaturas.</span></div>
+            </div>
+          </article>
+
+          <article class="panel">
+            <h3>Mapa de comunicacao</h3>
+            <div class="system-map">
+              <div class="system-node"><strong>Browser do usuario</strong><span>Usa rotas do SPA e nunca recebe Merchant Key.</span></div>
+              <div class="connector">v</div>
+              <div class="system-node"><strong>Backend Render</strong><span>Assina chamadas Cielo, valida JWT, cria OS e envia notificacoes.</span></div>
+              <div class="connector">v</div>
+              <div class="system-node"><strong>Provedores</strong><span>Supabase, Cielo, Assemed, Correios e Resend conforme fluxo.</span></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="admin">
+        <div class="section-head">
+          <h2>Admin e operacao</h2>
+          <p>Painel administrativo organiza usuarios, pedidos, medicamentos, receitas, conteudo, financeiro, configuracoes e suporte.</p>
+        </div>
+
+        <div class="matrix">
+          <article class="mini"><strong>Usuarios</strong><span>Lista, detalhe, dados do cliente e suporte operacional.</span></article>
+          <article class="mini"><strong>Pedidos</strong><span>Status do pedido, rastreio, notificacao e acompanhamento logistico.</span></article>
+          <article class="mini"><strong>Financeiro</strong><span>MRR, churn, inadimplencia, receita avulsa e distribuicao de planos.</span></article>
+          <article class="mini"><strong>Medicamentos</strong><span>Catalogo operacional e suporte ao fluxo Medicamento em Casa.</span></article>
+          <article class="mini"><strong>Receitas</strong><span>Prescricoes e apoio aos pedidos associados.</span></article>
+          <article class="mini"><strong>Configuracoes</strong><span>Parametros de integracao, notificacao e operacao.</span></article>
+        </div>
+
+        <div class="routes">
+          <span class="route">/admin</span>
+          <span class="route">/admin/usuarios</span>
+          <span class="route">/admin/pedidos</span>
+          <span class="route">/admin/medicamentos</span>
+          <span class="route">/admin/receitas</span>
+          <span class="route">/admin/financeiro</span>
+          <span class="route">/admin/configuracoes</span>
+          <span class="route">/admin/suporte</span>
+        </div>
+      </section>
+
+      <section id="integracoes">
+        <div class="section-head">
+          <h2>Integracoes do MVP</h2>
+          <p>Servicos externos ficam separados por responsabilidade para reduzir risco operacional e proteger credenciais sensiveis.</p>
+        </div>
+
+        <div class="matrix">
+          <article class="mini"><strong>Supabase</strong><span>Auth, perfis, assinaturas, prescricoes, pedidos e dados administrativos.</span></article>
+          <article class="mini"><strong>Cielo</strong><span>Cartao recorrente e avulso via backend, com producao real configurada.</span></article>
+          <article class="mini"><strong>Assemed</strong><span>Telemedicina white label, paciente, consulta e sala de espera.</span></article>
+          <article class="mini"><strong>Correios</strong><span>CEP, frete e rastreio por backend e configuracoes operacionais.</span></article>
+          <article class="mini"><strong>Resend</strong><span>Notificacoes por email quando API key esta configurada.</span></article>
+          <article class="mini"><strong>Memed</strong><span>Receitas digitais preparadas, com mock/fallback enquanto credenciais reais nao forem definidas.</span></article>
+        </div>
+
+        <div class="note">
+          <strong>Regra de seguranca</strong>
+          Chaves sensiveis de pagamento e integracoes devem ficar no backend/ambiente de servidor. O frontend usa apenas URLs publicas e tokens adequados ao cliente.
+        </div>
+      </section>
+
+      <section id="rotas">
+        <div class="section-head">
+          <h2>Rotas chave</h2>
+          <p>Resumo das principais entradas funcionais registradas no roteador da aplicacao.</p>
+        </div>
+
+        <div class="matrix">
+          <article class="mini"><strong>Publicas</strong><span><code>/</code>, <code>/sobre</code>, <code>/planos</code>, <code>/como-funciona</code>, <code>/blog</code></span></article>
+          <article class="mini"><strong>Conta</strong><span><code>/auth</code>, <code>/reset-password</code>, <code>/dashboard</code>, <code>/perfil</code>, <code>/meu-plano</code></span></article>
+          <article class="mini"><strong>Checkout</strong><span><code>/checkout/subscription</code>, <code>/checkout/medication</code>, <code>/checkout/consultation</code></span></article>
+          <article class="mini"><strong>Telemedicina</strong><span><code>/telemedicina</code>, <code>/teleconsultas</code>, <code>/sala-espera/:id</code>, <code>/especialistas</code></span></article>
+          <article class="mini"><strong>Medicamentos</strong><span><code>/medicamentos</code>, <code>/farmacia</code>, <code>/prescription/:id</code>, <code>/cart</code></span></article>
+          <article class="mini"><strong>Pedidos</strong><span><code>/orders</code>, <code>/order/:id</code>, <code>/prescriptions</code></span></article>
+        </div>
+      </section>
+
+      <footer>
+        Documento gerado para leitura operacional em <code>/docs</code>. Base: <code>ESCOPO_FECHADO.md</code> e <code>src/App.tsx</code>.
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
