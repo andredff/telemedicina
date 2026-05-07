@@ -268,17 +268,17 @@ function Index(): JSX.Element {
               <div className="grid grid-cols-3 gap-4 pt-4">
                                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Target className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.visao.title}</p>
+                  <p className="text-sm font-semibold text-foreground mb-2">{MISSAO_VISAO_VALORES.visao.title}</p>
                   <p className="text-xs font-medium text-muted-foreground">Ser Referência nacional em assistência à saúde.</p>
                 </div>
               <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.missao.title}</p>
+                  <p className="text-sm font-semibold text-foreground mb-2">{MISSAO_VISAO_VALORES.missao.title}</p>
                   <p className="text-xs font-medium text-muted-foreground">Proporcionar atendimento de excelência, promovendo o bem-estar e a qualidade de vida das pessoas.</p>
                 </div>
                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Award className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.valores.title}</p>
+                  <p className="text-sm font-semibold text-foreground mb-2">{MISSAO_VISAO_VALORES.valores.title}</p>
                   <p className="text-xs font-medium text-muted-foreground">Humanização, ética, empatia, comprometimento, respeito ao ser humano.</p>
 
                 </div>
@@ -348,6 +348,41 @@ function Index(): JSX.Element {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {DIFERENCIAIS.items.map((item, index) => {
+              const IconComponent = getIcon(item.icon);
+              return (
+                <Card
+                  key={item.title}
+                  className="bg-card border-border/50 hover:shadow-card hover:border-primary/20 transition-all duration-300 group"
+                >
+                  <CardContent className="p-6 space-y-4">
+                    <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                      <IconComponent className="h-7 w-7 text-primary" />
+                    </div>
+                    <h3 className="text-lg font-heading font-semibold text-foreground">
+                      {item.title}
+                    </h3>
+                    <p className="text-muted-foreground text-sm leading-relaxed">
+                      {item.description}
+                    </p>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Por que utilizar a Novità Section */}
+      <section className="py-20">
+        <div className="container mx-auto px-4">
+          <div className="text-center max-w-3xl mx-auto mb-16">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
+              {POR_QUE_NOVITA.title}
+            </h2>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {POR_QUE_NOVITA.items.map((item) => {
               const IconComponent = getIcon(item.icon);
               return (
                 <Card
@@ -471,27 +506,14 @@ function Index(): JSX.Element {
                     </div>
 
                     <ul className="space-y-3">
-                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        Clínico geral 24h ilimitado
-                      </li>
-                      {plan.specialist_consultations_per_year > 0 && (
-                        <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                          Inclui {plan.specialist_consultations_per_year} consultas com especialista(s)/ano
+                      {plan.features.map((feature, i) => (
+                        <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
+                          {feature}
                         </li>
-                      )}
-                      {plan.checkups_per_year > 0 && (
-                        <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                          Check-up anual incluso
-                        </li>
-                      )}
-                      <li className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="h-4 w-4 text-primary flex-shrink-0" />
-                        Receitas, atestados e pedidos de exames digitais
-                      </li>
+                      ))}
                     </ul>
+                    <p className="text-xs text-muted-foreground">(*) DF e região do entorno. Outras regiões em breve.</p>
                   </div>
 
                   <Button
@@ -561,6 +583,7 @@ function Index(): JSX.Element {
                           </li>
                         ))}
                       </ul>
+                      <p className="text-xs text-muted-foreground">(*) DF e região do entorno. Outras regiões em breve.</p>
                     </div>
 
                     <Button
@@ -576,7 +599,7 @@ function Index(): JSX.Element {
             </div>
           </div>
 
-          <div className="text-center mt-8">
+          <div className="text-center mt-8 space-y-4">
             <Button
               variant="outline"
               onClick={() => navigate("/planos")}
@@ -584,6 +607,10 @@ function Index(): JSX.Element {
               Ver Todos os Planos
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
+            <div className="text-xs text-muted-foreground space-y-1">
+              <p>* Pagamentos mensais são cobrados em 12 parcelas do valor apresentado (vide política de cancelamento). Pagamento anual cobrado em parcela única com 10% de desconto.</p>
+              <p>** Consulta avulsa com médico especialista (R$ 149,90) disponível apenas para assinantes.</p>
+            </div>
           </div>
         </div>
       </section>

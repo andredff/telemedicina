@@ -172,14 +172,14 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'O melhor plano para toda a família',
     shortDescription: 'Plano completo - até 3 pessoas',
     price_monthly: 259.90,
-    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
+    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT),
     specialist_consultations_per_year: 4,
-    checkups_per_year: 2,
+    checkups_per_year: 1,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
       '4 consultas com médico especialista por ano',
-      '2 check-ups anuais',
+      '1 check-up anual',
       'Até 3 beneficiários no total',
     ],
   },
