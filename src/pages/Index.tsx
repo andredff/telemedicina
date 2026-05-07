@@ -170,17 +170,16 @@ function Index(): JSX.Element {
 
       {/* Hero Section - Atualizado conforme briefing */}
       <section className="relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-primary/5" />
-        <div className="absolute top-20 right-0 w-96 h-96 bg-primary/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: "url('/bg-ond-scaled.jpg')" }} />
+        <div className="absolute inset-0 bg-white/60" />
 
         <div className="container mx-auto px-4 py-20 lg:py-32 relative">
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="space-y-8 animate-slide-up">
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-primary leading-tight">
                 {HERO_CONTENT.title.split('Novità').map((part, i, arr) => (
                   i < arr.length - 1 ? (
-                    <span key={i}>{part}<span className="gradient-text">Novità</span></span>
+                    <span key={i}>{part}<span>Novità</span></span>
                   ) : part
                 ))}
               </h1>
@@ -217,11 +216,11 @@ function Index(): JSX.Element {
             <div className="relative lg:pl-8">
               <div className="relative">
                 <div className="absolute inset-0 gradient-hero rounded-3xl blur-2xl opacity-20 scale-95" />
-                <div className="relative bg-card rounded-3xl shadow-elevated overflow-hidden border border-border/50">
+                <div className="relative rounded-3xl overflow-hidden border border-border/50">
                   <img
-                    src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80"
+                    src="/medica-nvt.png"
                     alt="Profissional de saúde"
-                    className="w-full h-[400px] lg:h-[500px] object-cover"
+                    className="w-full h-[400px] lg:h-[500px] object-contain object-bottom"
                   />
                 </div>
               </div>
@@ -236,14 +235,14 @@ function Index(): JSX.Element {
           <div className="grid lg:grid-cols-2 gap-12 items-center">
             <div className="relative">
               <img
-                src="https://images.unsplash.com/photo-1576765608535-5f04d1e3f289?auto=format&fit=crop&w=800&q=80"
+                src="/cuidado-nvt.jpg"
                 alt="Cuidado domiciliar"
                 className="rounded-3xl shadow-elevated w-full h-[400px] object-cover"
               />
             </div>
 
             <div className="space-y-6">
-              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
+              <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
                 {SOBRE_EMPRESA.title}
               </h2>
 
@@ -293,7 +292,7 @@ function Index(): JSX.Element {
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto">
             <div className="text-center mb-12">
-              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+              <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
                 {QUEM_SOMOS.title}
               </h2>
             </div>
@@ -317,7 +316,7 @@ function Index(): JSX.Element {
               <Home className="h-4 w-4" />
               <span>Home Care</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Internação e Assistência Domiciliar
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -338,7 +337,7 @@ function Index(): JSX.Element {
       <section id="diferenciais" className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-3xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               {DIFERENCIAIS.title}
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -380,7 +379,7 @@ function Index(): JSX.Element {
               <Stethoscope className="h-4 w-4" />
               <span>Especialidades</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               {ESPECIALIDADES.title}
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -426,7 +425,7 @@ function Index(): JSX.Element {
       <section className="py-20 section-bg-light">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Planos de <span className="gradient-text">Telemedicina</span>
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -459,14 +458,14 @@ function Index(): JSX.Element {
                         })()}
                       </div>
                       <div>
-                        <h3 className="text-xl font-heading font-bold text-foreground">{plan.name}</h3>
+                        <h3 className="text-xl font-heading font-bold text-primary">{plan.name}</h3>
                         <p className="text-sm text-muted-foreground">{plan.shortDescription}</p>
                       </div>
                     </div>
 
                     <div className="flex items-baseline gap-1">
                       <span className="text-sm text-muted-foreground">R$</span>
-                      <span className="text-4xl font-heading font-bold text-foreground">{formatPrice(plan.price_monthly)}</span>
+                      <span className="text-4xl font-heading font-bold text-primary">{formatPrice(plan.price_monthly)}</span>
                       <span className="text-sm text-muted-foreground">/mês</span>
                     </div>
 
@@ -509,7 +508,7 @@ function Index(): JSX.Element {
           {/* Planos Familiares */}
           <div className="mt-16 pt-12 border-t border-border/50">
             <div className="text-center max-w-2xl mx-auto mb-12">
-              <h3 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-4">
+              <h3 className="text-2xl md:text-3xl font-heading font-bold text-primary mb-4">
                 Planos <span className="gradient-text">Familiares</span>
               </h3>
               <p className="text-muted-foreground text-lg">
@@ -542,14 +541,14 @@ function Index(): JSX.Element {
                           })()}
                         </div>
                         <div>
-                          <h3 className="text-xl font-heading font-bold text-foreground">{plan.name}</h3>
+                          <h3 className="text-xl font-heading font-bold text-primary">{plan.name}</h3>
                           <p className="text-sm text-muted-foreground">{plan.shortDescription}</p>
                         </div>
                       </div>
 
                       <div className="flex items-baseline gap-1">
                         <span className="text-sm text-muted-foreground">R$</span>
-                        <span className="text-4xl font-heading font-bold text-foreground">{formatPrice(plan.price_monthly)}</span>
+                        <span className="text-4xl font-heading font-bold text-primary">{formatPrice(plan.price_monthly)}</span>
                         <span className="text-sm text-muted-foreground">/mês</span>
                       </div>
 
@@ -608,7 +607,7 @@ function Index(): JSX.Element {
                 <span>UTI Móvel</span>
               </div>
 
-              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
+              <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
                 Emergências e Remoções com{" "}
                 <span className="gradient-text">Segurança Total</span>
               </h2>
@@ -655,7 +654,7 @@ function Index(): JSX.Element {
       {/* <section id="contato" className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Entre em <span className="gradient-text">Contato</span>
             </h2>
             <p className="text-muted-foreground text-lg">
