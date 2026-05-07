@@ -22,6 +22,7 @@ import {
   ANNUAL_DISCOUNT,
   formatPrice,
   getPlanColor,
+  getFeaturesForBilling,
   PlanData,
 } from "@/data/plansData";
 import { FAQ_ITEMS, DIFERENCIAIS } from "@/data/landingContent";
@@ -227,7 +228,7 @@ function Plans(): JSX.Element {
                   </div>
 
                   <ul className="space-y-3 mb-6 flex-1">
-                    {plan.features.map((feature, index) => (
+                    {getFeaturesForBilling(plan, isYearly ? 'yearly' : 'monthly').map((feature, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                         <span>{feature}</span>

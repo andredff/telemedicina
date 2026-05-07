@@ -1,5 +1,5 @@
 // Dados dos planos conforme Briefing Novità Telemedicina
-// Última atualização: Janeiro/2026
+// Última atualização: Maio/2026
 
 export interface PlanData {
   id: string;
@@ -11,9 +11,11 @@ export interface PlanData {
   price_monthly: number;
   price_yearly: number;
   specialist_consultations_per_year: number;
-  checkups_per_year: number;
+  checkups_per_year: number;           // check-ups no pagamento mensal
+  checkups_per_year_annual: number;    // check-ups no pagamento anual
   max_dependents: number;
   features: string[];
+  features_annual: string[];
   highlight?: boolean;
 }
 
@@ -36,6 +38,7 @@ const BASE_BRONZE_FEATURES = [
 ];
 
 // Planos Individuais
+// Mensal e anual têm os mesmos check-ups (1 para Ouro e Diamante)
 export const INDIVIDUAL_PLANS: PlanData[] = [
   {
     id: 'individual-bronze',
@@ -48,8 +51,10 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     price_yearly: 29.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 322,92/ano = R$ 26,91/mês
     specialist_consultations_per_year: 0,
     checkups_per_year: 0,
+    checkups_per_year_annual: 0,
     max_dependents: 0,
     features: [...BASE_BRONZE_FEATURES],
+    features_annual: [...BASE_BRONZE_FEATURES],
   },
   {
     id: 'individual-prata',
@@ -62,8 +67,13 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     price_yearly: 49.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 538,92/ano = R$ 44,91/mês
     specialist_consultations_per_year: 1,
     checkups_per_year: 0,
+    checkups_per_year_annual: 0,
     max_dependents: 0,
     features: [
+      ...BASE_BRONZE_FEATURES,
+      '1 consulta com médico especialista por ano',
+    ],
+    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '1 consulta com médico especialista por ano',
     ],
@@ -79,12 +89,18 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     price_yearly: 69.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 754,92/ano = R$ 62,91/mês
     specialist_consultations_per_year: 1,
     checkups_per_year: 1,
+    checkups_per_year_annual: 1,
     max_dependents: 0,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
       '1 consulta com médico especialista por ano',
-      '1 check up anual (mulher, homem ou criança)',
+      '1 check-up anual (mulher, homem ou criança)',
+    ],
+    features_annual: [
+      ...BASE_BRONZE_FEATURES,
+      '1 consulta com médico especialista por ano',
+      '1 check-up anual (mulher, homem ou criança)',
     ],
   },
   {
@@ -98,16 +114,23 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     price_yearly: 89.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 970,92/ano = R$ 80,91/mês
     specialist_consultations_per_year: 2,
     checkups_per_year: 1,
+    checkups_per_year_annual: 1,
     max_dependents: 0,
     features: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
-      '1 check up anual (mulher, homem ou criança)',
+      '1 check-up anual (mulher, homem ou criança)',
+    ],
+    features_annual: [
+      ...BASE_BRONZE_FEATURES,
+      '2 consultas com médico especialista por ano',
+      '1 check-up anual (mulher, homem ou criança)',
     ],
   },
 ];
 
 // Planos Coletivos (Familiar - até 3 vidas)
+// Ouro e Diamante: mensal=2 check-ups, anual=1 check-up
 export const COLETIVO_PLANS: PlanData[] = [
   {
     id: 'coletivo-bronze',
@@ -120,8 +143,13 @@ export const COLETIVO_PLANS: PlanData[] = [
     price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
     specialist_consultations_per_year: 0,
     checkups_per_year: 0,
+    checkups_per_year_annual: 0,
     max_dependents: 2, // titular + 2 dependentes = 3 vidas
     features: [
+      ...BASE_BRONZE_FEATURES,
+      'Até 3 beneficiários no total',
+    ],
+    features_annual: [
       ...BASE_BRONZE_FEATURES,
       'Até 3 beneficiários no total',
     ],
@@ -137,8 +165,14 @@ export const COLETIVO_PLANS: PlanData[] = [
     price_yearly: 139.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.510,92/ano = R$ 125,91/mês
     specialist_consultations_per_year: 2,
     checkups_per_year: 0,
+    checkups_per_year_annual: 0,
     max_dependents: 2,
     features: [
+      ...BASE_BRONZE_FEATURES,
+      '2 consultas com médico especialista por ano',
+      'Até 3 beneficiários no total',
+    ],
+    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
       'Até 3 beneficiários no total',
@@ -155,12 +189,19 @@ export const COLETIVO_PLANS: PlanData[] = [
     price_yearly: 199.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
     specialist_consultations_per_year: 2,
     checkups_per_year: 2,
+    checkups_per_year_annual: 1,
     max_dependents: 2,
     highlight: true,
     features: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
       '2 check-ups anuais',
+      'Até 3 beneficiários no total',
+    ],
+    features_annual: [
+      ...BASE_BRONZE_FEATURES,
+      '2 consultas com médico especialista por ano',
+      '1 check-up anual',
       'Até 3 beneficiários no total',
     ],
   },
@@ -172,9 +213,10 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'O melhor plano para toda a família',
     shortDescription: 'Plano completo - até 3 pessoas',
     price_monthly: 259.90,
-    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT),
+    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.806,92/ano = R$ 233,91/mês
     specialist_consultations_per_year: 4,
     checkups_per_year: 2,
+    checkups_per_year_annual: 1,
     max_dependents: 2,
     features: [
       ...BASE_BRONZE_FEATURES,
@@ -182,11 +224,27 @@ export const COLETIVO_PLANS: PlanData[] = [
       '2 check-ups anuais',
       'Até 3 beneficiários no total',
     ],
+    features_annual: [
+      ...BASE_BRONZE_FEATURES,
+      '4 consultas com médico especialista por ano',
+      '1 check-up anual',
+      'Até 3 beneficiários no total',
+    ],
   },
 ];
 
 // Todos os planos combinados
 export const ALL_PLANS: PlanData[] = [...INDIVIDUAL_PLANS, ...COLETIVO_PLANS];
+
+// Retorna check-ups conforme periodicidade
+export const getCheckupsForBilling = (plan: PlanData, billing: 'monthly' | 'yearly'): number => {
+  return billing === 'yearly' ? plan.checkups_per_year_annual : plan.checkups_per_year;
+};
+
+// Retorna features conforme periodicidade
+export const getFeaturesForBilling = (plan: PlanData, billing: 'monthly' | 'yearly'): string[] => {
+  return billing === 'yearly' ? plan.features_annual : plan.features;
+};
 
 // Helper para calcular preço mensal no plano anual
 export const getMonthlyPriceFromYearly = (yearlyPrice: number): number => {
