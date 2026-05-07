@@ -462,7 +462,7 @@ function Index(): JSX.Element {
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
-              Planos de <span className="gradient-text">Telemedicina</span>
+              Planos de <span className="">Telemedicina</span>
             </h2>
             <p className="text-muted-foreground text-lg">
               Planos a partir de R$ {formatPrice(INDIVIDUAL_PLANS[0].price_monthly)}/mês com consultas ilimitadas com clínico geral 24h.
@@ -532,7 +532,7 @@ function Index(): JSX.Element {
           <div className="mt-16 pt-12 border-t border-border/50">
             <div className="text-center max-w-2xl mx-auto mb-12">
               <h3 className="text-2xl md:text-3xl font-heading font-bold text-primary mb-4">
-                Planos <span className="gradient-text">Familiares</span>
+                Planos <span className="">Familiares</span>
               </h3>
               <p className="text-muted-foreground text-lg">
                 Proteja você e sua família com até 3 pessoas pelos mesmos preços acessíveis
@@ -637,7 +637,7 @@ function Index(): JSX.Element {
 
               <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
                 Emergências e Remoções com{" "}
-                <span className="gradient-text">Segurança Total</span>
+                <span className="">Segurança Total</span>
               </h2>
 
               <p className="text-lg text-muted-foreground leading-relaxed">
@@ -683,7 +683,7 @@ function Index(): JSX.Element {
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
             <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
-              Entre em <span className="gradient-text">Contato</span>
+              Entre em <span className="">Contato</span>
             </h2>
             <p className="text-muted-foreground text-lg">
               Cobrindo todo o DF e região do entorno. Estamos prontos para atendê-lo.
