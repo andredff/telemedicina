@@ -41,27 +41,27 @@ export const DIFERENCIAIS = {
     {
       icon: 'Clock',
       title: '15 Anos de Experiência',
-      description: '2000+ pacientes assistidos, 30.000+ consultas médicas realizadas presencialmente e 500.000+ sessões multidisciplinares efetuadas.',
+      description: '2000+ pacientes assistidos, 30.000+ consultas médicas realizadas e 500.000+ sessões multidisciplinares efetuadas.',
     },
     {
       icon: 'Building',
       title: 'Sede e Farmácia Próprias',
-      description: 'Sede e farmácia próprias e modernizadas.',
+      description: 'Nova Sede moderna e com farmácia própria, localizada no coração de Brasília.',
     },
-    {
-      icon: 'Ambulance',
-      title: 'UTI Móvel',
-      description: 'UTI MÓVEL totalmente equipada e identificada, contando com equipamentos de ponta, sendo uma das mais modernas do mercado.',
-    },
+    // {
+    //   icon: 'Ambulance',
+    //   title: 'UTI Móvel',
+    //   description: 'UTI MÓVEL totalmente equipada e identificada, contando com equipamentos de ponta, sendo uma das mais modernas do mercado.',
+    // },
     {
       icon: 'FileCheck',
-      title: 'Prontuário e Prescrição Digital',
-      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica via assinatura eletrônica com protocolo ICP-Brasil).',
+      title: 'Prontuário Eletrônico',
+      description: 'Integração com prontuário eletrônico e prescrição digital (Receita Médica e pedido de exame via assinatura eletrônica com protocolo ICP-Brasil).',
     },
     {
       icon: 'Shield',
-      title: 'Protocolos Clínicos Seguros',
-      description: 'Protocolos clínicos seguros com suporte em evidências, conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1.348/2022.',
+      title: 'Portal de Telemedicina',
+      description: 'Telemedicina avançada, consulta com especialistas e Suporte em evidências conforme Resolução CFM nº 2.314/2022 e Portaria MS nº 1348/2022.',
     },
     {
       icon: 'Star',
@@ -129,13 +129,13 @@ export const POR_QUE_NOVITA = {
 };
 
 export const MISSAO_VISAO_VALORES = {
-  missao: {
-    title: 'Missão',
-    text: 'Proporcionar atendimento de excelência, promovendo o bem-estar e a qualidade de vida das pessoas.',
-  },
   visao: {
     title: 'Visão',
     text: 'Ser referência nacional em assistência à saúde.',
+  },
+  missao: {
+    title: 'Missão',
+    text: 'Proporcionar atendimento de excelência, promovendo o bem-estar e a qualidade de vida das pessoas.',
   },
   valores: {
     title: 'Valores',

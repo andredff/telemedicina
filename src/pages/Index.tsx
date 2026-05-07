@@ -267,15 +267,15 @@ function Index(): JSX.Element {
 
               {/* Missão, Visão, Valores */}
               <div className="grid grid-cols-3 gap-4 pt-4">
+                                <div className="text-center p-4 bg-card rounded-xl border border-border/50">
+                  <Target className="h-8 w-8 text-primary mx-auto mb-2" />
+                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.visao.title}</p>
+                  <p className="text-sm font-semibold text-foreground">Referência Nacional</p>
+                </div>
               <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
                   <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.missao.title}</p>
                   <p className="text-sm font-semibold text-foreground">Excelência</p>
-                </div>
-                <div className="text-center p-4 bg-card rounded-xl border border-border/50">
-                  <Target className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.visao.title}</p>
-                  <p className="text-sm font-semibold text-foreground">Referência Nacional</p>
                 </div>
                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Award className="h-8 w-8 text-primary mx-auto mb-2" />
