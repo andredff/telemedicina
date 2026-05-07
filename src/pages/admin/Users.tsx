@@ -109,8 +109,13 @@ export default function AdminUsers() {
           "Authorization": `Bearer ${session?.access_token}`,
         },
       });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || "Erro ao resetar senha");
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg = result.error || (response.status === 502 || response.status === 503 || response.status === 500
+          ? "Servidor backend indisponível. Execute: node server/cielo-server.js"
+          : "Erro ao resetar senha");
+        throw new Error(msg);
+      }
       toast({
         title: "E-mail enviado",
         description: `Link de redefinição enviado para ${result.email}`,
