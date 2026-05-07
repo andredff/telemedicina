@@ -268,18 +268,19 @@ function Index(): JSX.Element {
               <div className="grid grid-cols-3 gap-4 pt-4">
                                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Target className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.visao.title}</p>
-                  <p className="text-sm font-semibold text-foreground">Referência Nacional</p>
+                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.visao.title}</p>
+                  <p className="text-xs font-medium text-muted-foreground">Ser Referência nacional em assistência à saúde.</p>
                 </div>
               <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Heart className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.missao.title}</p>
-                  <p className="text-sm font-semibold text-foreground">Excelência</p>
+                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.missao.title}</p>
+                  <p className="text-xs font-medium text-muted-foreground">Proporcionar atendimento de excelência, promovendo o bem-estar e a qualidade de vida das pessoas.</p>
                 </div>
                 <div className="text-center p-4 bg-card rounded-xl border border-border/50">
                   <Award className="h-8 w-8 text-primary mx-auto mb-2" />
-                  <p className="text-xs font-medium text-muted-foreground">{MISSAO_VISAO_VALORES.valores.title}</p>
-                  <p className="text-sm font-semibold text-foreground">Humanização</p>
+                  <p className="text-sm font-bold text-foreground mb-2">{MISSAO_VISAO_VALORES.valores.title}</p>
+                  <p className="text-xs font-medium text-muted-foreground">Humanização, ética, empatia, comprometimento, respeito ao ser humano.</p>
+
                 </div>
               </div>
             </div>
