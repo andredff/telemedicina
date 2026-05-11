@@ -469,11 +469,11 @@ function Index(): JSX.Element {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
             {INDIVIDUAL_PLANS.map((plan) => (
               <Card
                 key={plan.id}
-                className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 ${
+                className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 h-full flex flex-col ${
                   plan.highlight ? "border-primary shadow-glow" : ""
                 }`}
               >
@@ -487,10 +487,10 @@ function Index(): JSX.Element {
                 <CardContent className="p-6 flex flex-col h-full">
                   <div className="flex-1 space-y-6">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                      <div className={`w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br ${getPlanColor(plan.type)} flex items-center justify-center text-white`}>
                         {(() => {
                           const IconComponent = getPlanIcon(plan.type);
-                          return <IconComponent className="h-6 w-6 text-primary" />;
+                          return <IconComponent className="h-6 w-6" />;
                         })()}
                       </div>
                       <div>
@@ -539,11 +539,11 @@ function Index(): JSX.Element {
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 items-stretch">
               {COLETIVO_PLANS.map((plan) => (
                 <Card
                   key={plan.id}
-                  className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 ${
+                  className={`relative bg-card border-border/50 hover:shadow-card transition-all duration-300 h-full flex flex-col ${
                     plan.highlight ? "border-primary shadow-glow" : ""
                   }`}
                 >
@@ -557,7 +557,7 @@ function Index(): JSX.Element {
                   <CardContent className="p-6 flex flex-col h-full">
                     <div className="flex-1 space-y-6">
                       <div className="flex items-center gap-3">
-                        <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${getPlanColor(plan.type)} flex items-center justify-center text-white`}>
+                        <div className={`w-12 h-12 shrink-0 rounded-xl bg-gradient-to-br ${getPlanColor(plan.type)} flex items-center justify-center text-white`}>
                           {(() => {
                             const IconComponent = getPlanIcon(plan.type);
                             return <IconComponent className="h-6 w-6" />;
