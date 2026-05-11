@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ShoppingBag } from "lucide-react";
+import { ShoppingBag, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
@@ -110,6 +110,32 @@ const CheckoutMedication = () => {
     email: profile?.email || user?.email || "",
     cpf: profile?.cpf || user?.user_metadata?.cpf,
   };
+
+  // Gate de CPF: a Cielo exige CPF do pagador em pagamentos PIX (BACEN).
+  // Usuários antigos sem CPF cadastrado precisam completar o perfil antes.
+  if (!customer.cpf) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header isAuthenticated title="Checkout" />
+        <main className="container mx-auto px-4 py-8">
+          <BackLink to="/cart" label="Voltar ao Carrinho" />
+          <div className="max-w-md mx-auto mt-8 p-6 bg-amber-50 border border-amber-200 rounded-lg text-center">
+            <AlertCircle className="h-12 w-12 mx-auto mb-3 text-amber-600" />
+            <h2 className="text-xl font-heading font-semibold mb-2 text-amber-900">
+              Complete seu cadastro
+            </h2>
+            <p className="text-sm text-amber-800 mb-5">
+              Precisamos do seu CPF para processar pagamentos com segurança.
+              O CPF é obrigatório por exigência do Banco Central.
+            </p>
+            <Button onClick={() => navigate("/perfil")} className="w-full">
+              Completar cadastro
+            </Button>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

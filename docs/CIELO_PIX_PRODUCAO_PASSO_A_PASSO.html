@@ -462,6 +462,7 @@
         <li><strong>Conta Cielo E-commerce de produção</strong> — contratação em <code class="inline">cielo.com.br/e-commerce</code>. Pode levar dias úteis de aprovação comercial.</li>
         <li><strong>MerchantId e MerchantKey de produção</strong> — Cielo envia por e-mail após aprovação.</li>
         <li><strong>Chave PIX da empresa</strong> (CNPJ ou aleatória) para vincular à loja Cielo. Sem isso, a Cielo rejeita o pagamento.</li>
+        <li><strong>Backend já publicado no Render</strong> com URL pública estável (ex: <code class="inline">https://novita-telemedicina-3uv8.onrender.com</code>).</li>
       </ul>
     </div>
 
@@ -562,6 +563,40 @@
       <article class="step">
         <div class="step-number"><span>5</span></div>
         <div class="step-body">
+          <span class="step-tag">Frontend</span>
+          <h2>Apontar o front para o backend de produção</h2>
+          <p>O frontend precisa saber a URL pública do backend Render. Configurado em <code class="inline">.env.production</code>:</p>
+          <pre>VITE_LOCAL_SERVER_URL=https://&lt;seu-host-render&gt;.onrender.com</pre>
+          <p>O valor atual é <code class="inline">https://novita-telemedicina-3uv8.onrender.com</code>. Se o serviço Render tiver outra URL, atualize e refaça o build.</p>
+          <p>Também é preciso <strong>CORS</strong> no backend liberando o domínio do front. Setar no Render:</p>
+          <pre>CORS_ORIGINS=https://novita.migrai.com.br,https://novitahomecare.com.br</pre>
+          <p>Sem isso, o navegador bloqueia as chamadas com erro CORS no console.</p>
+        </div>
+      </article>
+
+      <!-- Passo 6 -->
+      <article class="step">
+        <div class="step-number"><span>6</span></div>
+        <div class="step-body">
+          <span class="step-tag critical">Crítico</span>
+          <h2>CPF do pagador é obrigatório no PIX</h2>
+          <p>Por exigência do <strong>BACEN</strong>, todo pagamento PIX precisa do CPF do pagador. A Cielo rejeita transações sem CPF.</p>
+          <p>No projeto:</p>
+          <ul>
+            <li>O <strong>signup</strong> já exige CPF com validação de regex (<code class="inline">src/pages/Auth.tsx</code>) — usuários novos sempre têm.</li>
+            <li>O <strong>checkout de medicamentos</strong> tem um gate: usuários antigos sem CPF cadastrado são redirecionados para <code class="inline">/perfil</code> para completar o cadastro antes de pagar.</li>
+            <li>O CPF é enviado para a Cielo como <code class="inline">Customer.Identity</code> + <code class="inline">IdentityType="CPF"</code>.</li>
+          </ul>
+          <div class="callout">
+            <strong>✓ Implementado:</strong> esse gate já está no código. Nenhuma ação manual necessária — só validar com um usuário antigo (criado antes da regra) que o fluxo redireciona corretamente.
+          </div>
+        </div>
+      </article>
+
+      <!-- Passo 7 -->
+      <article class="step">
+        <div class="step-number"><span>7</span></div>
+        <div class="step-body">
           <span class="step-tag">Validação</span>
           <h2>Smoke test em produção</h2>
           <p>Faça um pagamento real de <strong>R$ 1,00</strong>:</p>
@@ -592,8 +627,11 @@
         <li>PIX habilitado no portal Cielo</li>
         <li>Chave PIX vinculada e validada pelo banco</li>
         <li>Variáveis configuradas no Render: <code class="inline">CIELO_MERCHANT_ID</code>, <code class="inline">CIELO_MERCHANT_KEY</code>, <code class="inline">CIELO_SANDBOX=false</code>, <code class="inline">CIELO_WEBHOOK_TOKEN</code></li>
+        <li>Variável <code class="inline">CORS_ORIGINS</code> no Render liberando o domínio do front</li>
         <li>Servidor reiniciado, log mostra <code class="inline">PRODUCTION | Cielo &lt;id&gt;...</code></li>
         <li>Webhook configurado no portal Cielo com o token correto</li>
+        <li>Frontend buildado com <code class="inline">VITE_LOCAL_SERVER_URL</code> apontando para o backend Render</li>
+        <li>Gate de CPF no checkout testado: usuário sem CPF é redirecionado para <code class="inline">/perfil</code></li>
         <li>Smoke test de R$ 1,00 passou (pedido vira "paid" automaticamente)</li>
       </ul>
     </div>
@@ -637,6 +675,21 @@
           <td>QR Code é um placeholder estranho</td>
           <td><code class="inline">CIELO_SIMULATE=true</code> em produção</td>
           <td>Setar <code class="inline">CIELO_SIMULATE=false</code> ou remover variável</td>
+        </tr>
+        <tr>
+          <td>Erro CORS no console do navegador</td>
+          <td><code class="inline">CORS_ORIGINS</code> não inclui o domínio do front</td>
+          <td>Setar <code class="inline">CORS_ORIGINS=https://novita.migrai.com.br</code> no Render</td>
+        </tr>
+        <tr>
+          <td>"Servidor de pagamento não configurado"</td>
+          <td><code class="inline">VITE_LOCAL_SERVER_URL</code> vazio no build</td>
+          <td>Setar no <code class="inline">.env.production</code> e refazer build/deploy do front</td>
+        </tr>
+        <tr>
+          <td>Cielo rejeita PIX com erro de Identity</td>
+          <td>Usuário sem CPF cadastrado</td>
+          <td>Gate de CPF já redireciona para <code class="inline">/perfil</code> — confirmar que está funcionando</td>
         </tr>
       </table>
     </section>
