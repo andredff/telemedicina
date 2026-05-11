@@ -673,7 +673,20 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
 // ─── GET /api/cielo/payment/:paymentId ──────────────────────────────────────
 app.get("/api/cielo/payment/:paymentId", requireAuth, async (req, res) => {
   try {
-    const result = await reconcilePaymentStatus(req.params.paymentId);
+    const { paymentId } = req.params;
+
+    // Em modo simulação, IDs PIX simulados (SIM-PIX-*) não existem na Cielo.
+    // Retorna status 2 (pago) para que o polling do frontend confirme a venda.
+    if (isSimulating() && String(paymentId).startsWith("SIM-")) {
+      return res.json({
+        success:   true,
+        paymentId,
+        status:    2,
+        message:   "Pagamento confirmado (simulação)",
+      });
+    }
+
+    const result = await reconcilePaymentStatus(paymentId);
     return res.json({
       success:   result.ok,
       paymentId: result.paymentId,
