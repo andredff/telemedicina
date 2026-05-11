@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PIX em Producao - Passo a Passo Visual</title>
+  <style>
+    :root {
+      --ink: #17201a;
+      --muted: #5b675f;
+      --paper: #f7f8f3;
+      --surface: #ffffff;
+      --line: #dfe5dd;
+      --ok: #0f8f68;
+      --ok-soft: #dff5ea;
+      --info: #2364aa;
+      --info-soft: #e3eefb;
+      --warn: #a66a00;
+      --warn-soft: #fff1d5;
+      --danger: #b73a3a;
+      --danger-soft: #fce4e4;
+      --code: #10231e;
+      --shadow: 0 20px 70px rgba(23, 32, 26, 0.12);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        linear-gradient(90deg, rgba(15, 143, 104, 0.06) 1px, transparent 1px),
+        linear-gradient(0deg, rgba(35, 100, 170, 0.05) 1px, transparent 1px),
+        var(--paper);
+      background-size: 42px 42px;
+      font-family: Candara, "Aptos", "Segoe UI", sans-serif;
+      line-height: 1.45;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+      padding: 42px 0 72px;
+    }
+
+    header {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 24px;
+      align-items: end;
+      padding-bottom: 26px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .kicker {
+      margin: 0 0 10px;
+      color: var(--ok);
+      font-size: 13px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 38px;
+      letter-spacing: -0.01em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      font-size: 16px;
+      max-width: 70ch;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: var(--ok-soft);
+      color: var(--ok);
+      font-weight: 700;
+      font-size: 13px;
+      border: 1px solid rgba(15, 143, 104, 0.25);
+    }
+
+    .badge .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--ok);
+    }
+
+    /* Pre-requisitos */
+    .prereq {
+      margin: 28px 0 32px;
+      background: var(--warn-soft);
+      border: 1px solid rgba(166, 106, 0, 0.3);
+      border-left: 4px solid var(--warn);
+      border-radius: 12px;
+      padding: 18px 22px;
+    }
+
+    .prereq h3 {
+      margin: 0 0 10px;
+      color: var(--warn);
+      font-size: 15px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .prereq ul {
+      margin: 0;
+      padding-left: 22px;
+      color: #6b4d0a;
+    }
+
+    .prereq li { margin: 4px 0; }
+
+    /* Steps */
+    .steps {
+      display: grid;
+      gap: 22px;
+      margin: 36px 0;
+    }
+
+    .step {
+      display: grid;
+      grid-template-columns: 80px 1fr;
+      gap: 20px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 24px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .step::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--ok);
+    }
+
+    .step-number {
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+    }
+
+    .step-number span {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #0f8f68, #16a87a);
+      color: #fff;
+      font-size: 26px;
+      font-weight: 800;
+      box-shadow: 0 6px 20px rgba(15, 143, 104, 0.3);
+    }
+
+    .step-body h2 {
+      margin: 0 0 6px;
+      font-size: 22px;
+    }
+
+    .step-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--info);
+      background: var(--info-soft);
+      padding: 3px 10px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .step-tag.critical {
+      color: var(--danger);
+      background: var(--danger-soft);
+    }
+
+    .step-tag.recommended {
+      color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .step-body p {
+      margin: 8px 0;
+      color: var(--muted);
+    }
+
+    .step-body ol,
+    .step-body ul {
+      margin: 10px 0;
+      padding-left: 22px;
+    }
+
+    .step-body li {
+      margin: 6px 0;
+    }
+
+    .callout {
+      margin: 14px 0;
+      padding: 12px 16px;
+      border-radius: 8px;
+      background: var(--warn-soft);
+      border-left: 3px solid var(--warn);
+      font-size: 14px;
+      color: #6b4d0a;
+    }
+
+    .callout strong { color: var(--warn); }
+
+    /* Codigo */
+    pre {
+      background: var(--code);
+      color: #d9e6df;
+      padding: 16px 18px;
+      border-radius: 10px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 13.5px;
+      line-height: 1.6;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+
+    pre .comment { color: #7a9088; }
+    pre .var { color: #f4c069; }
+
+    code.inline {
+      background: rgba(15, 143, 104, 0.08);
+      color: var(--code);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "Cascadia Code", "Consolas", monospace;
+      font-size: 13px;
+    }
+
+    /* Tabelas */
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      margin: 12px 0;
+      background: var(--surface);
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+
+    th, td {
+      padding: 11px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--line);
+      font-size: 14px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f0f3ee;
+      font-weight: 700;
+      font-size: 12px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    tr:last-child td { border-bottom: 0; }
+
+    .env-table td:first-child { font-family: "Cascadia Code", monospace; font-weight: 700; color: var(--info); width: 30%; }
+
+    /* Checklist */
+    .checklist {
+      background: var(--ok-soft);
+      border: 1px solid rgba(15, 143, 104, 0.25);
+      border-radius: 12px;
+      padding: 24px;
+      margin: 30px 0;
+    }
+
+    .checklist h2 {
+      margin: 0 0 14px;
+      color: var(--ok);
+      font-size: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .checklist ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+
+    .checklist li {
+      padding: 8px 0 8px 32px;
+      position: relative;
+      color: #1a3e2f;
+    }
+
+    .checklist li::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 12px;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--ok);
+      border-radius: 4px;
+      background: #fff;
+    }
+
+    /* Diagrama de fluxo */
+    .flow {
+      margin: 18px 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 14px;
+      text-align: center;
+      font-size: 13px;
+      position: relative;
+    }
+
+    .flow-step .num {
+      display: inline-block;
+      background: var(--info);
+      color: #fff;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 800;
+      line-height: 22px;
+      margin-bottom: 6px;
+    }
+
+    .flow-step strong { display: block; margin-bottom: 4px; }
+    .flow-step small { color: var(--muted); }
+
+    /* Erros comuns */
+    .errors h2 {
+      margin: 32px 0 12px;
+      font-size: 22px;
+    }
+
+    .errors td:first-child {
+      font-weight: 600;
+      color: var(--danger);
+      width: 32%;
+    }
+
+    .errors td:nth-child(2) { width: 30%; color: var(--muted); }
+
+    footer {
+      margin-top: 50px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    footer a {
+      color: var(--info);
+      text-decoration: none;
+    }
+
+    footer a:hover { text-decoration: underline; }
+
+    @media (max-width: 720px) {
+      header { grid-template-columns: 1fr; }
+      .step { grid-template-columns: 1fr; }
+      .step-number { justify-content: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+
+    <header>
+      <div>
+        <p class="kicker">Cielo · PIX · Produção</p>
+        <h1>Configurar PIX em produção</h1>
+        <p class="subtitle">
+          Passo a passo para colocar o pagamento PIX da Cielo no ar com pedidos reais.
+          Foco em produção — para dev/sandbox veja o guia completo em
+          <a href="CIELO_PIX_CONFIGURACAO.md">CIELO_PIX_CONFIGURACAO.md</a>.
+        </p>
+      </div>
+      <span class="badge">
+        <span class="dot"></span>
+        Pronto para produção
+      </span>
+    </header>
+
+    <!-- Como funciona -->
+    <section style="margin: 30px 0 6px;">
+      <h2 style="margin: 0 0 10px; font-size: 20px;">Como o pagamento PIX flui no sistema</h2>
+      <div class="flow">
+        <div class="flow-step">
+          <span class="num">1</span>
+          <strong>Cliente</strong>
+          <small>Escolhe PIX no checkout</small>
+        </div>
+        <div class="flow-step">
+          <span class="num">2</span>
+          <strong>Servidor</strong>
+          <small>POST para Cielo gera QR Code</small>
+        </div>
+        <div class="flow-step">
+          <span class="num">3</span>
+          <strong>Front</strong>
+          <small>Exibe QR Code e faz polling 5s</small>
+        </div>
+        <div class="flow-step">
+          <span class="num">4</span>
+          <strong>Banco do cliente</strong>
+          <small>Cliente paga pelo app</small>
+        </div>
+        <div class="flow-step">
+          <span class="num">5</span>
+          <strong>Cielo</strong>
+          <small>Polling ou webhook confirma</small>
+        </div>
+        <div class="flow-step">
+          <span class="num">6</span>
+          <strong>Supabase</strong>
+          <small>Pedido marcado como pago</small>
+        </div>
+      </div>
+    </section>
+
+    <!-- Pre-requisitos -->
+    <div class="prereq">
+      <h3>⚠ Pré-requisitos antes de começar</h3>
+      <ul>
+        <li><strong>Conta Cielo E-commerce de produção</strong> — contratação em <code class="inline">cielo.com.br/e-commerce</code>. Pode levar dias úteis de aprovação comercial.</li>
+        <li><strong>MerchantId e MerchantKey de produção</strong> — Cielo envia por e-mail após aprovação.</li>
+        <li><strong>Chave PIX da empresa</strong> (CNPJ ou aleatória) para vincular à loja Cielo. Sem isso, a Cielo rejeita o pagamento.</li>
+      </ul>
+    </div>
+
+    <!-- Passos -->
+    <div class="steps">
+
+      <!-- Passo 1 -->
+      <article class="step">
+        <div class="step-number"><span>1</span></div>
+        <div class="step-body">
+          <span class="step-tag critical">Crítico</span>
+          <h2>Habilitar PIX no portal Cielo</h2>
+          <p>PIX <strong>não vem habilitado por padrão</strong>. Sem este passo, o request retorna erro de validação mesmo com as credenciais corretas.</p>
+          <ol>
+            <li>Acesse <code class="inline">minhaconta2.cielo.com.br</code> com sua conta de produção</li>
+            <li>Menu <strong>Loja → Meios de pagamento</strong> (o nome pode variar)</li>
+            <li>Localize <strong>Pix</strong> e clique em <strong>Habilitar</strong></li>
+            <li>Vincule sua <strong>chave PIX</strong> (CNPJ ou aleatória da conta bancária da empresa)</li>
+            <li>Aguarde validação automática com seu banco — pode levar de algumas horas a 1 dia útil</li>
+            <li>Confirme a aprovação por e-mail antes de seguir</li>
+          </ol>
+          <div class="callout">
+            <strong>⚠ Bloqueante:</strong> sem chave PIX vinculada e validada, a Cielo retorna <code class="inline">ProviderError</code> em produção.
+          </div>
+        </div>
+      </article>
+
+      <!-- Passo 2 -->
+      <article class="step">
+        <div class="step-number"><span>2</span></div>
+        <div class="step-body">
+          <span class="step-tag">Configuração</span>
+          <h2>Configurar variáveis de ambiente no Render</h2>
+          <p>Dashboard Render → seu serviço backend → <strong>Environment</strong>. Adicione/atualize:</p>
+
+          <table class="env-table">
+            <tr><th>Variável</th><th>Valor</th></tr>
+            <tr><td>CIELO_MERCHANT_ID</td><td>UUID de produção recebido por e-mail</td></tr>
+            <tr><td>CIELO_MERCHANT_KEY</td><td>Chave de API de produção</td></tr>
+            <tr><td>CIELO_SANDBOX</td><td><code class="inline">false</code></td></tr>
+            <tr><td>CIELO_SIMULATE</td><td><code class="inline">false</code> (ou ausente)</td></tr>
+            <tr><td>CIELO_WEBHOOK_TOKEN</td><td>Token aleatório — gere com <code class="inline">openssl rand -hex 32</code></td></tr>
+          </table>
+
+          <div class="callout">
+            <strong>⚠ Atenção:</strong> <code class="inline">CIELO_SIMULATE=true</code> em produção gera QR Code falso. Mantenha em <code class="inline">false</code> ou remova a variável.
+          </div>
+
+          <p>O Render reinicia o serviço automaticamente após salvar.</p>
+        </div>
+      </article>
+
+      <!-- Passo 3 -->
+      <article class="step">
+        <div class="step-number"><span>3</span></div>
+        <div class="step-body">
+          <span class="step-tag">Validação</span>
+          <h2>Validar que as credenciais foram carregadas</h2>
+          <p>Após o restart, confira o log de boot do servidor no Render. A linha de status deve aparecer:</p>
+          <pre>║  Pagamentos: <span class="var">PRODUCTION</span> | Cielo <span class="var">&lt;abc12345&gt;...</span>     ║
+║  E-mails:    RESEND (live)                   ║
+║  Rastreio:   painel/env                      ║
+║  Supabase:   conectado                       ║</pre>
+          <p>Se aparece <code class="inline">PRODUCTION</code> e os primeiros caracteres do MerchantId, está OK. Se aparece <code class="inline">não configurado</code>, o env não está sendo lido — revise o painel do Render.</p>
+        </div>
+      </article>
+
+      <!-- Passo 4 -->
+      <article class="step">
+        <div class="step-number"><span>4</span></div>
+        <div class="step-body">
+          <span class="step-tag recommended">Recomendado</span>
+          <h2>Configurar webhook da Cielo</h2>
+          <p>Sem webhook, se o cliente fechar o navegador antes do polling de 5s detectar o pagamento, o pedido fica "aguardando pagamento" eternamente. O webhook garante reconciliação assíncrona.</p>
+          <ol>
+            <li>Portal Cielo → <strong>Loja → Notificações</strong> (ou <strong>Webhooks</strong>)</li>
+            <li>Adicione esta URL de notificação:
+              <pre>https://&lt;seu-host-render&gt;/api/cielo/webhook?token=<span class="var">&lt;CIELO_WEBHOOK_TOKEN&gt;</span></pre>
+            </li>
+            <li>Use <strong>exatamente o mesmo token</strong> que você setou no env do Render</li>
+            <li>Selecione os eventos:
+              <ul>
+                <li><strong>Mudança de status do pagamento</strong> (obrigatório)</li>
+                <li><strong>Pagamentos recorrentes</strong> (se houver assinaturas)</li>
+              </ul>
+            </li>
+            <li>Salve. A Cielo envia um POST de teste — confira o log:
+              <pre>[Cielo Webhook] &lt;paymentId&gt; → status 12 (Aguardando)</pre>
+            </li>
+          </ol>
+          <div class="callout">
+            Se aparecer <code class="inline">401 Token inválido</code>, o token na URL não bate com o env do Render.
+          </div>
+        </div>
+      </article>
+
+      <!-- Passo 5 -->
+      <article class="step">
+        <div class="step-number"><span>5</span></div>
+        <div class="step-body">
+          <span class="step-tag">Validação</span>
+          <h2>Smoke test em produção</h2>
+          <p>Faça um pagamento real de <strong>R$ 1,00</strong>:</p>
+          <ol>
+            <li>Como cliente, adicione um medicamento ao carrinho</li>
+            <li>Checkout → escolha PIX → QR Code aparece (vindo da Cielo, base64)</li>
+            <li>Pague pelo app do seu banco</li>
+            <li>Em até 5s (polling) ou imediato (webhook), o pedido vira <code class="inline">payment_status='paid'</code></li>
+          </ol>
+          <p>Confira os 4 lugares:</p>
+          <table>
+            <tr><th>Onde</th><th>O que ver</th></tr>
+            <tr><td><strong>Portal Cielo</strong></td><td>Transação aprovada</td></tr>
+            <tr><td><strong>Extrato bancário</strong></td><td>Valor creditado (geralmente D+1)</td></tr>
+            <tr><td><strong>Supabase</strong></td><td><code class="inline">select id, payment_status, payment_id from orders order by created_at desc limit 1;</code></td></tr>
+            <tr><td><strong>Log do servidor</strong></td><td><code class="inline">[Cielo] ✓ Pedido reconciliado: payment_id=... → paid</code></td></tr>
+          </table>
+        </div>
+      </article>
+
+    </div>
+
+    <!-- Checklist final -->
+    <div class="checklist">
+      <h2>✓ Checklist de Go-Live</h2>
+      <ul>
+        <li>Conta Cielo de produção contratada e aprovada</li>
+        <li>PIX habilitado no portal Cielo</li>
+        <li>Chave PIX vinculada e validada pelo banco</li>
+        <li>Variáveis configuradas no Render: <code class="inline">CIELO_MERCHANT_ID</code>, <code class="inline">CIELO_MERCHANT_KEY</code>, <code class="inline">CIELO_SANDBOX=false</code>, <code class="inline">CIELO_WEBHOOK_TOKEN</code></li>
+        <li>Servidor reiniciado, log mostra <code class="inline">PRODUCTION | Cielo &lt;id&gt;...</code></li>
+        <li>Webhook configurado no portal Cielo com o token correto</li>
+        <li>Smoke test de R$ 1,00 passou (pedido vira "paid" automaticamente)</li>
+      </ul>
+    </div>
+
+    <!-- Erros comuns -->
+    <section class="errors">
+      <h2>Erros comuns e como resolver</h2>
+      <table>
+        <tr><th>Sintoma</th><th>Causa</th><th>Solução</th></tr>
+        <tr>
+          <td>"Cielo credentials not configured" no checkout</td>
+          <td>Env não está setado no Render</td>
+          <td>Verificar dashboard Render → Environment, redeploy se preciso</td>
+        </tr>
+        <tr>
+          <td>Cielo retorna 401 / 403</td>
+          <td>MerchantId/Key são sandbox, não produção</td>
+          <td>Trocar pelas credenciais que vieram no e-mail de produção</td>
+        </tr>
+        <tr>
+          <td>Erro de validação no POST de pagamento</td>
+          <td>PIX não habilitado na loja</td>
+          <td>Voltar ao Passo 1 — habilitar no portal Cielo</td>
+        </tr>
+        <tr>
+          <td>Cielo retorna <code class="inline">ProviderError</code></td>
+          <td>Chave PIX não vinculada ou ainda não validada pelo banco</td>
+          <td>Aguardar validação ou reenviar no portal</td>
+        </tr>
+        <tr>
+          <td>Cliente paga, pedido não vira "paid"</td>
+          <td>Webhook não configurado e cliente fechou aba antes do polling</td>
+          <td>Configurar webhook (Passo 4)</td>
+        </tr>
+        <tr>
+          <td>Webhook recebe 401 nos logs</td>
+          <td>Token na URL ≠ <code class="inline">CIELO_WEBHOOK_TOKEN</code></td>
+          <td>Conferir token nos dois lados (Render e portal Cielo)</td>
+        </tr>
+        <tr>
+          <td>QR Code é um placeholder estranho</td>
+          <td><code class="inline">CIELO_SIMULATE=true</code> em produção</td>
+          <td>Setar <code class="inline">CIELO_SIMULATE=false</code> ou remover variável</td>
+        </tr>
+      </table>
+    </section>
+
+    <footer>
+      <div>
+        Novità Telemedicina · Configuração de PIX em produção · Gerado a partir de
+        <a href="CIELO_PIX_CONFIGURACAO.md">CIELO_PIX_CONFIGURACAO.md</a>
+      </div>
+      <div>
+        <a href="./">← Voltar ao índice de docs</a>
+      </div>
+    </footer>
+
+  </main>
+</body>
+</html>

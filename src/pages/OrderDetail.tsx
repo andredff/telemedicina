@@ -37,6 +37,7 @@ import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import type { OrderStatus } from "@/hooks/useOrderSubscription";
 import type { TrackingEvent } from "@/services/trackingService";
+import { formatPaymentMethod } from "@/lib/labels";
 
 interface OrderItem {
   name: string;
@@ -446,12 +447,8 @@ const OrderDetail = () => {
               <CardContent className="space-y-3">
                 <div>
                   <p className="text-sm font-medium">Método de pagamento</p>
-                  <p className="text-sm text-muted-foreground capitalize">
-                    {order.payment_method === "credit_card"
-                      ? "Cartão de Crédito"
-                      : order.payment_method === "pix"
-                        ? "PIX"
-                        : order.payment_method}
+                  <p className="text-sm text-muted-foreground">
+                    {formatPaymentMethod(order.payment_method)}
                   </p>
                 </div>
                 {order.payment_id && (

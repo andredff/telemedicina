@@ -45,6 +45,7 @@ import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
 import AdminUserDetail from "./pages/admin/UserDetail";
+import ServiceOrderView from "./pages/admin/ServiceOrderView";
 import Support from "./pages/Support";
 
 const queryClient = new QueryClient();
@@ -126,6 +127,9 @@ const App = () => (
             <Route path="configuracoes" element={<AdminSettings />} />
             <Route path="suporte" element={<AdminSupport />} />
           </Route>
+
+          {/* OS fullscreen (sem AdminLayout) — para impressão limpa */}
+          <Route path="/admin/pedidos/:orderId/os" element={<ServiceOrderView />} />
 
           <Route path="*" element={<NotFound />} />
         </Routes>

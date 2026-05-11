@@ -27,6 +27,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import { getCorreiosTrackingUrl, type TrackingEvent } from "@/services/trackingService";
+import { formatPaymentMethod } from "@/lib/labels";
 
 interface Order {
   id: string;
@@ -521,7 +522,7 @@ const Orders = () => {
                             ? <Banknote className="h-3.5 w-3.5 shrink-0" />
                             : <CreditCard className="h-3.5 w-3.5 shrink-0" />
                           }
-                          <span className="capitalize">{order.payment_method}</span>
+                          <span>{formatPaymentMethod(order.payment_method)}</span>
                           {order.installments && order.installments > 1 && (
                             <span>· {order.installments}×</span>
                           )}

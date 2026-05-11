@@ -61,12 +61,14 @@ import {
   ClipboardCheck,
   CheckCheck,
   ShieldAlert,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 import { cieloClient } from '@/integrations/cielo';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
+import { formatOrderStatus } from '@/lib/labels';
 
 interface OrderItem {
   name: string;
@@ -130,6 +132,12 @@ export default function AdminOrders() {
   const [submittingReview, setSubmittingReview] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
   const [loadingPdf, setLoadingPdf] = useState(false);
+
+  // Dialog de rastreio ao mudar status para "shipped"
+  const [shippingOrder, setShippingOrder] = useState<Order | null>(null);
+  const [shippingTrackingCode, setShippingTrackingCode] = useState('');
+  const [shippingEstimatedDelivery, setShippingEstimatedDelivery] = useState('');
+  const [confirmingShipping, setConfirmingShipping] = useState(false);
 
   useEffect(() => {
     fetchOrders();
@@ -243,6 +251,15 @@ export default function AdminOrders() {
 
       // Valida se houve mudança real de status — evita spam de notificação
       if (order.status === newStatus) return;
+
+      // Ao marcar como "Enviado": pergunta o código de rastreio antes de
+      // persistir e disparar o email. O dialog cuida do resto do fluxo.
+      if (newStatus === 'shipped') {
+        setShippingOrder(order);
+        setShippingTrackingCode(order.tracking_code || '');
+        setShippingEstimatedDelivery('');
+        return;
+      }
 
       // Atualiza no banco de dados
       const { error: updateError } = await AdminQueries.updateOrderStatus(orderId, newStatus);
@@ -397,6 +414,99 @@ export default function AdminOrders() {
       setShowNotificationDialog(false);
       setTrackingCode('');
       setEstimatedDelivery('');
+    }
+  };
+
+  const shippingTrackingValidation = shippingTrackingCode.trim()
+    ? validateCorreiosTrackingCode(shippingTrackingCode)
+    : { valid: true, code: '', message: '' };
+
+  const handleConfirmShipping = async () => {
+    if (!shippingOrder) return;
+
+    const code = shippingTrackingCode.trim();
+    if (code && !shippingTrackingValidation.valid) {
+      toast({
+        title: 'Código de rastreio inválido',
+        description: shippingTrackingValidation.message,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setConfirmingShipping(true);
+    const orderId = shippingOrder.id;
+
+    try {
+      const trackingCodeToUse = code ? shippingTrackingValidation.code : (shippingOrder.tracking_code || undefined);
+      const estimatedDeliveryToUse = shippingEstimatedDelivery || undefined;
+      const orderPatch: Partial<Order> = { status: 'shipped' };
+
+      // Persiste status + tracking_code direto na tabela `orders` via service role.
+      // Não dependemos do endpoint do cielo-server que consulta a API dos Correios
+      // — essa consulta enriquece os dados depois, mas não é pré-requisito.
+      if (code) {
+        const { error: trackingError } = await AdminQueries.updateOrderTracking(orderId, shippingTrackingValidation.code);
+        if (trackingError) throw new Error('Falha ao salvar código de rastreio');
+        orderPatch.tracking_code = shippingTrackingValidation.code;
+      }
+
+      const { error: updateError } = await AdminQueries.updateOrderStatus(orderId, 'shipped');
+      if (updateError) throw new Error('Falha ao atualizar status no banco de dados');
+
+      // Tenta enriquecer com a consulta aos Correios em background (não bloqueia).
+      // Falha silenciosa: o que importa para o cliente é o status + código.
+      if (code) {
+        saveOrderTracking(orderId, shippingTrackingValidation.code)
+          .then((trackingResult) => {
+            setOrders((prev) => prev.map((o) =>
+              o.id === orderId
+                ? {
+                    ...o,
+                    tracking_carrier: trackingResult.order.tracking_carrier,
+                    tracking_status: trackingResult.order.tracking_status,
+                    tracking_status_label: trackingResult.order.tracking_status_label,
+                    tracking_last_event_at: trackingResult.order.tracking_last_event_at,
+                    tracking_last_checked_at: trackingResult.order.tracking_last_checked_at,
+                    tracking_estimated_delivery: trackingResult.order.tracking_estimated_delivery,
+                    tracking_events: trackingResult.order.tracking_events,
+                  }
+                : o
+            ));
+          })
+          .catch((err) => logger.warn('[AdminOrders] Consulta Correios falhou (ignorado):', err));
+      }
+
+      setOrders(orders.map(o => (o.id === orderId ? { ...o, ...orderPatch } : o)));
+
+      const notificationResult = await sendOrderStatusNotification({
+        orderId,
+        customerEmail: shippingOrder.customer_email || 'email@exemplo.com',
+        customerName: shippingOrder.customer,
+        status: 'shipped',
+        trackingCode: trackingCodeToUse,
+        estimatedDelivery: estimatedDeliveryToUse,
+      });
+
+      toast({
+        title: 'Pedido marcado como enviado',
+        description: notificationResult.success
+          ? `Notificação enviada para ${shippingOrder.customer_email}${code ? ' com código de rastreio' : ''}`
+          : 'Status atualizado (notificação não enviada)',
+      });
+
+      setShippingOrder(null);
+      setShippingTrackingCode('');
+      setShippingEstimatedDelivery('');
+    } catch (err) {
+      logger.error('Error confirming shipping:', err);
+      toast({
+        title: 'Erro',
+        description: 'Falha ao confirmar envio do pedido',
+        variant: 'destructive',
+      });
+    } finally {
+      setConfirmingShipping(false);
     }
   };
 
@@ -631,6 +741,14 @@ export default function AdminOrders() {
                       <Button
                         variant="outline"
                         size="sm"
+                        onClick={() => window.open(`/admin/pedidos/${order.id}/os`, '_blank')}
+                        title="Ver Ordem de Serviço"
+                      >
+                        <FileSpreadsheet className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => handleViewDetails(order)}
                         title="Ver detalhes"
                       >
@@ -805,6 +923,28 @@ export default function AdminOrders() {
                 </div>
               )}
 
+              {/* Ordem de Serviço Logística */}
+              <div className="flex items-center justify-between p-3 rounded-lg border border-emerald-200 bg-emerald-50/50">
+                <div className="flex items-center gap-2">
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-700" />
+                  <div>
+                    <p className="text-sm font-medium">Ordem de Serviço</p>
+                    <p className="text-xs text-muted-foreground">
+                      Documento para separação e entrega — pronto para impressão ou PDF
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 border-emerald-600 text-emerald-700 hover:bg-emerald-100"
+                  onClick={() => window.open(`/admin/pedidos/${selectedOrder.id}/os`, '_blank')}
+                >
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Ver OS
+                </Button>
+              </div>
+
               {/* Notification History */}
               <div>
                 <div className="flex items-center justify-between mb-2">
@@ -835,7 +975,7 @@ export default function AdminOrders() {
                             {new Date(notification.sentAt).toLocaleString('pt-BR')}
                           </p>
                         </div>
-                        <Badge variant="outline">{notification.status}</Badge>
+                        <Badge variant="outline">{formatOrderStatus(notification.status)}</Badge>
                       </div>
                     ))}
                   </div>
@@ -1075,6 +1215,102 @@ export default function AdminOrders() {
               </Button>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Shipping Tracking Dialog — pergunta o código ao marcar como "Enviado" */}
+      <Dialog
+        open={!!shippingOrder}
+        onOpenChange={(open) => {
+          if (!open && !confirmingShipping) {
+            setShippingOrder(null);
+            setShippingTrackingCode('');
+            setShippingEstimatedDelivery('');
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Truck className="h-5 w-5 text-purple-600" />
+              Marcar pedido como Enviado
+            </DialogTitle>
+            <DialogDescription>
+              Informe o código de rastreio dos Correios. Ele será incluído no e-mail de notificação ao cliente e aparecerá em "Meus Pedidos".
+            </DialogDescription>
+          </DialogHeader>
+
+          {shippingOrder && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <Label className="text-muted-foreground">Pedido</Label>
+                  <p className="font-mono">#{shippingOrder.id}</p>
+                </div>
+                <div>
+                  <Label className="text-muted-foreground">Cliente</Label>
+                  <p className="font-medium">{shippingOrder.customer}</p>
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="shipping-tracking">Código de Rastreio Correios</Label>
+                <Input
+                  id="shipping-tracking"
+                  value={shippingTrackingCode}
+                  onChange={(e) => setShippingTrackingCode(normalizeCorreiosTrackingCode(e.target.value))}
+                  placeholder="DG049186226BR"
+                  className="font-mono uppercase"
+                  autoFocus
+                />
+                {shippingTrackingCode && (
+                  <p className={`text-xs mt-1 ${shippingTrackingValidation.valid ? 'text-muted-foreground' : 'text-destructive'}`}>
+                    {shippingTrackingValidation.message}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label htmlFor="shipping-delivery">Previsão de Entrega (opcional)</Label>
+                <Input
+                  id="shipping-delivery"
+                  value={shippingEstimatedDelivery}
+                  onChange={(e) => setShippingEstimatedDelivery(e.target.value)}
+                  placeholder="Ex: 3-5 dias úteis"
+                />
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShippingOrder(null);
+                setShippingTrackingCode('');
+                setShippingEstimatedDelivery('');
+              }}
+              disabled={confirmingShipping}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmShipping}
+              disabled={confirmingShipping || (!!shippingTrackingCode && !shippingTrackingValidation.valid)}
+            >
+              {confirmingShipping ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Confirmando...
+                </>
+              ) : (
+                <>
+                  <Truck className="h-4 w-4 mr-2" />
+                  Confirmar envio
+                </>
+              )}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

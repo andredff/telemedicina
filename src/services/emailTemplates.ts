@@ -5,6 +5,16 @@
 
 import type { OrderStatus, OrderNotification } from "./notificationService";
 
+// URL base da aplicação para links nos emails. Em prod aponta para o domínio
+// público; em dev cai no Vite (5173). Configurável via VITE_APP_URL.
+const APP_URL = (import.meta.env.VITE_APP_URL as string | undefined)?.replace(/\/$/, "")
+  || (import.meta.env.PROD ? "https://novita.migrai.com.br" : "http://localhost:5173");
+const ORDERS_URL = `${APP_URL}/orders`;
+
+// Assets de imagem hospedados publicamente (Supabase Storage) — clientes de
+// email não conseguem carregar imagens de localhost durante o desenvolvimento.
+const LOGO_URL = "https://ttzenzogctubbcyxaauo.supabase.co/storage/v1/object/public/brand-assets/novita_logo.png";
+
 // Cores da marca
 const BRAND = {
   primary: "#EDAF00",
@@ -50,19 +60,12 @@ const STATUS_COLORS: Record<OrderStatus, { color: string; bg: string; label: str
   },
 };
 
-// SVG do logo (coração dourado)
+// Logo Novità Health Group servido a partir de /public
 const LOGO_SVG = `
 <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;">
   <tr>
-    <td style="background:linear-gradient(135deg,${BRAND.primary},${BRAND.secondary});border-radius:12px;padding:10px;" align="center">
-      <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="white" stroke="white" stroke-width="0">
-        <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-      </svg>
-    </td>
-    <td style="padding-left:12px;">
-      <span style="font-family:Arial,Helvetica,sans-serif;font-size:22px;font-weight:700;color:${BRAND.text};">Novit&agrave;</span>
-      <br/>
-      <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;color:${BRAND.textLight};letter-spacing:0.5px;">TELEMEDICINA</span>
+    <td align="center">
+      <img src="${LOGO_URL}" alt="Novità Health Group" width="180" style="display:block;border:0;outline:none;text-decoration:none;height:auto;max-width:180px;" />
     </td>
   </tr>
 </table>`;
@@ -113,7 +116,7 @@ function baseLayout(content: string, preheader: string): string {
                 <tr>
                   <td align="center" style="padding-bottom:16px;">
                     <span style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:${BRAND.textLight};">
-                      &#128222; (61) 3041-3218 &nbsp;&nbsp;|&nbsp;&nbsp; &#9993; telemedicina@novitahomecare.com.br
+                      &#128222; (61) 3041-3218 &nbsp;&nbsp;|&nbsp;&nbsp; &#9993; contato@novitahomecare.com.br
                     </span>
                   </td>
                 </tr>
@@ -286,7 +289,7 @@ function pendingBody(data: OrderNotification): string {
       </tr>
     </table>
 
-    ${ctaButton("Acompanhar Pedido")}
+    ${ctaButton("Acompanhar Pedido", ORDERS_URL)}
   `;
 }
 
@@ -314,7 +317,7 @@ function processingBody(data: OrderNotification): string {
       </tr>
     </table>
 
-    ${ctaButton("Acompanhar Pedido")}
+    ${ctaButton("Acompanhar Pedido", ORDERS_URL)}
   `;
 }
 
@@ -334,7 +337,7 @@ function shippedBody(data: OrderNotification): string {
 
     ${itemsTable(data.items || [])}
 
-    ${ctaButton("Rastrear Pedido")}
+    ${ctaButton("Acompanhar Pedido", ORDERS_URL)}
   `;
 }
 
@@ -362,7 +365,7 @@ function deliveredBody(data: OrderNotification): string {
       </tr>
     </table>
 
-    ${ctaButton("Ver Meus Pedidos")}
+    ${ctaButton("Acompanhar Pedido", ORDERS_URL)}
   `;
 }
 
@@ -384,7 +387,7 @@ function cancelledBody(data: OrderNotification): string {
       <tr>
         <td style="padding:16px 20px;">
           <span style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${STATUS_COLORS.cancelled.color};line-height:20px;">
-            &#128222; Precisa de ajuda? Ligue para <strong>(61) 3041-3218</strong> ou envie um email para <strong>telemedicina@novitahomecare.com.br</strong>
+            &#128222; Precisa de ajuda? Ligue para <strong>(61) 3041-3218</strong> ou envie um email para <strong>contato@novitahomecare.com.br</strong>
           </span>
         </td>
       </tr>

@@ -336,6 +336,7 @@ export default function AdminSettings() {
     }
   };
 
+
   const updateSetting = <K extends keyof SettingsData>(
     category: K,
     field: keyof SettingsData[K],

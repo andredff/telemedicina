@@ -271,41 +271,63 @@ function envFlag(value) {
 }
 
 const CIELO_SANDBOX_VALUE = readEnv("CIELO_SANDBOX", "VITE_CIELO_SANDBOX");
-const isSandbox = envFlag(CIELO_SANDBOX_VALUE);
 
-const CIELO_URLS = isSandbox
-  ? {
-      transactional: "https://apisandbox.cieloecommerce.cielo.com.br/1/sales",
-      query: "https://apiquerysandbox.cieloecommerce.cielo.com.br/1/sales",
-    }
-  : {
-      transactional: "https://api.cieloecommerce.cielo.com.br/1/sales",
-      query: "https://apiquery.cieloecommerce.cielo.com.br/1/sales",
-    };
-
-const MERCHANT_ID = readEnv(
-  "CIELO_MERCHANT_ID",
-  "VITE_CIELO_MERCHANT_ID",
-  "CIELO_MERCHANTID",
-  "MERCHANT_ID"
-);
-const MERCHANT_KEY = readEnv(
-  "CIELO_MERCHANT_KEY",
-  "VITE_CIELO_MERCHANT_KEY",
-  "CIELO_MERCHANTKEY",
-  "MERCHANT_KEY"
-);
-
-const CIELO_ENV_STATUS = {
-  merchantId: Boolean(MERCHANT_ID),
-  merchantKey: Boolean(MERCHANT_KEY),
-  sandboxFlag: CIELO_SANDBOX_VALUE ? CIELO_SANDBOX_VALUE.toLowerCase() : "false",
+// Configuração da Cielo — mutável em runtime, com overrides do banco. As URLs
+// e headers são recalculados via getters quando uma das credenciais muda.
+const cieloConfig = {
+  merchantId: readEnv("CIELO_MERCHANT_ID", "VITE_CIELO_MERCHANT_ID", "CIELO_MERCHANTID", "MERCHANT_ID"),
+  merchantKey: readEnv("CIELO_MERCHANT_KEY", "VITE_CIELO_MERCHANT_KEY", "CIELO_MERCHANTKEY", "MERCHANT_KEY"),
+  sandbox: envFlag(CIELO_SANDBOX_VALUE),
+  pixEnabled: true,
+  source: "env",
 };
 
-const cieloHeaders = {
-  "Content-Type": "application/json",
-  "MerchantId":   MERCHANT_ID,
-  "MerchantKey":  MERCHANT_KEY,
+function getCieloUrls() {
+  return cieloConfig.sandbox
+    ? {
+        transactional: "https://apisandbox.cieloecommerce.cielo.com.br/1/sales",
+        query: "https://apiquerysandbox.cieloecommerce.cielo.com.br/1/sales",
+      }
+    : {
+        transactional: "https://api.cieloecommerce.cielo.com.br/1/sales",
+        query: "https://apiquery.cieloecommerce.cielo.com.br/1/sales",
+      };
+}
+
+function getCieloHeaders() {
+  return {
+    "Content-Type": "application/json",
+    "MerchantId": cieloConfig.merchantId,
+    "MerchantKey": cieloConfig.merchantKey,
+  };
+}
+
+// Carrega APENAS o toggle de PIX salvo no banco. Credenciais e ambiente
+// (sandbox/produção) são sempre lidos das variáveis de ambiente do servidor
+// — gerenciados via Render/host, nunca via UI.
+async function loadCieloConfigFromDB() {
+  if (!supabase) return;
+  try {
+    const { data } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "integrations")
+      .single();
+
+    if (typeof data?.value?.cieloPixEnabled === "boolean") {
+      cieloConfig.pixEnabled = data.value.cieloPixEnabled;
+      console.log(`[Cielo] ✓ Toggle PIX carregado do banco (pixEnabled=${cieloConfig.pixEnabled})`);
+    }
+  } catch {
+    // Sem banco ou sem registro — segue com default (PIX habilitado)
+  }
+}
+
+// Alias para retro-compat com referências antigas
+const CIELO_ENV_STATUS = {
+  get merchantId() { return Boolean(cieloConfig.merchantId); },
+  get merchantKey() { return Boolean(cieloConfig.merchantKey); },
+  get sandboxFlag() { return cieloConfig.sandbox ? "true" : "false"; },
 };
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -367,10 +389,10 @@ function parseCieloResponse(body) {
 }
 
 async function callCielo(method, urlPath, body) {
-  const url = urlPath.startsWith("http") ? urlPath : `${CIELO_URLS.transactional}${urlPath}`;
+  const url = urlPath.startsWith("http") ? urlPath : `${getCieloUrls().transactional}${urlPath}`;
   const opts = {
     method,
-    headers: cieloHeaders,
+    headers: getCieloHeaders(),
   };
   if (body) opts.body = JSON.stringify(body);
 
@@ -388,7 +410,10 @@ async function callCielo(method, urlPath, body) {
 // sem precisar de credenciais de sandbox.
 // Último dígito do cartão: 0,1,4 = autorizado | 2 = negado | 3 = expirado
 const CIELO_SIMULATE_VALUE = readEnv("CIELO_SIMULATE", "VITE_CIELO_SIMULATE");
-const SIMULATE = isSandbox && envFlag(CIELO_SIMULATE_VALUE);
+// Simulação só é considerada quando a flag de env está ligada. A checagem de
+// sandbox é feita dinamicamente via cieloConfig.sandbox no momento do uso.
+const SIMULATE_FLAG = envFlag(CIELO_SIMULATE_VALUE);
+function isSimulating() { return cieloConfig.sandbox && SIMULATE_FLAG; }
 
 function simulatePayment(cardNumber, amountInCents, paymentType) {
   const lastDigit = parseInt(String(cardNumber).replace(/\D/g, "").slice(-1));
@@ -436,14 +461,21 @@ function simulatePayment(cardNumber, amountInCents, paymentType) {
 // ─── POST /api/cielo/payment ─────────────────────────────────────────────────
 app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => {
   try {
-    if (!MERCHANT_ID || !MERCHANT_KEY) {
+    if (!cieloConfig.merchantId || !cieloConfig.merchantKey) {
       return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
     }
 
     const { orderId, customer, card, amountInCents, installments = 1, paymentType } = req.body;
 
+    if (paymentType === "pix" && !cieloConfig.pixEnabled) {
+      return res.status(403).json({
+        success: false,
+        message: "Pagamento via PIX está desabilitado. Habilite em Admin → Configurações → Cielo.",
+      });
+    }
+
     // ── Modo simulação ──────────────────────────────────────────────────────
-    if (SIMULATE) {
+    if (isSimulating()) {
       const cardNumber = card?.cardNumber || "0";
       console.log(`[Cielo] SIMULATE mode — orderId=${orderId} card=****${String(cardNumber).replace(/\D/g,"").slice(-4)}`);
       const simResult = simulatePayment(cardNumber, amountInCents, paymentType);
@@ -641,17 +673,7 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
 // ─── GET /api/cielo/payment/:paymentId ──────────────────────────────────────
 app.get("/api/cielo/payment/:paymentId", requireAuth, async (req, res) => {
   try {
-    if (!MERCHANT_ID) return res.status(500).json({ success: false, message: "Cielo not configured" });
-
-    const { paymentId } = req.params;
-    const url = `${CIELO_URLS.query}/${paymentId}`;
-    const { httpStatus, parsed } = await callCielo("GET", url);
-
-    if (!parsed || httpStatus >= 400) {
-      return res.status(400).json({ success: false, message: "Pagamento não encontrado" });
-    }
-
-    const result = parseCieloResponse(parsed);
+    const result = await reconcilePaymentStatus(req.params.paymentId);
     return res.json({
       success:   result.ok,
       paymentId: result.paymentId,
@@ -659,7 +681,104 @@ app.get("/api/cielo/payment/:paymentId", requireAuth, async (req, res) => {
       message:   result.returnMessage,
     });
   } catch (err) {
+    if (err.statusCode === 404) {
+      return res.status(400).json({ success: false, message: "Pagamento não encontrado" });
+    }
+    if (err.message === "Cielo credentials not configured") {
+      return res.status(500).json({ success: false, message: err.message });
+    }
     return res.status(500).json({ success: false, message: safeErrorMessage(err) });
+  }
+});
+
+// ─── Reconciliação de status: consulta a Cielo e atualiza o Supabase ───────
+// Usado pelo polling (GET /payment/:id) e pelo webhook. A Cielo é a fonte de
+// verdade — nunca confiamos no payload bruto recebido pelo webhook.
+async function reconcilePaymentStatus(paymentId) {
+  if (!cieloConfig.merchantId || !cieloConfig.merchantKey) {
+    throw new Error("Cielo credentials not configured");
+  }
+
+  const { httpStatus, parsed } = await callCielo("GET", `${getCieloUrls().query}/${paymentId}`);
+  if (!parsed || httpStatus >= 400) {
+    const err = new Error("Pagamento não encontrado");
+    err.statusCode = 404;
+    throw err;
+  }
+
+  const result = parseCieloResponse(parsed);
+
+  // Status 2 = pago. Persiste no Supabase de forma idempotente.
+  if (result.status === 2 && supabase && result.paymentId) {
+    try {
+      const { data: updated } = await supabase
+        .from("orders")
+        .update({
+          payment_status: "paid",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("payment_id", result.paymentId)
+        .neq("payment_status", "paid")
+        .select("id")
+        .maybeSingle();
+
+      if (updated) {
+        console.log(`[Cielo] ✓ Pedido reconciliado: payment_id=${result.paymentId} → paid`);
+      }
+    } catch (e) {
+      console.warn("[Cielo] Falha ao reconciliar pedido:", e.message);
+    }
+  }
+
+  return result;
+}
+
+// ─── Webhook Cielo ──────────────────────────────────────────────────────────
+// A Cielo POST para esta URL quando o status de um pagamento muda. O payload
+// pode conter PaymentId/RecurrentPaymentId. Não confiamos no payload — sempre
+// consultamos a Cielo para obter o status real.
+//
+// Autenticação: token compartilhado na query string (CIELO_WEBHOOK_TOKEN no
+// .env). Como o handler é público (chamado pela Cielo), o token é a única
+// camada de defesa contra abuso.
+//
+// Configuração na Cielo: portal → Loja → Webhooks → URL:
+//   https://<seu-host>/api/cielo/webhook?token=<CIELO_WEBHOOK_TOKEN>
+const CIELO_WEBHOOK_TOKEN = process.env.CIELO_WEBHOOK_TOKEN || "";
+
+app.post("/api/cielo/webhook", async (req, res) => {
+  // 1) Autenticação por token
+  if (!CIELO_WEBHOOK_TOKEN) {
+    console.warn("[Cielo Webhook] CIELO_WEBHOOK_TOKEN não configurado — rejeitando requisição");
+    return res.status(503).json({ error: "Webhook não configurado" });
+  }
+  if (req.query.token !== CIELO_WEBHOOK_TOKEN) {
+    console.warn("[Cielo Webhook] Token inválido — IP=" + req.ip);
+    return res.status(401).json({ error: "Token inválido" });
+  }
+
+  // 2) Extrai paymentId do payload (formato Cielo: { PaymentId, ChangeType, RecurrentPaymentId? })
+  const paymentId = req.body?.PaymentId || req.body?.paymentId;
+  if (!paymentId) {
+    console.warn("[Cielo Webhook] Payload sem PaymentId:", JSON.stringify(req.body).substring(0, 200));
+    // Retorna 200 mesmo assim — a Cielo reenvia em caso de não-2xx, e queremos
+    // descartar payloads que não conseguimos processar para não ficar em loop.
+    return res.status(200).json({ received: true, ignored: "no PaymentId" });
+  }
+
+  // 3) Reconcilia consultando a Cielo (fonte de verdade)
+  try {
+    const result = await reconcilePaymentStatus(paymentId);
+    console.log(`[Cielo Webhook] ${paymentId} → status ${result.status} (${result.returnMessage})`);
+    return res.status(200).json({ received: true, paymentId, status: result.status });
+  } catch (err) {
+    console.error("[Cielo Webhook] Erro ao reconciliar:", err.message);
+    // Retorna 200 para evitar retry infinito de pagamentos inválidos. Se for
+    // erro transitório (rede, 5xx da Cielo), a Cielo reenvia depois.
+    if (err.statusCode === 404) {
+      return res.status(200).json({ received: true, ignored: "payment not found" });
+    }
+    return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
 
@@ -669,7 +788,7 @@ app.post("/api/cielo/payment/:paymentId/capture", requireAuth, requireAdmin, asy
     const { paymentId } = req.params;
     const { amount } = req.body;
     const qs  = amount ? `?amount=${amount}` : "";
-    const url = `${CIELO_URLS.transactional}/${paymentId}/capture${qs}`;
+    const url = `${getCieloUrls().transactional}/${paymentId}/capture${qs}`;
     const { parsed } = await callCielo("PUT", url);
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 2, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
@@ -684,7 +803,7 @@ app.post("/api/cielo/payment/:paymentId/cancel", requireAuth, requireAdmin, asyn
     const { paymentId } = req.params;
     const { amount } = req.body;
     const qs  = amount ? `?amount=${amount}` : "";
-    const url = `${CIELO_URLS.transactional}/${paymentId}/void${qs}`;
+    const url = `${getCieloUrls().transactional}/${paymentId}/void${qs}`;
     const { parsed } = await callCielo("PUT", url);
     const result = parseCieloResponse(parsed ?? {});
     return res.json({ success: result.status === 10, paymentId: result.paymentId, status: result.status, message: result.returnMessage });
@@ -696,7 +815,7 @@ app.post("/api/cielo/payment/:paymentId/cancel", requireAuth, requireAdmin, asyn
 // ─── Recurrence management ───────────────────────────────────────────────────
 app.put("/api/cielo/recurrence/:id/deactivate", requireAuth, async (req, res) => {
   try {
-    const url = `${CIELO_URLS.transactional}/${req.params.id}/deactivate`;
+    const url = `${getCieloUrls().transactional}/${req.params.id}/deactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
   } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
@@ -704,7 +823,7 @@ app.put("/api/cielo/recurrence/:id/deactivate", requireAuth, async (req, res) =>
 
 app.put("/api/cielo/recurrence/:id/reactivate", requireAuth, async (req, res) => {
   try {
-    const url = `${CIELO_URLS.transactional}/${req.params.id}/reactivate`;
+    const url = `${getCieloUrls().transactional}/${req.params.id}/reactivate`;
     const { parsed } = await callCielo("PUT", url);
     return res.json({ success: true, ...parsed });
   } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
@@ -712,7 +831,7 @@ app.put("/api/cielo/recurrence/:id/reactivate", requireAuth, async (req, res) =>
 
 app.put("/api/cielo/recurrence/:id/amount", requireAuth, async (req, res) => {
   try {
-    const url = `${CIELO_URLS.transactional}/${req.params.id}/amount`;
+    const url = `${getCieloUrls().transactional}/${req.params.id}/amount`;
     await callCielo("PUT", url, req.body.amount);
     return res.json({ success: true });
   } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
@@ -720,7 +839,7 @@ app.put("/api/cielo/recurrence/:id/amount", requireAuth, async (req, res) => {
 
 app.put("/api/cielo/recurrence/:id/interval", requireAuth, async (req, res) => {
   try {
-    const url = `${CIELO_URLS.transactional}/${req.params.id}/interval`;
+    const url = `${getCieloUrls().transactional}/${req.params.id}/interval`;
     await callCielo("PUT", url, req.body.interval);
     return res.json({ success: true });
   } catch (err) { return res.status(500).json({ success: false, message: safeErrorMessage(err) }); }
@@ -755,9 +874,9 @@ app.post("/api/cielo/webhook", async (req, res) => {
 
     // P6 — Consulta Cielo para confirmar o status real da transação
     let confirmedStatus = payload.Status;
-    if (MERCHANT_ID && MERCHANT_KEY) {
+    if (cieloConfig.merchantId && cieloConfig.merchantKey) {
       try {
-        const queryUrl = `${CIELO_URLS.query}/${payload.PaymentId}`;
+        const queryUrl = `${getCieloUrls().query}/${payload.PaymentId}`;
         const { parsed } = await callCielo("GET", queryUrl);
         if (parsed?.Payment?.Status !== undefined) {
           confirmedStatus = parsed.Payment.Status;
@@ -824,6 +943,7 @@ async function loadResendKeyFromDB() {
   }
 }
 loadResendKeyFromDB();
+loadCieloConfigFromDB();
 
 // ─── Endpoint: testar conexão Resend ────────────────────────────────────────
 app.post("/api/integrations/resend/test", requireAuth, requireAdmin, async (req, res) => {
@@ -889,6 +1009,73 @@ app.post("/api/integrations/resend/reload", requireAuth, requireAdmin, async (_r
   res.json({ success: true, configured: Boolean(resendApiKey) });
 });
 
+// ─── Endpoint: status da integração Cielo ───────────────────────────────────
+app.get("/api/integrations/cielo/status", requireAuth, requireAdmin, (_req, res) => {
+  res.json({
+    configured: Boolean(cieloConfig.merchantId && cieloConfig.merchantKey),
+    merchantId: cieloConfig.merchantId
+      ? `${cieloConfig.merchantId.substring(0, 8)}...${cieloConfig.merchantId.slice(-4)}`
+      : null,
+    environment: cieloConfig.sandbox ? "sandbox" : "production",
+    sandbox: cieloConfig.sandbox,
+    pixEnabled: cieloConfig.pixEnabled,
+    simulating: isSimulating(),
+    source: cieloConfig.source,
+    urls: getCieloUrls(),
+  });
+});
+
+// ─── Endpoint: testar conexão Cielo ─────────────────────────────────────────
+// Faz uma consulta a um paymentId inexistente usando as credenciais do
+// servidor (env vars). Cielo retorna 401/403 se inválidas, 404 se OK.
+app.post("/api/integrations/cielo/test", requireAuth, requireAdmin, async (_req, res) => {
+  if (!cieloConfig.merchantId || !cieloConfig.merchantKey) {
+    return res.status(400).json({
+      success: false,
+      error: "Credenciais Cielo não configuradas no servidor (CIELO_MERCHANT_ID / CIELO_MERCHANT_KEY)",
+    });
+  }
+
+  const queryUrl = `${getCieloUrls().query}/00000000-0000-0000-0000-000000000000`;
+
+  try {
+    const response = await fetch(queryUrl, {
+      method: "GET",
+      headers: getCieloHeaders(),
+    });
+
+    if (response.status === 401 || response.status === 403) {
+      return res.json({
+        success: false,
+        error: "MerchantId/MerchantKey inválidos para o ambiente atual",
+      });
+    }
+
+    // 404 é o resultado esperado: Cielo aceitou as credenciais e disse que o
+    // pagamento não existe. Qualquer 2xx/4xx fora de 401/403 indica que
+    // estamos autenticados.
+    return res.json({
+      success: true,
+      environment: cieloConfig.sandbox ? "sandbox" : "production",
+      httpStatus: response.status,
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── Endpoint: recarregar configuração Cielo do banco ───────────────────────
+app.post("/api/integrations/cielo/reload", requireAuth, requireAdmin, async (_req, res) => {
+  await loadCieloConfigFromDB();
+  res.json({
+    success: true,
+    configured: Boolean(cieloConfig.merchantId && cieloConfig.merchantKey),
+    sandbox: cieloConfig.sandbox,
+    pixEnabled: cieloConfig.pixEnabled,
+    source: cieloConfig.source,
+  });
+});
+
 // ─── Endpoint: status da integração Correios ─────────────────────────────────
 app.get("/api/integrations/correios/status", requireAuth, requireAdmin, async (_req, res) => {
   const config = await getCorreiosTrackingSettings();
@@ -944,6 +1131,15 @@ app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
     return res.json({ id: `sim_${Date.now()}`, simulated: true });
   }
 
+  // Override de dev: redireciona todo envio para a caixa de teste do Resend.
+  // O Resend em modo sandbox (onboarding@resend.dev) só aceita envios para a
+  // conta verificada. Em dev, preservamos o destinatário original no assunto
+  // para facilitar a identificação durante os testes.
+  const devInbox = !IS_PRODUCTION ? (process.env.RESEND_DEV_TO_OVERRIDE || "") : "";
+  const originalTo = Array.isArray(to) ? to.join(", ") : String(to);
+  const effectiveTo = devInbox ? [devInbox] : (Array.isArray(to) ? to : [to]);
+  const effectiveSubject = devInbox ? `[DEV → ${originalTo}] ${subject}` : subject;
+
   try {
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
@@ -953,8 +1149,8 @@ app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
       },
       body: JSON.stringify({
         from: from || resendFrom,
-        to:   Array.isArray(to) ? to : [to],
-        subject,
+        to:   effectiveTo,
+        subject: effectiveSubject,
         html,
       }),
     });
@@ -966,7 +1162,10 @@ app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
       return res.status(response.status).json({ error: data });
     }
 
-    if (!IS_PRODUCTION) console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${Array.isArray(to) ? to[0] : to}`);
+    if (!IS_PRODUCTION) {
+      const redirected = devInbox ? ` (redirecionado de ${originalTo})` : "";
+      console.log(`[Resend] ✓ Email enviado — id: ${data.id} → ${effectiveTo[0]}${redirected}`);
+    }
     return res.json(data);
   } catch (err) {
     console.error("[Resend] Falha na requisição:", err.message);
@@ -1282,6 +1481,123 @@ app.post("/api/logistics/service-orders", notificationLimiter, requireAuth, asyn
     return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });
+
+// ─── OS: render server-side (mantido como referência) ───────────────────────
+// A OS é renderizada pelo front (página /admin/pedidos/:id/os) lendo direto
+// da tabela logistics_service_orders via supabaseAdmin. Esta função fica
+// disponível caso futuramente precisemos gerar PDFs server-side.
+// eslint-disable-next-line no-unused-vars
+function renderServiceOrderDocument(os) {
+  const items = Array.isArray(os.items) ? os.items : [];
+  const itemRows = items.map((item, i) => `
+    <tr>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;width:48px;color:#6b7280;">${i + 1}</td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;">${escapeHtml(item.name || "")}</td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;text-align:center;width:80px;">${Number(item.quantity || 0)}</td>
+      <td style="padding:10px;border-bottom:1px solid #e5e7eb;width:160px;">${escapeHtml(item.prescriptionId || "—")}</td>
+    </tr>
+  `).join("");
+
+  const createdAt = os.created_at
+    ? new Date(os.created_at).toLocaleString("pt-BR")
+    : "—";
+
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>OS — Pedido ${escapeHtml(os.order_id)}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: #111827; }
+  .toolbar { position: sticky; top: 0; background: #1f2937; color: #fff; padding: 12px 24px; display: flex; gap: 12px; align-items: center; justify-content: space-between; z-index: 10; }
+  .toolbar .info { font-size: 13px; opacity: .85; }
+  .toolbar button { background: #0ea5e9; color: #fff; border: 0; padding: 8px 16px; font-size: 14px; font-weight: 600; border-radius: 6px; cursor: pointer; }
+  .toolbar button:hover { background: #0284c7; }
+  .doc { background: #fff; max-width: 210mm; margin: 24px auto; padding: 32mm 20mm; box-shadow: 0 4px 24px rgba(0,0,0,.08); border-radius: 4px; }
+  .doc header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f766e; padding-bottom: 16px; margin-bottom: 24px; }
+  .doc h1 { font-size: 22px; margin: 0 0 4px; color: #0f766e; }
+  .doc .subtitle { color: #6b7280; font-size: 13px; }
+  .doc .meta { text-align: right; font-size: 12px; color: #6b7280; line-height: 1.7; }
+  .doc .meta strong { color: #111827; }
+  .doc section { margin-bottom: 22px; }
+  .doc h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .5px; color: #6b7280; margin: 0 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; }
+  .doc .field { margin: 4px 0; font-size: 14px; }
+  .doc .field strong { display: inline-block; min-width: 110px; color: #374151; }
+  .doc table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 4px; }
+  .doc th { background: #ecfdf5; padding: 10px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: #065f46; border-bottom: 2px solid #10b981; }
+  .doc .footer-note { margin-top: 32px; padding: 16px; background: #fef3c7; border-left: 4px solid #f59e0b; font-size: 13px; color: #78350f; border-radius: 4px; }
+  .doc .signature { margin-top: 48px; display: flex; justify-content: space-around; }
+  .doc .signature .line { width: 220px; border-top: 1px solid #111827; padding-top: 6px; text-align: center; font-size: 12px; color: #6b7280; }
+  .status-pill { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #fef3c7; color: #92400e; }
+  .status-pill.delivered { background: #d1fae5; color: #065f46; }
+  @media print {
+    .toolbar { display: none; }
+    body { background: #fff; }
+    .doc { margin: 0; box-shadow: none; max-width: none; padding: 16mm 14mm; }
+    @page { size: A4; margin: 0; }
+  }
+</style>
+</head>
+<body>
+  <div class="toolbar">
+    <div class="info">OS do Pedido <strong>${escapeHtml(os.order_id)}</strong></div>
+    <button onclick="window.print()">Imprimir / Salvar como PDF</button>
+  </div>
+
+  <div class="doc">
+    <header>
+      <div>
+        <h1>Ordem de Serviço Logística</h1>
+        <div class="subtitle">Novità Health Group — Separação e Entrega de Medicamentos</div>
+      </div>
+      <div class="meta">
+        <div><strong>OS Nº</strong> ${escapeHtml(os.id || "—")}</div>
+        <div><strong>Pedido</strong> ${escapeHtml(os.order_id)}</div>
+        <div><strong>Emitida em</strong> ${escapeHtml(createdAt)}</div>
+        <div><strong>Status</strong> <span class="status-pill ${escapeHtml(os.status || "pending")}">${escapeHtml((os.status || "pending").toUpperCase())}</span></div>
+      </div>
+    </header>
+
+    <section>
+      <h2>Paciente</h2>
+      <div class="field"><strong>Nome:</strong> ${escapeHtml(os.customer_name || "—")}</div>
+      <div class="field"><strong>E-mail:</strong> ${escapeHtml(os.customer_email || "—")}</div>
+      <div class="field"><strong>Telefone:</strong> ${escapeHtml(os.customer_phone || "—")}</div>
+    </section>
+
+    <section>
+      <h2>Endereço de Entrega</h2>
+      <div class="field">${escapeHtml(os.delivery_address || "—")}</div>
+    </section>
+
+    <section>
+      <h2>Itens para Separação (${items.length})</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Medicamento</th>
+            <th style="text-align:center;">Qtd.</th>
+            <th>Receita</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows || `<tr><td colspan="4" style="padding:16px;text-align:center;color:#6b7280;">Nenhum item registrado.</td></tr>`}</tbody>
+      </table>
+    </section>
+
+    <div class="footer-note">
+      <strong>⚠ Atenção:</strong> Medicamentos controlados — requer assinatura do paciente ou responsável na entrega. Conferir documento com foto antes de entregar.
+    </div>
+
+    <div class="signature">
+      <div class="line">Responsável pela Separação</div>
+      <div class="line">Responsável pela Entrega</div>
+    </div>
+  </div>
+</body>
+</html>`;
+}
 
 // ─── Correios tracking ────────────────────────────────────────────────────────
 
@@ -1862,17 +2178,17 @@ function formatarDataHoraLocal(isoString) {
 app.get("/api/health", (_req, res) => {
   res.json({
     status:        "ok",
-    env:           isSandbox ? "sandbox" : "production",
-    merchant:      MERCHANT_ID ? `${MERCHANT_ID.substring(0, 8)}...` : "not configured",
+    env:           cieloConfig.sandbox ? "sandbox" : "production",
+    merchant:      cieloConfig.merchantId ? `${cieloConfig.merchantId.substring(0, 8)}...` : "not configured",
     supabase:      supabase ? "connected" : "not configured",
     cielo:         {
-      transactional: CIELO_URLS.transactional,
-      query: CIELO_URLS.query,
+      transactional: getCieloUrls().transactional,
+      query: getCieloUrls().query,
       configured: CIELO_ENV_STATUS.merchantId && CIELO_ENV_STATUS.merchantKey,
       hasMerchantId: CIELO_ENV_STATUS.merchantId,
       hasMerchantKey: CIELO_ENV_STATUS.merchantKey,
-      sandbox: isSandbox,
-      simulate: SIMULATE,
+      sandbox: cieloConfig.sandbox,
+      simulate: isSimulating(),
     },
     notifications: {
       modo:    RESEND_MOCK_MODE ? "MOCK" : "RESEND",
@@ -1976,7 +2292,7 @@ app.listen(PORT, '0.0.0.0', () => {
 ║  Novità — Backend Server                                 ║
 ║  http://localhost:${PORT}                                    ║
 ║                                                          ║
-║  Pagamentos: ${isSandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${MERCHANT_ID ? MERCHANT_ID.substring(0, 8) + "..." : "não configurado"}          ║
+║  Pagamentos: ${cieloConfig.sandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${cieloConfig.merchantId ? cieloConfig.merchantId.substring(0, 8) + "..." : "não configurado"}          ║
 ║  E-mails:    ${emailMode.padEnd(32)}║
 ║  Rastreio:   ${trackingMode.padEnd(32)}║
 ║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║

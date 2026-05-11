@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AdminQueries, supabaseAdmin } from '@/integrations/supabase/adminClient';
+import { formatOrderStatus, formatSubscriptionStatus, formatPrescriptionStatus, formatBillingCycle } from '@/lib/labels';
 import { assemedClient } from '@/integrations/assemed';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -173,9 +174,9 @@ export default function AdminUserDetail() {
             <div className="space-y-2">
               <div><b>Plano:</b> {plan.plan?.name || 'N/A'}</div>
               <div><b>Tipo:</b> {plan.plan?.type === 'monthly' ? 'Mensal' : 'Anual'}</div>
-              <div><b>Status:</b> {plan.status}</div>
+              <div><b>Status:</b> {formatSubscriptionStatus(plan.status)}</div>
               <div><b>Expira em:</b> {plan.expires_at ? new Date(plan.expires_at).toLocaleString('pt-BR') : 'N/A'}</div>
-              <div><b>Ciclo de cobrança:</b> {plan.billing_cycle}</div>
+              <div><b>Ciclo de cobrança:</b> {formatBillingCycle(plan.billing_cycle)}</div>
             </div>
           ) : (
             <div className="text-gray-500">Nenhum plano ativo contratado</div>
@@ -271,7 +272,7 @@ export default function AdminUserDetail() {
               ) : orders.map((order) => (
                 <TableRow key={order.id}>
                   <TableCell>{order.id}</TableCell>
-                  <TableCell>{order.status}</TableCell>
+                  <TableCell>{formatOrderStatus(order.status)}</TableCell>
                   <TableCell>{new Date(order.created_at).toLocaleString('pt-BR')}</TableCell>
                   <TableCell>R$ {order.total?.toFixed(2)}</TableCell>
                 </TableRow>
@@ -358,7 +359,7 @@ export default function AdminUserDetail() {
                 <TableRow key={rx.id}>
                   <TableCell>{rx.id}</TableCell>
                   <TableCell>{rx.doctor_name || rx.doctor}</TableCell>
-                  <TableCell>{rx.status}</TableCell>
+                  <TableCell>{formatPrescriptionStatus(rx.status)}</TableCell>
                   <TableCell>{new Date(rx.created_at).toLocaleString('pt-BR')}</TableCell>
                 </TableRow>
               ))}
