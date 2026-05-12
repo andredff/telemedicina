@@ -13,6 +13,7 @@ import {
   LogOut,
   Pill,
   DollarSign,
+  ClipboardList,
 } from 'lucide-react';
 
 export default function AdminLayout() {
@@ -61,6 +62,7 @@ export default function AdminLayout() {
     { id: 'users', icon: <Users className="h-5 w-5" />, label: 'Usuários', path: '/admin/usuarios' },
     { id: 'orders', icon: <ShoppingCart className="h-5 w-5" />, label: 'Pedidos', path: '/admin/pedidos' },
     { id: 'medications', icon: <Pill className="h-5 w-5" />, label: 'Medicamentos', path: '/admin/medicamentos' },
+    { id: 'subscriptions', icon: <ClipboardList className="h-5 w-5" />, label: 'Planos Contratados', path: '/admin/planos-contratados' },
 
     { id: 'content', icon: <BookOpen className="h-5 w-5" />, label: 'Conteúdo', path: '/admin/conteudo' },
     { id: 'finance', icon: <DollarSign className="h-5 w-5" />, label: 'Financeiro', path: '/admin/financeiro' },
@@ -125,7 +127,7 @@ export default function AdminLayout() {
               <span className="text-primary font-medium">{user.email?.[0].toUpperCase()}</span>
             </div>
             <div className="ml-3">
-              <p className="text-sm font-medium">{user.email}</p>
+              <p className="text-xs font-medium">{user.email}</p>
               <p className="text-xs text-gray-500">Administrador</p>
             </div>
           </div>

@@ -125,7 +125,6 @@ Integracoes externas
 - Cielo (pagamentos): READY (backend com credenciais server-side e webhook configurados para producao).
 - Assemed (telemedicina): READY (credenciais e ambiente de producao configurados).
 - Memed (receitas digitais): READY (mock client criado; integracao real a definir quando credenciais disponiveis) (src/integrations/memed/).
-- Correios (CEP, frete e rastreio): READY (ViaCEP para consulta de endereco; Preco/Prazo/Rastro via backend com credenciais configuraveis no admin e fallback operacional enquanto o cliente nao cadastra as chaves) (src/integrations/correios/, server/tracking/correios.js).
 
 Pontos que dependem de configuracao externa (nao bloqueiam MVP)
 

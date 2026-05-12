@@ -26,6 +26,7 @@ export interface CustomerData {
   name: string;
   email?: string;
   cpf?: string;
+  phone?: string;
   birthdate?: string;
   address?: {
     street: string;

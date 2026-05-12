@@ -294,7 +294,7 @@ export function MedicationCheckout({
       const logisticsResult = await sendLogisticsServiceOrder(orderGroup.orderId, {
         name: customer.name,
         email: customer.email || "",
-        phone: "",
+        phone: customer.phone || "",
         address: addressString,
       }, notificationItems);
 

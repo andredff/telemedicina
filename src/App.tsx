@@ -41,6 +41,8 @@ import AdminReports from "./pages/admin/Reports";
 import AdminSettings from "./pages/admin/Settings";
 import AdminSupport from "./pages/admin/Support";
 import AdminMedications from "./pages/admin/Medications";
+import AdminSubscriptions from "./pages/admin/Subscriptions";
+import AdminSubscriptionDetail from "./pages/admin/SubscriptionDetail";
 import Terms from "./pages/Terms";
 import Privacy from "./pages/Privacy";
 import Cancellation from "./pages/Cancellation";
@@ -120,6 +122,8 @@ const App = () => (
             <Route path="usuarios/:userId" element={<AdminUserDetail />} />
             <Route path="pedidos" element={<AdminOrders />} />
             <Route path="medicamentos" element={<AdminMedications />} />
+            <Route path="planos-contratados" element={<AdminSubscriptions />} />
+            <Route path="planos-contratados/:subscriptionId" element={<AdminSubscriptionDetail />} />
             <Route path="receitas" element={<AdminPrescriptions />} />
             <Route path="conteudo" element={<AdminContent />} />
             <Route path="financeiro" element={<AdminReports />} />

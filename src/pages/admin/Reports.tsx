@@ -138,7 +138,7 @@ export default function AdminReports() {
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Painel Financeiro</h1>
-        <p className="text-gray-600">Acompanhe MRR, pedidos avulsos, churn, inadimplência, ticket médio e distribuição de planos</p>
+        <p className="text-gray-600">Acompanhe MRR, pedidos avulsos, churn, ticket médio e distribuição de planos</p>
       </div>
 
       {/* Controls */}
@@ -366,23 +366,7 @@ export default function AdminReports() {
                 </p>
               </div>
               
-              <div>
-                <div className="flex justify-between mb-2">
-                  <span className="text-sm font-medium">Inadimplência</span>
-                  <span className="text-sm font-medium">{formatPercent(financialMetrics?.delinquencyRate || 0)}</span>
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-3">
-                  <div 
-                    className="bg-yellow-500 h-3 rounded-full" 
-                    style={{ width: `${(financialMetrics?.delinquencyRate || 0) * 10}%` }}
-                  ></div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {formatCurrency(financialMetrics?.delinquentAmount || 0)} em atraso
-                </p>
-              </div>
-              
-              <div>
+<div>
                 <div className="flex justify-between mb-2">
                   <span className="text-sm font-medium">Ticket Médio Consolidado</span>
                   <span className="text-sm font-medium">{formatCurrency(financialMetrics?.averageTicket || 0)}</span>

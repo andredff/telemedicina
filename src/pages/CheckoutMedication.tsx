@@ -23,7 +23,7 @@ const CheckoutMedication = () => {
   const catalogItems = cart.catalogItems;
   const { markAsPaid } = usePaidPrescriptions();
   const [paymentDone, setPaymentDone] = useState(false);
-  const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string } | null>(null);
+  const [profile, setProfile] = useState<{ full_name: string; email: string; cpf?: string; phone?: string } | null>(null);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -62,14 +62,15 @@ const CheckoutMedication = () => {
     try {
       const { data } = await supabase
         .from("profiles")
-        .select("full_name, email")
+        .select("full_name, email, phone")
         .eq("id", userId)
-        .maybeSingle();
+        .maybeSingle() as { data: { full_name: string; email: string; phone?: string | null } | null };
 
       if (data) {
         const userData = await supabase.auth.getUser();
         const cpf = userData.data.user?.user_metadata?.cpf;
-        setProfile({ ...data, cpf });
+        const phone = data.phone || userData.data.user?.user_metadata?.phone;
+        setProfile({ full_name: data.full_name, email: data.email, cpf, phone });
       }
     } catch (error) {
       logger.error("Error fetching profile:", error);
@@ -109,6 +110,7 @@ const CheckoutMedication = () => {
     name: profile?.full_name || user?.user_metadata?.full_name || "",
     email: profile?.email || user?.email || "",
     cpf: profile?.cpf || user?.user_metadata?.cpf,
+    phone: profile?.phone || user?.user_metadata?.phone,
   };
 
   // Gate de CPF: a Cielo exige CPF do pagador em pagamentos PIX (BACEN).
