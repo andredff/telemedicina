@@ -175,7 +175,7 @@ const BlogPostPage = () => {
             <Card className="bg-card border-border/50">
               <CardContent className="p-8 md:p-16 prose prose-lg max-w-none dark:prose-invert prose-p:leading-9 prose-p:mb-8 prose-h2:mt-14 prose-h2:mb-6 prose-h3:mt-10 prose-h3:mb-4 prose-li:mb-3 prose-ul:my-8 prose-ol:my-8 prose-hr:my-12">
                 <div
-                  className="[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-primary [&_h2]:mt-14 [&_h2]:mb-5 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:text-primary [&_h3]:mt-10 [&_h3]:mb-4 [&_p]:leading-9 [&_p]:mb-7 [&_p]:text-base [&_ul]:my-7 [&_ul]:pl-6 [&_ol]:my-7 [&_ol]:pl-6 [&_li]:mb-3 [&_li]:leading-8 [&_hr]:my-12 [&_hr]:border-border [&_a]:text-primary [&_a]:underline [&_a:hover]:opacity-80 [&_strong]:font-semibold"
+                  className="[&_h2]:text-2xl [&_h2]:font-bold [&_h2]:text-primary [&_h2]:mt-14 [&_h2]:mb-5 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:text-primary [&_h3]:mt-10 [&_h3]:mb-4 [&_p]:leading-9 [&_p]:mb-7 [&_p]:text-base [&_ul]:my-7 [&_ul]:pl-6 [&_ol]:my-7 [&_ol]:pl-6 [&_li]:mb-3 [&_li]:leading-8 [&_hr]:my-12 [&_hr]:border-border [&_a]:text-blue-600 [&_a]:underline [&_a:hover]:text-blue-800 [&_strong]:font-semibold"
                   dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(post.content, { ADD_TAGS: ['iframe'], ADD_ATTR: ['target', 'rel'] }) }}
                 />
               </CardContent>
