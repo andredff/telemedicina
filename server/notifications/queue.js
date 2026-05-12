@@ -137,6 +137,10 @@ class EmailQueue {
         return templates.lembreteConsulta(data);
       case "NotificacaoPedido":
         return templates.notificacaoPedido(data);
+      case "PagamentoMedicamentoConfirmado":
+        return templates.pagamentoMedicamentoConfirmado(data);
+      case "AssinaturaPlanoAtivada":
+        return templates.assinaturaPlanoAtivada(data);
       default:
         throw new Error(`Tipo de evento desconhecido: ${tipo}`);
     }

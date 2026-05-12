@@ -297,6 +297,7 @@ const CheckoutSubscription = () => {
             plan={{
               id: plan.id,
               name: plan.name,
+              type: plan.type,
               priceMonthly: plan.price_monthly,
               priceYearly: plan.price_yearly || undefined,
               features: plan.features,

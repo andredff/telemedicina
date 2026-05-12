@@ -359,8 +359,74 @@ async function createLogisticsServiceOrderFallback(
   };
 }
 
+/**
+ * Dispara um evento de domínio genérico no backend (/api/notifications/events).
+ * Fire-and-forget: erros são logados mas não propagados.
+ */
+export async function dispatchDomainEvent(
+  tipo: string,
+  data: Record<string, unknown>
+): Promise<void> {
+  try {
+    const baseUrl = getApiBaseUrl();
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${baseUrl}/api/notifications/events`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify({ tipo, data }),
+    });
+    if (!response.ok) {
+      const errBody = await response.json().catch(() => ({}));
+      logger.warn(`[NOTIFICATION] Falha ao despachar ${tipo}:`, errBody);
+    }
+  } catch (err) {
+    logger.warn(`[NOTIFICATION] Erro de rede ao despachar ${tipo}:`, err);
+  }
+}
+
+export interface MedicationPaymentConfirmedPayload {
+  email: string;
+  nome: string;
+  pedidoId: string;
+  paymentId?: string;
+  paymentMethod?: "credit_card" | "pix";
+  installments?: number;
+  subtotal?: number;
+  total: number;
+  items?: Array<{ name: string; quantity: number }>;
+  enderecoEntrega?: string;
+}
+
+export async function sendMedicationPaymentConfirmed(
+  payload: MedicationPaymentConfirmedPayload
+): Promise<void> {
+  await dispatchDomainEvent("PagamentoMedicamentoConfirmado", payload as unknown as Record<string, unknown>);
+}
+
+export interface PlanSubscriptionActivatedPayload {
+  email: string;
+  nome: string;
+  planoNome: string;
+  planoTipo?: string;
+  billingCycle: "monthly" | "yearly";
+  price: number;
+  monthlyEquivalent?: number;
+  recurrentPaymentId?: string;
+  features?: string[];
+  proximoCobranca?: string;
+}
+
+export async function sendPlanSubscriptionActivated(
+  payload: PlanSubscriptionActivatedPayload
+): Promise<void> {
+  await dispatchDomainEvent("AssinaturaPlanoAtivada", payload as unknown as Record<string, unknown>);
+}
+
 export default {
   sendOrderStatusNotification,
   getOrderNotificationHistory,
   sendLogisticsServiceOrder,
+  dispatchDomainEvent,
+  sendMedicationPaymentConfirmed,
+  sendPlanSubscriptionActivated,
 };

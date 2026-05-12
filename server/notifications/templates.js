@@ -353,6 +353,161 @@ function notificacaoPedido({ nome, pedidoId, status, mensagem }) {
   };
 }
 
+// ─── Template: PagamentoMedicamentoConfirmado ────────────────────────────────
+function pagamentoMedicamentoConfirmado({
+  nome,
+  pedidoId,
+  paymentId,
+  paymentMethod,
+  installments,
+  subtotal,
+  total,
+  items,
+  enderecoEntrega,
+}) {
+  const shortId = String(pedidoId || "").substring(0, 8).toUpperCase();
+  const metodo = (paymentMethod || "credit_card").toLowerCase() === "pix"
+    ? "PIX"
+    : "Cartão de crédito";
+  const formatBRL = (v) =>
+    typeof v === "number"
+      ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      : v;
+
+  const rows = [
+    ["Pedido", `#${shortId}`],
+    ["Forma de pagamento", metodo],
+  ];
+  if (installments && Number(installments) > 1) {
+    rows.push(["Parcelas", `${installments}x`]);
+  }
+  if (typeof subtotal === "number") rows.push(["Subtotal", formatBRL(subtotal)]);
+  rows.push(["Total pago", formatBRL(total)]);
+  if (paymentId) rows.push(["ID do pagamento", String(paymentId).substring(0, 16) + "..."]);
+
+  const itemsList = Array.isArray(items) && items.length > 0
+    ? `
+      <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:16px 0;border:1px solid ${BRAND.border};border-radius:8px;overflow:hidden;">
+        <tr style="background-color:${BRAND.cardBg};">
+          <td style="padding:10px 14px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:${BRAND.muted};text-transform:uppercase;letter-spacing:0.5px;">Medicamento</td>
+          <td style="padding:10px 14px;font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:${BRAND.muted};text-transform:uppercase;letter-spacing:0.5px;text-align:center;width:60px;">Qtd</td>
+        </tr>
+        ${items.map((it) => `
+          <tr>
+            <td style="padding:10px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${BRAND.text};border-top:1px solid ${BRAND.border};">${it.name || ""}</td>
+            <td style="padding:10px 14px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${BRAND.muted};border-top:1px solid ${BRAND.border};text-align:center;">${it.quantity || 1}x</td>
+          </tr>
+        `).join("")}
+      </table>`
+    : "";
+
+  const enderecoBlock = enderecoEntrega
+    ? alertBox(`<strong>Endereço de entrega:</strong><br/>${enderecoEntrega}`, BRAND.info)
+    : "";
+
+  const body = `
+    ${badge("Pagamento Confirmado", BRAND.accent)}
+    ${heading(`✅ Pagamento confirmado — Pedido #${shortId}`)}
+    ${paragraph(`Olá, <strong style="color:${BRAND.text};">${nome || "Cliente"}</strong>. Recebemos o pagamento do seu pedido de medicamentos com sucesso!`)}
+
+    ${infoCard(rows)}
+
+    ${itemsList}
+
+    ${enderecoBlock}
+
+    ${alertBox(`<strong>Próximos passos:</strong> nossa equipe vai conferir a receita e separar seus medicamentos. A entrega é realizada pela equipe Novità — você será notificado quando o pedido sair para entrega.`, BRAND.primary)}
+
+    ${cta("Acompanhar pedido", `${SITE_URL}/orders`, BRAND.accent)}`;
+
+  return {
+    subject: `✅ Pagamento confirmado — Pedido #${shortId}`,
+    html: base({ preheader: `Recebemos seu pagamento do pedido #${shortId}.`, body }),
+  };
+}
+
+// ─── Template: AssinaturaPlanoAtivada ─────────────────────────────────────────
+function assinaturaPlanoAtivada({
+  nome,
+  planoNome,
+  planoTipo,
+  billingCycle,
+  price,
+  monthlyEquivalent,
+  recurrentPaymentId,
+  features,
+  proximoCobranca,
+}) {
+  const ciclo = billingCycle === "yearly" ? "Anual" : "Mensal";
+  const formatBRL = (v) =>
+    typeof v === "number"
+      ? v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+      : v;
+
+  // Cor/emoji por tipo de plano
+  const PLAN_THEME = {
+    bronze:   { color: "#CD7F32", emoji: "🥉", title: "Bronze" },
+    prata:    { color: "#A8A9AD", emoji: "🥈", title: "Prata" },
+    ouro:     { color: "#EDAF00", emoji: "🥇", title: "Ouro" },
+    platina:  { color: "#7F8C8D", emoji: "💠", title: "Platina" },
+    diamante: { color: "#5DADE2", emoji: "💎", title: "Diamante" },
+    coletivo: { color: "#10B981", emoji: "👨‍👩‍👧", title: "Coletivo" },
+  };
+  const baseKey = String(planoTipo || "")
+    .toLowerCase()
+    .replace("-coletivo", "")
+    .replace("coletivo-", "")
+    .trim();
+  const theme = PLAN_THEME[baseKey] || PLAN_THEME[String(planoTipo || "").toLowerCase()] || {
+    color: BRAND.primary,
+    emoji: "✨",
+    title: planoNome || "Plano",
+  };
+
+  const rows = [
+    ["Plano", `${theme.emoji} ${planoNome || theme.title}`],
+    ["Ciclo de cobrança", ciclo],
+    ["Valor", `${formatBRL(price)} / ${billingCycle === "yearly" ? "ano" : "mês"}`],
+  ];
+  if (billingCycle === "yearly" && typeof monthlyEquivalent === "number") {
+    rows.push(["Equivalente mensal", `${formatBRL(monthlyEquivalent)} / mês`]);
+  }
+  if (proximoCobranca) rows.push(["Próxima cobrança", proximoCobranca]);
+  if (recurrentPaymentId) {
+    rows.push(["ID da assinatura", String(recurrentPaymentId).substring(0, 16) + "..."]);
+  }
+
+  const featuresList = Array.isArray(features) && features.length > 0
+    ? `
+      <div style="margin:20px 0;padding:20px;background-color:${BRAND.cardBg};border:1px solid ${BRAND.border};border-radius:12px;">
+        <p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:13px;font-weight:700;color:${theme.color};text-transform:uppercase;letter-spacing:0.5px;">
+          O que está incluso
+        </p>
+        <ul style="margin:0;padding-left:20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${BRAND.text};line-height:22px;">
+          ${features.map((f) => `<li style="margin-bottom:6px;">${f}</li>`).join("")}
+        </ul>
+      </div>`
+    : "";
+
+  const body = `
+    ${badge(`Plano ${theme.title} ativado`, theme.color)}
+    ${heading(`${theme.emoji} Bem-vindo ao plano ${theme.title}!`)}
+    ${paragraph(`Olá, <strong style="color:${BRAND.text};">${nome || "Cliente"}</strong>. Sua assinatura do <strong>plano ${theme.title}</strong> foi ativada com sucesso. A partir de agora você já pode aproveitar todos os benefícios.`)}
+
+    ${infoCard(rows)}
+
+    ${featuresList}
+
+    ${alertBox(`<strong>Cobrança recorrente:</strong> a renovação é automática a cada ${billingCycle === "yearly" ? "ano" : "mês"}. Você pode cancelar a qualquer momento pelo seu painel.`, BRAND.info)}
+
+    ${cta("Acessar meu plano", `${SITE_URL}/my-plan`, theme.color)}`;
+
+  return {
+    subject: `${theme.emoji} Plano ${theme.title} ativado — Novità Telemedicina`,
+    html: base({ preheader: `Sua assinatura do plano ${theme.title} está ativa.`, body }),
+  };
+}
+
 // ─── Exports ──────────────────────────────────────────────────────────────────
 module.exports = {
   // Componentes (para uso externo se necessário)
@@ -373,4 +528,6 @@ module.exports = {
   consultaAgendada,
   lembreteConsulta,
   notificacaoPedido,
+  pagamentoMedicamentoConfirmado,
+  assinaturaPlanoAtivada,
 };

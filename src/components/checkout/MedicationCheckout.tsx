@@ -24,7 +24,7 @@ import { toast } from "sonner";
 import type { CartItem, CatalogCartItem } from "@/types/prescription";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
-import { sendOrderStatusNotification, sendLogisticsServiceOrder } from "@/services/notificationService";
+import { sendOrderStatusNotification, sendLogisticsServiceOrder, sendMedicationPaymentConfirmed } from "@/services/notificationService";
 import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
 
 type CheckoutStep = "address" | "payment";
@@ -308,6 +308,20 @@ export function MedicationCheckout({
 
           await Promise.all(orderGroups.map(triggerLogisticsNotifications));
 
+          // Dispara email de pagamento confirmado (cartão de crédito)
+          await sendMedicationPaymentConfirmed({
+            email: customer.email || "",
+            nome: customer.name,
+            pedidoId: savedOrderIds[0] ?? primaryOrderId,
+            paymentId: result.paymentId,
+            paymentMethod: "credit_card",
+            installments: parseInt(installments),
+            subtotal,
+            total,
+            items: allItems.map((it) => ({ name: it.name, quantity: it.quantity })),
+            enderecoEntrega: deliveryAddressString,
+          });
+
           setPaymentResult({
             success: true,
             paymentId: result.paymentId,
@@ -371,6 +385,19 @@ export function MedicationCheckout({
 
       await Promise.all(orderGroups.map(triggerLogisticsNotifications));
       const primaryOrderId = savedOrderIds[0] ?? orderGroups[0]?.orderId ?? generateOrderId();
+
+      // Dispara email de pagamento confirmado (PIX)
+      await sendMedicationPaymentConfirmed({
+        email: customer.email || "",
+        nome: customer.name,
+        pedidoId: primaryOrderId,
+        paymentId: pixPaymentId,
+        paymentMethod: "pix",
+        subtotal,
+        total,
+        items: allItems.map((it) => ({ name: it.name, quantity: it.quantity })),
+        enderecoEntrega: deliveryAddressString,
+      });
 
       const paidReceitaIds = orderGroups
         .map(g => g.receitaId)

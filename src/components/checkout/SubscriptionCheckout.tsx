@@ -16,10 +16,12 @@ import {
   type RecurrenceInterval,
 } from "@/services/paymentService";
 import { toast } from "sonner";
+import { sendPlanSubscriptionActivated } from "@/services/notificationService";
 
 interface SubscriptionPlan {
   id: string;
   name: string;
+  type?: string;
   priceMonthly: number;
   priceYearly?: number;
   features: string[];
@@ -92,6 +94,26 @@ export function SubscriptionCheckout({
       });
 
       if (result.success) {
+        const nextBillingDate = new Date();
+        if (billingCycle === "yearly") {
+          nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
+        } else {
+          nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
+        }
+
+        await sendPlanSubscriptionActivated({
+          email: customer.email || "",
+          nome: customer.name,
+          planoNome: plan.name,
+          planoTipo: plan.type || plan.id,
+          billingCycle,
+          price,
+          monthlyEquivalent,
+          recurrentPaymentId: result.recurrentPaymentId,
+          features: plan.features,
+          proximoCobranca: nextBillingDate.toLocaleDateString("pt-BR"),
+        });
+
         toast.success("Assinatura ativada com sucesso!");
         onSuccess?.(result.recurrentPaymentId!, billingCycle);
       } else {

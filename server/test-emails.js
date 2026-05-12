@@ -90,6 +90,131 @@ const FIXTURES = [
       mensagem:     "Seu pedido saiu para entrega e chegará em breve!",
     },
   },
+  {
+    tipo: "PagamentoMedicamentoConfirmado",
+    data: {
+      nome:           "André Tester",
+      email:          DEST,
+      pedidoId:       "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      paymentId:      "PAY_2026_05_12_abcdef1234567890",
+      paymentMethod:  "credit_card",
+      installments:   3,
+      subtotal:       189.70,
+      total:          189.70,
+      items: [
+        { name: "Losartana 50mg (caixa com 30 comprimidos)", quantity: 2 },
+        { name: "Atorvastatina 20mg (caixa com 30 comprimidos)", quantity: 1 },
+        { name: "AAS 100mg (caixa com 30 comprimidos)", quantity: 1 },
+      ],
+      enderecoEntrega: "SQN 408 Bloco D, Apto 305 - Asa Norte, Brasília - DF, 70856-040",
+    },
+  },
+  {
+    tipo: "AssinaturaPlanoAtivada",
+    data: {
+      nome:               "André Tester",
+      email:              DEST,
+      planoNome:          "Bronze",
+      planoTipo:          "bronze",
+      billingCycle:       "monthly",
+      price:              29.90,
+      recurrentPaymentId: "REC_BRONZE_abcdef1234567890",
+      features: [
+        'Consultas ilimitadas com clínico geral, sem agendamento',
+        'Atendimento 24h por dia, 7 dias por semana',
+        'Receitas e atestados médicos digitais',
+        'Descontos em medicamentos e exames',
+        'Programa "Medicamento em Casa"',
+      ],
+      proximoCobranca: new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR"),
+    },
+  },
+  {
+    tipo: "AssinaturaPlanoAtivada",
+    data: {
+      nome:               "André Tester",
+      email:              DEST,
+      planoNome:          "Prata",
+      planoTipo:          "prata",
+      billingCycle:       "monthly",
+      price:              49.90,
+      recurrentPaymentId: "REC_PRATA_abcdef1234567890",
+      features: [
+        'Consultas ilimitadas com clínico geral, sem agendamento',
+        'Atendimento 24h por dia, 7 dias por semana',
+        'Receitas e atestados médicos digitais',
+        'Descontos em medicamentos e exames',
+        'Programa "Medicamento em Casa"',
+        '1 consulta com médico especialista por ano',
+      ],
+      proximoCobranca: new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR"),
+    },
+  },
+  {
+    tipo: "AssinaturaPlanoAtivada",
+    data: {
+      nome:               "André Tester",
+      email:              DEST,
+      planoNome:          "Ouro",
+      planoTipo:          "ouro",
+      billingCycle:       "yearly",
+      price:              754.92,
+      monthlyEquivalent:  62.91,
+      recurrentPaymentId: "REC_OURO_abcdef1234567890",
+      features: [
+        'Consultas ilimitadas com clínico geral, sem agendamento',
+        'Atendimento 24h por dia, 7 dias por semana',
+        'Receitas e atestados médicos digitais',
+        'Descontos em medicamentos e exames',
+        'Programa "Medicamento em Casa"',
+        '1 consulta com médico especialista por ano',
+        '1 check-up anual (mulher, homem ou criança)',
+      ],
+      proximoCobranca: new Date(agora.getTime() + 365 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR"),
+    },
+  },
+  {
+    tipo: "AssinaturaPlanoAtivada",
+    data: {
+      nome:               "André Tester",
+      email:              DEST,
+      planoNome:          "Diamante",
+      planoTipo:          "diamante",
+      billingCycle:       "yearly",
+      price:              970.92,
+      monthlyEquivalent:  80.91,
+      recurrentPaymentId: "REC_DIAMANTE_abcdef1234567890",
+      features: [
+        'Consultas ilimitadas com clínico geral, sem agendamento',
+        'Atendimento 24h por dia, 7 dias por semana',
+        'Receitas e atestados médicos digitais',
+        'Descontos em medicamentos e exames',
+        'Programa "Medicamento em Casa"',
+        '2 consultas com médico especialista por ano',
+        '1 check-up anual (mulher, homem ou criança)',
+      ],
+      proximoCobranca: new Date(agora.getTime() + 365 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR"),
+    },
+  },
+  {
+    tipo: "AssinaturaPlanoAtivada",
+    data: {
+      nome:               "André Tester",
+      email:              DEST,
+      planoNome:          "Coletivo Ouro",
+      planoTipo:          "ouro-coletivo",
+      billingCycle:       "monthly",
+      price:              199.90,
+      recurrentPaymentId: "REC_COLETIVO_abcdef1234567890",
+      features: [
+        'Todos os benefícios do plano Ouro para o titular',
+        'Até 4 dependentes incluídos',
+        'Atendimento 24h por dia para toda a família',
+        '1 check-up anual por dependente',
+      ],
+      proximoCobranca: new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("pt-BR"),
+    },
+  },
 ];
 
 for (const { tipo, data } of FIXTURES) {
@@ -104,7 +229,7 @@ for (const { tipo, data } of FIXTURES) {
 // Aguarda fila drenar (polling) — timeout de 60s
 (async () => {
   const inicio = Date.now();
-  while (Date.now() - inicio < 60000) {
+  while (Date.now() - inicio < 120000) {
     const status = dispatcher.queueStatus();
     if (status.pending === 0 && status.sent + status.failed === FIXTURES.length) {
       console.log("\n═════════════════════════════════════════════════════════");
@@ -118,7 +243,7 @@ for (const { tipo, data } of FIXTURES) {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
-  console.error("\n✗ Timeout: fila não drenou em 60s");
+  console.error("\n✗ Timeout: fila não drenou em 120s");
   console.error("   Status atual:", dispatcher.queueStatus());
   process.exit(2);
 })();

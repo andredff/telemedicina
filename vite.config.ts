@@ -154,6 +154,11 @@ export default defineConfig(({ mode }) => {
           target: "http://localhost:5174",
           changeOrigin: true,
         },
+        // Notification events (PagamentoMedicamentoConfirmado, AssinaturaPlanoAtivada, etc.)
+        "/api/notifications": {
+          target: "http://localhost:5174",
+          changeOrigin: true,
+        },
         // /api/resend/emails → Express local (que decide entre Mailpit e Resend real)
         "/api/resend/emails": {
           target: "http://localhost:5174",

@@ -19,6 +19,8 @@ const EVENTOS_VALIDOS = new Set([
   "ConsultaAgendada",
   "LembreteConsulta",
   "NotificacaoPedido",
+  "PagamentoMedicamentoConfirmado",
+  "AssinaturaPlanoAtivada",
 ]);
 
 // ─── Validadores de payload ───────────────────────────────────────────────────
@@ -46,6 +48,19 @@ const VALIDADORES = {
     if (!d.pedidoId)  throw new Error("NotificacaoPedido: campo 'pedidoId' obrigatório");
     if (!d.status)    throw new Error("NotificacaoPedido: campo 'status' obrigatório");
     if (!d.email)     throw new Error("NotificacaoPedido: campo 'email' obrigatório");
+  },
+  PagamentoMedicamentoConfirmado: (d) => {
+    if (!d.email)     throw new Error("PagamentoMedicamentoConfirmado: campo 'email' obrigatório");
+    if (!d.nome)      throw new Error("PagamentoMedicamentoConfirmado: campo 'nome' obrigatório");
+    if (!d.pedidoId)  throw new Error("PagamentoMedicamentoConfirmado: campo 'pedidoId' obrigatório");
+    if (typeof d.total !== "number") throw new Error("PagamentoMedicamentoConfirmado: campo 'total' obrigatório (number)");
+  },
+  AssinaturaPlanoAtivada: (d) => {
+    if (!d.email)        throw new Error("AssinaturaPlanoAtivada: campo 'email' obrigatório");
+    if (!d.nome)         throw new Error("AssinaturaPlanoAtivada: campo 'nome' obrigatório");
+    if (!d.planoNome)    throw new Error("AssinaturaPlanoAtivada: campo 'planoNome' obrigatório");
+    if (!d.billingCycle) throw new Error("AssinaturaPlanoAtivada: campo 'billingCycle' obrigatório");
+    if (typeof d.price !== "number") throw new Error("AssinaturaPlanoAtivada: campo 'price' obrigatório (number)");
   },
 };
 
