@@ -233,16 +233,6 @@ app.use("/api/receitas", receitasRouter);
 const dispatcher = require("./notifications/dispatcher");
 const { startScheduler } = require("./notifications/scheduler");
 const emailTemplates = require("./notifications/templates");
-const {
-  buildCorreiosConfig,
-  getCorreiosTrackingUrl,
-  isCorreiosShippingConfigured,
-  isCorreiosTrackingConfigured,
-  mapTrackingToOrderStatus,
-  queryCorreiosShippingQuote,
-  queryCorreiosTracking,
-  validateCorreiosTrackingCode,
-} = require("./tracking/correios");
 
 // resendApiKey / resendFrom são declarados em definitivo na seção "Resend Email Proxy"
 // (linha ~756), mas inicializamos o dispatcher aqui com os valores de env para o boot.
@@ -1089,46 +1079,6 @@ app.post("/api/integrations/cielo/reload", requireAuth, requireAdmin, async (_re
   });
 });
 
-// ─── Endpoint: status da integração Correios ─────────────────────────────────
-app.get("/api/integrations/correios/status", requireAuth, requireAdmin, async (_req, res) => {
-  const config = await getCorreiosTrackingSettings();
-  const configured = isCorreiosTrackingConfigured(config);
-  const shippingConfigured = isCorreiosShippingConfigured(config);
-
-  res.json({
-    enabled: config.enabled,
-    configured,
-    shippingConfigured,
-    source: configured ? config.source : "none",
-    apiBaseUrl: config.apiBaseUrl,
-    trackingPollMinutes: config.trackingPollMinutes,
-    trackingResultType: config.trackingResultType,
-    hasApiToken: Boolean(config.apiToken),
-    hasApiUsername: Boolean(config.apiUsername),
-    hasApiPassword: Boolean(config.apiPassword),
-    hasPostingCard: Boolean(config.postingCard),
-    originCep: config.originCep || "",
-    pacServiceCode: config.pacServiceCode,
-    sedexServiceCode: config.sedexServiceCode,
-  });
-});
-
-app.post("/api/correios/shipping-quote", notificationLimiter, requireAuth, async (req, res) => {
-  try {
-    const config = await getCorreiosTrackingSettings();
-    const quote = await queryCorreiosShippingQuote(req.body || {}, config);
-    return res.status(quote.success === false ? 400 : 200).json(quote);
-  } catch (err) {
-    console.error("[Correios] Erro ao calcular frete:", err.message);
-    return res.status(502).json({
-      success: false,
-      configured: true,
-      options: [],
-      message: safeErrorMessage(err),
-    });
-  }
-});
-
 app.post("/api/resend/emails", emailLimiter, requireAuth, async (req, res) => {
   const { to, subject, html, from } = req.body;
 
@@ -1237,54 +1187,6 @@ async function getLogisticsNotificationSettings() {
     };
   } catch (err) {
     console.warn("[Logistics] Não foi possível carregar configurações de notificação:", err.message);
-    return fallback;
-  }
-}
-
-async function getCorreiosTrackingSettings() {
-  const envConfig = buildCorreiosConfig();
-  const fallback = {
-    ...envConfig,
-    trackingPollMinutes: Number(process.env.CORREIOS_TRACKING_POLL_MINUTES || 60),
-    originCep: process.env.CORREIOS_ORIGIN_CEP || "",
-    pacServiceCode: process.env.CORREIOS_PAC_SERVICE_CODE || envConfig.pacServiceCode,
-    sedexServiceCode: process.env.CORREIOS_SEDEX_SERVICE_CODE || envConfig.sedexServiceCode,
-    source: isCorreiosTrackingConfigured(envConfig) ? "env" : "none",
-  };
-
-  if (!supabase) return fallback;
-
-  try {
-    const { data, error } = await supabase
-      .from("site_settings")
-      .select("value")
-      .eq("key", "correios")
-      .maybeSingle();
-
-    if (error || !data?.value) return fallback;
-
-    const value = data.value || {};
-    const hasPanelCredentials = Boolean(value.apiToken || value.apiUsername || value.apiPassword || value.postingCard);
-    const config = {
-      enabled: value.enabled !== false,
-      apiBaseUrl: value.apiBaseUrl || fallback.apiBaseUrl,
-      apiToken: value.apiToken || fallback.apiToken,
-      apiUsername: value.apiUsername || fallback.apiUsername,
-      apiPassword: value.apiPassword || fallback.apiPassword,
-      postingCard: value.postingCard || fallback.postingCard,
-      contractNumber: value.contractNumber || fallback.contractNumber,
-      contractDr: value.contractDr || fallback.contractDr,
-      trackingResultType: value.trackingResultType || fallback.trackingResultType,
-      trackingPollMinutes: Number(value.trackingPollMinutes || fallback.trackingPollMinutes || 60),
-      originCep: value.originCep || fallback.originCep,
-      pacServiceCode: value.pacServiceCode || fallback.pacServiceCode,
-      sedexServiceCode: value.sedexServiceCode || fallback.sedexServiceCode,
-      source: hasPanelCredentials ? "site_settings" : fallback.source,
-    };
-
-    return config;
-  } catch (err) {
-    console.warn("[Tracking] Não foi possível carregar configurações dos Correios:", err.message);
     return fallback;
   }
 }
@@ -1612,134 +1514,6 @@ function renderServiceOrderDocument(os) {
 </html>`;
 }
 
-// ─── Correios tracking ────────────────────────────────────────────────────────
-
-function buildTrackingUpdate(trackingResult, currentStatus) {
-  const normalizedCurrentStatus =
-    currentStatus === "confirmed"
-      ? "processing"
-      : currentStatus === "in_transit"
-        ? "shipped"
-        : currentStatus;
-
-  return {
-    tracking_carrier: trackingResult.carrier || "correios",
-    tracking_code: trackingResult.trackingCode,
-    tracking_status: trackingResult.trackingStatus,
-    tracking_status_label: trackingResult.trackingStatusLabel,
-    tracking_last_event_at: trackingResult.trackingLastEventAt,
-    tracking_last_checked_at: new Date().toISOString(),
-    tracking_estimated_delivery: trackingResult.trackingEstimatedDelivery,
-    tracking_url: trackingResult.trackingUrl || getCorreiosTrackingUrl(trackingResult.trackingCode),
-    tracking_events: trackingResult.trackingEvents || [],
-    status: mapTrackingToOrderStatus(normalizedCurrentStatus, trackingResult.trackingStatus),
-    updated_at: new Date().toISOString(),
-  };
-}
-
-async function fetchOrderForTracking(orderId) {
-  const { data, error } = await supabase
-    .from("orders")
-    .select("id, user_id, status, customer_email, customer_name, tracking_code, items")
-    .eq("id", orderId)
-    .single();
-
-  if (error || !data) return null;
-  return data;
-}
-
-async function isAdminUser(userId) {
-  if (!userId || !supabase) return false;
-  const { data } = await supabase
-    .from("profiles")
-    .select("role")
-    .eq("id", userId)
-    .single();
-  return data?.role === "admin";
-}
-
-async function applyTrackingToOrder(order, trackingCode, correiosConfig) {
-  const validation = validateCorreiosTrackingCode(trackingCode);
-  if (!validation.valid) {
-    const err = new Error(validation.message);
-    err.statusCode = 400;
-    throw err;
-  }
-
-  const tracking = await queryCorreiosTracking(
-    validation.code,
-    correiosConfig || await getCorreiosTrackingSettings()
-  );
-  const update = buildTrackingUpdate(tracking, order.status);
-
-  const { data, error } = await supabase
-    .from("orders")
-    .update(update)
-    .eq("id", order.id)
-    .select("*")
-    .single();
-
-  if (error) throw error;
-
-  return {
-    tracking,
-    order: data,
-    statusChanged: data.status !== order.status,
-  };
-}
-
-function trackingResponsePayload(result) {
-  return {
-    success: true,
-    configured: result.tracking.configured,
-    message: result.tracking.trackingStatusLabel,
-    tracking: result.tracking,
-    order: result.order,
-  };
-}
-
-app.post("/api/orders/:id/tracking", notificationLimiter, requireAuth, requireAdmin, async (req, res) => {
-  if (!supabase) {
-    return res.status(503).json({ error: "Supabase não configurado no servidor" });
-  }
-
-  const order = await fetchOrderForTracking(req.params.id);
-  if (!order) return res.status(404).json({ error: "Pedido não encontrado" });
-
-  try {
-    const result = await applyTrackingToOrder(order, req.body?.trackingCode);
-    return res.json(trackingResponsePayload(result));
-  } catch (err) {
-    console.error("[Tracking] Erro ao salvar rastreio:", err.message);
-    return res.status(err.statusCode || 500).json({
-      error: err.statusCode && err.statusCode < 500 ? err.message : safeErrorMessage(err),
-    });
-  }
-});
-
-app.post("/api/orders/:id/tracking/refresh", notificationLimiter, requireAuth, async (req, res) => {
-  if (!supabase) {
-    return res.status(503).json({ error: "Supabase não configurado no servidor" });
-  }
-
-  const order = await fetchOrderForTracking(req.params.id);
-  if (!order) return res.status(404).json({ error: "Pedido não encontrado" });
-
-  const allowed = order.user_id === req.user?.id || await isAdminUser(req.user?.id);
-  if (!allowed) return res.status(403).json({ error: "Pedido não pertence ao usuário autenticado" });
-  if (!order.tracking_code) return res.status(400).json({ error: "Pedido sem código de rastreio" });
-
-  try {
-    const result = await applyTrackingToOrder(order, order.tracking_code);
-    return res.json(trackingResponsePayload(result));
-  } catch (err) {
-    console.error("[Tracking] Erro ao atualizar rastreio:", err.message);
-    return res.status(err.statusCode || 500).json({
-      error: err.statusCode && err.statusCode < 500 ? err.message : safeErrorMessage(err),
-    });
-  }
-});
-
 // ─── Orders — atualização de status com evento de notificação ─────────────────
 // Endpoint desacoplado: atualiza o DB e dispara notificação de forma assíncrona.
 // O request retorna imediatamente; o email é enviado em background.
@@ -1754,7 +1528,7 @@ const MENSAGENS_STATUS = {
   cancelled:  "Seu pedido foi cancelado. Se precisar, estamos aqui.",
 };
 
-async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusAnterior, novoStatus, trackingCode, items }) {
+async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusAnterior, novoStatus, items }) {
   // Idempotência: verifica se já foi notificado para este status recentemente (5 min)
   if (supabase) {
     const cincoMinAtras = new Date(Date.now() - 5 * 60 * 1000).toISOString();
@@ -1787,7 +1561,6 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     pedidoId,
     status:       novoStatus,
     mensagem:     mensagemOpcional,
-    trackingCode: trackingCode || undefined,
   });
 
   // Registra notificação no banco
@@ -1800,7 +1573,6 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
       status:         novoStatus,
       subject,
       body:           html,
-      tracking_code:  trackingCode || null,
       sent_at:        sentAt,
     }).catch(err => console.error("[Notificação] Erro ao registrar log:", err.message));
   }
@@ -1812,68 +1584,8 @@ async function dispararNotificacaoPedido({ pedidoId, email, nomeUsuario, statusA
     pedidoId,
     status:       novoStatus,
     mensagem:     mensagemOpcional,
-    trackingCode: trackingCode || undefined,
   });
   console.log(`[Notificação] 📧 Email enfileirado → ${email} (pedido ${pedidoId})`);
-}
-
-async function refreshTrackedOrdersBatch() {
-  if (!supabase) return;
-
-  const correiosConfig = await getCorreiosTrackingSettings();
-  if (!isCorreiosTrackingConfigured(correiosConfig)) return;
-
-  const pollMinutes = Math.max(Number(correiosConfig.trackingPollMinutes || 60), 10);
-  const staleBefore = new Date(Date.now() - pollMinutes * 60 * 1000).toISOString();
-
-  const { data: orders, error } = await supabase
-    .from("orders")
-    .select("id, user_id, status, customer_email, customer_name, tracking_code, items, tracking_last_checked_at")
-    .not("tracking_code", "is", null)
-    .not("status", "in", "(delivered,cancelled)")
-    .or(`tracking_last_checked_at.is.null,tracking_last_checked_at.lt.${staleBefore}`)
-    .order("tracking_last_checked_at", { ascending: true, nullsFirst: true })
-    .limit(25);
-
-  if (error) {
-    console.error("[Tracking] Erro ao buscar pedidos para atualização:", error.message);
-    return;
-  }
-
-  for (const order of orders || []) {
-    try {
-      const result = await applyTrackingToOrder(order, order.tracking_code, correiosConfig);
-
-      if (result.statusChanged && ["shipped", "delivered"].includes(result.order.status)) {
-        await dispararNotificacaoPedido({
-          pedidoId: order.id,
-          email: order.customer_email || "",
-          nomeUsuario: order.customer_name || "Cliente",
-          statusAnterior: order.status,
-          novoStatus: result.order.status,
-          trackingCode: result.order.tracking_code,
-          items: order.items || [],
-        });
-      }
-    } catch (err) {
-      console.error(`[Tracking] Falha ao atualizar pedido ${order.id}:`, err.message);
-    }
-  }
-}
-
-function startOrderTrackingScheduler() {
-  if (!supabase) return;
-
-  const intervalMinutes = Number(process.env.CORREIOS_TRACKING_SCHEDULER_MINUTES || 10);
-  if (!intervalMinutes || intervalMinutes <= 0) {
-    console.log("[Tracking] Scheduler desativado por configuração");
-    return;
-  }
-
-  const intervalMs = Math.max(intervalMinutes, 10) * 60 * 1000;
-  setTimeout(() => refreshTrackedOrdersBatch().catch(err => console.error("[Tracking] Scheduler erro:", err.message)), 15_000);
-  setInterval(() => refreshTrackedOrdersBatch().catch(err => console.error("[Tracking] Scheduler erro:", err.message)), intervalMs);
-  console.log(`[Tracking] Scheduler Correios ativo a cada ${Math.max(intervalMinutes, 10)} min; credenciais via painel/env`);
 }
 
 // ─── Admin: reset de senha ────────────────────────────────────────────────────
@@ -1954,7 +1666,7 @@ app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) =>
     // Busca pedido atual
     const { data: pedido, error: fetchErr } = await supabase
       .from("orders")
-      .select("id, status, customer_email, customer_name, tracking_code, items")
+      .select("id, status, customer_email, customer_name, items")
       .eq("id", id)
       .single();
 
@@ -1986,7 +1698,6 @@ app.put("/api/orders/:id/status", requireAuth, requireAdmin, async (req, res) =>
         nomeUsuario:   pedido.customer_name  || "Cliente",
         statusAnterior,
         novoStatus,
-        trackingCode:  pedido.tracking_code,
         items:         pedido.items || [],
       }).catch(err => console.error("[Notificação] Erro no worker:", err.message));
     });
@@ -2140,7 +1851,6 @@ app.post("/api/notifications/test/:tipo", requireAuth, requireAdmin, (req, res) 
       pedidoId: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       status:   "shipped",
       mensagem: "Seu pedido saiu para entrega e chegará em breve!",
-      trackingCode: "BR123456789",
     },
   };
 
@@ -2293,11 +2003,9 @@ app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-startOrderTrackingScheduler();
 
 app.listen(PORT, '0.0.0.0', () => {
   const emailMode = RESEND_MOCK_MODE ? "MOCK (console)" : "RESEND (live)";
-  const trackingMode = isCorreiosTrackingConfigured() ? "CORREIOS API (env)" : "painel/env";
   const groqStatus  = process.env.GROQ_API_KEY        ? "configurado" : "não configurado";
   const ollamaInfo  = "ver /api/receitas/status";
   console.log(`
@@ -2307,7 +2015,6 @@ app.listen(PORT, '0.0.0.0', () => {
 ║                                                          ║
 ║  Pagamentos: ${cieloConfig.sandbox ? "SANDBOX " : "PRODUCTION"} | Cielo ${cieloConfig.merchantId ? cieloConfig.merchantId.substring(0, 8) + "..." : "não configurado"}          ║
 ║  E-mails:    ${emailMode.padEnd(32)}║
-║  Rastreio:   ${trackingMode.padEnd(32)}║
 ║  Supabase:   ${(supabase ? "conectado" : "não configurado").padEnd(32)}║
 ║                                                          ║
 ║  Receitas — OCR + IA + Matching:                         ║

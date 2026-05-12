@@ -26,7 +26,6 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
-import { getCorreiosTrackingUrl, type TrackingEvent } from "@/services/trackingService";
 import { formatPaymentMethod } from "@/lib/labels";
 
 interface Order {
@@ -36,10 +35,6 @@ interface Order {
   total: number;
   items: { name: string; quantity: number; price: number }[];
   delivery_address: string;
-  tracking_code: string | null;
-  tracking_status_label?: string | null;
-  tracking_last_checked_at?: string | null;
-  tracking_events?: TrackingEvent[] | null;
   payment_id: string | null;
   payment_method: string | null;
   installments: number | null;
@@ -492,27 +487,12 @@ const Orders = () => {
                       </div>
                     )}
 
-                    {/* ── Footer: address + tracking + payment ─────────────── */}
+                    {/* ── Footer: address + payment ─────────────── */}
                     <div className="space-y-2 text-xs text-muted-foreground border-t pt-3">
                       {order.status !== "cancelled" && order.delivery_address && (
                         <div className="flex items-start gap-1.5">
                           <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5" />
                           <span className="truncate">{order.delivery_address}</span>
-                        </div>
-                      )}
-
-                      {order.tracking_code && (
-                        <div className="flex items-start gap-1.5">
-                          <Truck className="h-3.5 w-3.5 shrink-0" />
-                          <div>
-                            <span>Rastreio: </span>
-                            <span className="font-mono text-primary font-medium">{order.tracking_code}</span>
-                            {order.tracking_status_label && (
-                              <p className="text-[11px] text-muted-foreground mt-0.5">
-                                {order.tracking_status_label}
-                              </p>
-                            )}
-                          </div>
                         </div>
                       )}
 
@@ -537,22 +517,6 @@ const Orders = () => {
 
                     {/* ── Actions ──────────────────────────────────────────── */}
                     <div className="flex gap-2 mt-4">
-                      {order.tracking_code && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="flex-1 text-xs h-9"
-                          onClick={() =>
-                            window.open(
-                              getCorreiosTrackingUrl(order.tracking_code!),
-                              "_blank"
-                            )
-                          }
-                        >
-                          <Truck className="h-3.5 w-3.5 mr-1.5" />
-                          Rastrear
-                        </Button>
-                      )}
                       <Button
                         variant="ghost"
                         size="sm"

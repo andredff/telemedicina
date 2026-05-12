@@ -11,8 +11,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Label } from "@/components/ui/label";
 import { CreditCardForm } from "./CreditCardForm";
 import { PixPaymentForm } from "./PixPaymentForm";
 import { DeliveryAddressForm, type DeliveryAddress } from "./DeliveryAddressForm";
@@ -27,7 +25,7 @@ import type { CartItem, CatalogCartItem } from "@/types/prescription";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { sendOrderStatusNotification, sendLogisticsServiceOrder } from "@/services/notificationService";
-import { calculateCartShipping, applyFreeShipping, type ShippingOption, type ShippingConfig } from "@/integrations/correios/client";
+import { getShippingConfig, type ShippingConfig } from "@/integrations/correios/client";
 
 type CheckoutStep = "address" | "payment";
 type PaymentMethod = "credit_card" | "pix";
@@ -65,7 +63,6 @@ export function MedicationCheckout({
   const allItems = [...items, ...catalogAsCartItems];
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [isCalculatingShipping, setIsCalculatingShipping] = useState(false);
   const [currentStep, setCurrentStep] = useState<CheckoutStep>("address");
   const [editingAddress, setEditingAddress] = useState(false);
   const [deliveryAddress, setDeliveryAddress] = useState<DeliveryAddress | null>(null);
@@ -77,8 +74,6 @@ export function MedicationCheckout({
     orderId?: string;
     message: string;
   } | null>(null);
-  const [shippingOptions, setShippingOptions] = useState<ShippingOption[]>([]);
-  const [selectedShipping, setSelectedShipping] = useState<ShippingOption | null>(null);
   const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
 
   const subtotal = allItems.reduce(
@@ -86,50 +81,13 @@ export function MedicationCheckout({
     0
   );
 
-  // Calculate shipping based on selected option and admin config
-  const shipping = selectedShipping && shippingConfig ? applyFreeShipping(selectedShipping.price, subtotal, shippingConfig) : 0;
+  // Entrega própria — sempre grátis
+  const shipping = 0;
   const total = subtotal + shipping;
-  const getShippingDeadlineLabel = (option: ShippingOption) => {
-    if (option.deadline <= 1) return "1 dia útil";
-    return `${option.deadline} dias úteis`;
-  };
 
-  // Calculate shipping when address is set
   useEffect(() => {
-    const fetchShipping = async () => {
-      if (deliveryAddress?.zipCode && allItems.length > 0) {
-        setIsCalculatingShipping(true);
-        try {
-          const { options, config } = await calculateCartShipping(
-            deliveryAddress.zipCode,
-            allItems.length,
-            subtotal
-          );
-          setShippingOptions(options);
-          setShippingConfig(config);
-
-          // Auto-select first option or cheapest
-          if (options.length > 0) {
-            const cheapest = options.reduce((prev, curr) =>
-              curr.price < prev.price ? curr : prev
-            );
-            setSelectedShipping((current) =>
-              current && options.some((option) => option.id === current.id)
-                ? current
-                : cheapest
-            );
-          }
-        } catch (error) {
-          logger.error("Error calculating shipping:", error);
-          toast.error("Erro ao calcular o frete");
-        } finally {
-          setIsCalculatingShipping(false);
-        }
-      }
-    };
-
-    fetchShipping();
-  }, [deliveryAddress, allItems.length, subtotal]);
+    getShippingConfig().then(setShippingConfig);
+  }, []);
 
   const generateOrderId = () => {
     return `MED-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
@@ -569,71 +527,13 @@ export function MedicationCheckout({
                   <span>R$ {subtotal.toFixed(2)}</span>
                 </div>
                 
-                {/* Shipping Options */}
-                {deliveryAddress ? (
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium">Frete</p>
-                    {isCalculatingShipping ? (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <div className="animate-spin h-4 w-4 border-2 border-primary border-t-transparent rounded-full" />
-                        Calculando frete...
-                      </div>
-                    ) : shippingOptions.length > 0 ? (
-                      <RadioGroup
-                        value={selectedShipping?.id || ""}
-                        onValueChange={(value) => {
-                          const option = shippingOptions.find(o => o.id === value);
-                          if (option) setSelectedShipping(option);
-                        }}
-                        className="space-y-2"
-                      >
-                        {shippingOptions.map((option) => {
-                          const finalPrice = applyFreeShipping(option.price, subtotal, shippingConfig || undefined);
-                          return (
-                            <div key={option.id} className="flex items-center space-x-2">
-                              <RadioGroupItem value={option.id} id={`shipping-${option.id}`} />
-                              <Label
-                                htmlFor={`shipping-${option.id}`}
-                                className="flex-1 cursor-pointer"
-                              >
-                                <div className="flex justify-between">
-                                  <span>
-                                    <span className="font-medium">{option.name}</span>
-                                    <span className="text-muted-foreground text-xs ml-1">
-                                      ({getShippingDeadlineLabel(option)})
-                                    </span>
-                                  </span>
-                                  <span className={finalPrice === 0 ? "text-green-600 font-medium" : ""}>
-                                    {finalPrice === 0 ? "Grátis" : `R$ ${finalPrice.toFixed(2)}`}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-muted-foreground">
-                                  {option.description}
-                                </p>
-                              </Label>
-                            </div>
-                          );
-                        })}
-                      </RadioGroup>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        Não foi possível calcular o frete para este endereço.
-                      </p>
-                    )}
-                    {shippingConfig?.enableFreeShipping && subtotal >= shippingConfig.freeShippingThreshold && (
-                      <p className="text-xs text-green-600">
-                        Frete grátis para compras acima de R$ {shippingConfig.freeShippingThreshold.toFixed(2)}!
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div className="flex justify-between text-sm">
-                    <span>Frete</span>
-                    <span className="text-muted-foreground">
-                      Informe o endereço para calcular
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between text-sm">
+                  <span>Entrega Própria</span>
+                  <span className="text-green-600 font-medium">Grátis</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Entrega realizada pela equipe Novità em até {shippingConfig?.maxDeliveryDays ?? 2} dias úteis.
+                </p>
               </div>
 
               <Separator />

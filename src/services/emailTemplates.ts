@@ -213,39 +213,18 @@ function itemsTable(items: Array<{ name: string; quantity: number }>): string {
   </table>`;
 }
 
-function trackingBox(trackingCode: string, estimatedDelivery?: string): string {
+function estimatedDeliveryBox(estimatedDelivery: string): string {
   return `
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:20px 0;background-color:${STATUS_COLORS.shipped.bg};border:1px solid #DDD6FE;border-radius:12px;">
     <tr>
       <td style="padding:20px 24px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
-          <tr>
-            <td>
-              <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:${STATUS_COLORS.shipped.color};text-transform:uppercase;letter-spacing:0.5px;">
-                C&oacute;digo de Rastreio
-              </span>
-              <br/>
-              <span style="font-family:'Courier New',monospace;font-size:20px;font-weight:700;color:${BRAND.text};letter-spacing:1px;">
-                ${trackingCode}
-              </span>
-            </td>
-          </tr>
-          ${
-            estimatedDelivery
-              ? `<tr>
-            <td style="padding-top:12px;">
-              <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:${STATUS_COLORS.shipped.color};text-transform:uppercase;letter-spacing:0.5px;">
-                Previs&atilde;o de Entrega
-              </span>
-              <br/>
-              <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;color:${BRAND.text};">
-                ${estimatedDelivery}
-              </span>
-            </td>
-          </tr>`
-              : ""
-          }
-        </table>
+        <span style="font-family:Arial,Helvetica,sans-serif;font-size:12px;font-weight:700;color:${STATUS_COLORS.shipped.color};text-transform:uppercase;letter-spacing:0.5px;">
+          Previs&atilde;o de Entrega
+        </span>
+        <br/>
+        <span style="font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:700;color:${BRAND.text};">
+          ${estimatedDelivery}
+        </span>
       </td>
     </tr>
   </table>`;
@@ -311,7 +290,7 @@ function processingBody(data: OrderNotification): string {
       <tr>
         <td style="padding:16px 20px;">
           <span style="font-family:Arial,Helvetica,sans-serif;font-size:14px;color:${STATUS_COLORS.processing.color};line-height:20px;">
-            &#128230; <strong>Em breve:</strong> Assim que seu pedido for despachado, voc&ecirc; receber&aacute; o c&oacute;digo de rastreio para acompanhar a entrega.
+            &#128230; <strong>Em breve:</strong> Assim que seu pedido for despachado, nossa equipe entrar&aacute; em contato para combinar a entrega.
           </span>
         </td>
       </tr>
@@ -330,10 +309,10 @@ function shippedBody(data: OrderNotification): string {
       Ol&aacute;, ${data.customerName}!
     </p>
     <p style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:${BRAND.textLight};line-height:24px;margin:0 0 16px;">
-      Seu pedido foi enviado e est&aacute; a caminho! Acompanhe a entrega pelo c&oacute;digo de rastreio abaixo.
+      Seu pedido foi enviado e est&aacute; a caminho! A entrega ser&aacute; realizada pela equipe Novit&agrave;.
     </p>
 
-    ${data.trackingCode ? trackingBox(data.trackingCode, data.estimatedDelivery) : ""}
+    ${data.estimatedDelivery ? estimatedDeliveryBox(data.estimatedDelivery) : ""}
 
     ${itemsTable(data.items || [])}
 
@@ -412,7 +391,7 @@ const EMAIL_SUBJECTS: Record<OrderStatus, string> = {
 const PREHEADERS: Record<OrderStatus, (data: OrderNotification) => string> = {
   pending: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi confirmado e está pago!`,
   processing: (d) => `Seu pedido #${d.orderId.substring(0, 8)} está sendo separado.`,
-  shipped: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi enviado! ${d.trackingCode ? `Rastreio: ${d.trackingCode}` : ""}`,
+  shipped: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi enviado!`,
   delivered: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi entregue com sucesso!`,
   cancelled: (d) => `Seu pedido #${d.orderId.substring(0, 8)} foi cancelado.`,
 };

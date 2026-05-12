@@ -88,7 +88,6 @@ const FIXTURES = [
       pedidoId:     "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
       status:       "shipped",
       mensagem:     "Seu pedido saiu para entrega e chegará em breve!",
-      trackingCode: "BR123456789",
     },
   },
 ];

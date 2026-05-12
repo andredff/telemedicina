@@ -945,15 +945,13 @@ export default function AdminSupport() {
                     <strong>Assunto:</strong> {`{icone}`} Pedido #{`{pedidoId}`} — {`{statusLabel}`}<br /><br />
                     Olá, {`{nome}`}. Seu pedido foi atualizado.<br /><br />
                     <strong>Pedido:</strong> #{`{pedidoId}`}<br />
-                    <strong>Status:</strong> {`{statusLabel}`}<br />
-                    <strong>Código de rastreio:</strong> {`{trackingCode}`} <span className="text-gray-400">(quando enviado)</span><br /><br />
+                    <strong>Status:</strong> {`{statusLabel}`}<br /><br />
                     <span className="text-blue-600">[Ver meus pedidos →]</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{nome}`}</code>
                     <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{pedidoId}`}</code>
                     <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{status}`}</code>
-                    <code className="text-xs bg-gray-100 px-1.5 py-0.5 rounded">{`{trackingCode}`}</code>
                   </div>
                   <div className="mt-3 text-xs text-gray-500">
                     <strong>Status disponíveis:</strong> 📦 Pedido recebido · ⚙️ Em preparação · 🚚 Pedido enviado · ✅ Pedido entregue · ❌ Pedido cancelado

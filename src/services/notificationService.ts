@@ -16,7 +16,6 @@ export interface OrderNotification {
   customerEmail: string;
   customerName: string;
   status: OrderStatus;
-  trackingCode?: string;
   estimatedDelivery?: string;
   items?: Array<{
     name: string;
@@ -99,7 +98,6 @@ export async function sendOrderStatusNotification(
         subject: emailContent.subject,
         body: emailContent.body,
         sent_at: emailContent.sentAt,
-        tracking_code: notification.trackingCode,
         estimated_delivery: notification.estimatedDelivery,
       })
       .select()

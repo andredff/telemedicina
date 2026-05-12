@@ -36,7 +36,6 @@ import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import { toast } from "sonner";
 import type { OrderStatus } from "@/hooks/useOrderSubscription";
-import type { TrackingEvent } from "@/services/trackingService";
 import { formatPaymentMethod } from "@/lib/labels";
 
 interface OrderItem {
@@ -52,14 +51,6 @@ interface Order {
   total: number;
   items: OrderItem[];
   delivery_address: string;
-  tracking_code: string | null;
-  tracking_carrier?: string | null;
-  tracking_status?: string | null;
-  tracking_status_label?: string | null;
-  tracking_last_event_at?: string | null;
-  tracking_last_checked_at?: string | null;
-  tracking_estimated_delivery?: string | null;
-  tracking_events?: TrackingEvent[] | null;
   payment_id: string | null;
   payment_method: string | null;
   payment_status?: string | null;
@@ -280,13 +271,8 @@ const OrderDetail = () => {
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Main Content */}
           <div className="lg:col-span-2 space-y-6">
-            {/* Order Tracking - Atualização em tempo real */}
             <OrderTracking
               orderId={order.id}
-              trackingCode={order.tracking_code}
-              trackingStatusLabel={order.tracking_status_label}
-              trackingLastCheckedAt={order.tracking_last_checked_at}
-              trackingEvents={order.tracking_events}
               status={order.status as OrderStatus}
               onStatusChange={handleStatusChange}
             />

@@ -244,25 +244,6 @@ export const AdminQueries = {
     }
   },
 
-  // Update tracking code for an order
-  async updateOrderTracking(orderId: string, trackingCode: string | null) {
-    try {
-      const { error } = await supabaseAdmin
-        .from('orders')
-        .update({
-          tracking_code: trackingCode,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      return { error: null };
-    } catch (error) {
-      logger.error("[AdminQueries] Error updating tracking", error);
-      return { error };
-    }
-  },
-  
   // Save pharmacist review decision on an order
   async reviewOrder(orderId: string, decision: 'approved' | 'rejected', notes: string) {
     try {

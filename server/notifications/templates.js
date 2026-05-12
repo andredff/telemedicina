@@ -316,7 +316,7 @@ function lembreteConsulta({ nome, especialidade, profissional, dataHora, consult
 }
 
 // ─── Template: NotificacaoPedido (Order Status Update) ───────────────────────
-function notificacaoPedido({ nome, pedidoId, status, mensagem, trackingCode }) {
+function notificacaoPedido({ nome, pedidoId, status, mensagem }) {
   const statusConfig = {
     pending:    { label: "Pedido recebido",    color: BRAND.info,    icon: "📦" },
     processing: { label: "Em preparação",      color: BRAND.primary, icon: "⚙️" },
@@ -332,7 +332,6 @@ function notificacaoPedido({ nome, pedidoId, status, mensagem, trackingCode }) {
     ["Pedido", `#${shortId}`],
     ["Status", config.label],
   ];
-  if (trackingCode) rows.push(["Código de rastreio", trackingCode]);
 
   const body = `
     ${badge(config.label, config.color)}
@@ -341,8 +340,8 @@ function notificacaoPedido({ nome, pedidoId, status, mensagem, trackingCode }) {
 
     ${infoCard(rows)}
 
-    ${status === "shipped" && trackingCode
-      ? alertBox(`<strong>Rastreie seu pedido:</strong> Use o código <strong>${trackingCode}</strong> para acompanhar a entrega.`)
+    ${status === "shipped"
+      ? alertBox(`<strong>Entrega Própria:</strong> A entrega será realizada pela equipe Novità. Em breve entraremos em contato.`)
       : ""
     }
 
