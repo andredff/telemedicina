@@ -137,6 +137,7 @@ const Auth = () => {
           // Check admin role in background and redirect if needed
           checkUserRole(session.user.id).then(role => {
             if (role === 'admin') navigate('/admin');
+            else if (role === 'lab') navigate('/laboratorio');
           }).catch(() => {});
         }
       }
@@ -267,6 +268,7 @@ const Auth = () => {
       navigate(defaultPath);
       checkUserRole(data.user.id).then(role => {
         if (role === 'admin') navigate('/admin');
+        else if (role === 'lab') navigate('/laboratorio');
       }).catch(() => {});
     } catch (error) {
       toast({

@@ -10,7 +10,7 @@ import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText, Calendar, ChevronRight, Video, Pill, Crown,
   Stethoscope, ArrowRight, Sparkles, Package, CheckCircle2,
-  ShoppingCart, User, Download,
+  ShoppingCart, User, Download, HeartPulse,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -349,6 +349,14 @@ const Dashboard = () => {
       route: "/especialistas",
     },
     {
+      label: "Check-ups",
+      sublabel: "Saldo e histórico",
+      icon: HeartPulse,
+      color: "text-rose-500",
+      bg: "bg-rose-500/10 group-hover:bg-rose-500/20",
+      route: "/meus-checkups",
+    },
+    {
       label: "Farmácia",
       sublabel: "Entrega em casa",
       icon: Pill,
@@ -446,15 +454,15 @@ const Dashboard = () => {
         {/* ── Quick Actions ─────────────────────────────────────────────── */}
         <div>
           <p className="section-title">Acesso rápido</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
             {quickActions.map(({ label, sublabel, icon: Icon, color, bg, route }) => (
               <button
                 key={route}
-                className="group text-left bg-card border border-border/50 rounded-2xl p-4 sm:p-5 flex flex-col gap-3 hover:shadow-md hover:border-primary/20 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+                className="group text-left bg-card border border-border/50 rounded-xl p-3 sm:p-4 flex flex-col gap-2 hover:shadow-md hover:border-primary/20 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 onClick={() => navigate(route)}
               >
-                <div className={`w-11 h-11 rounded-xl ${bg} flex items-center justify-center transition-colors group-hover:scale-105 duration-200`}>
-                  <Icon className={`h-5 w-5 ${color}`} />
+                <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center transition-colors group-hover:scale-105 duration-200`}>
+                  <Icon className={`h-4 w-4 ${color}`} />
                 </div>
                 <div>
                   <p className="font-semibold text-sm text-foreground leading-tight">{label}</p>

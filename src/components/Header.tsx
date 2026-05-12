@@ -26,6 +26,7 @@ interface HeaderProps {
   enterDisabled?: boolean;
   inIframe?: boolean;
   onClose?: () => void;
+  minimal?: boolean;
 }
 
 const Header = ({ 
@@ -40,6 +41,7 @@ const Header = ({
   enterDisabled,
   inIframe,
   onClose,
+  minimal = false,
 }: HeaderProps) => {
   const navigate = useNavigate();
   const cart = useCart();
@@ -83,48 +85,52 @@ const Header = ({
                 </>
               ) : (
                 <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="relative"
-                    onClick={() => navigate("/cart")}
-                    type="button"
-                  >
-                    <ShoppingCart className="h-5 w-5" />
-                    {displayCartCount > 0 && (
-                      <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
-                        {displayCartCount}
-                      </span>
-                    )}
-                  </Button>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" type="button">
-                        <Settings className="h-5 w-5" />
+                  {!minimal && (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="relative"
+                        onClick={() => navigate("/cart")}
+                        type="button"
+                      >
+                        <ShoppingCart className="h-5 w-5" />
+                        {displayCartCount > 0 && (
+                          <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-xs font-bold text-primary-foreground">
+                            {displayCartCount}
+                          </span>
+                        )}
                       </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48 z-[100]">
-                      <DropdownMenuLabel>Configurações</DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate("/perfil")}>
-                        <User className="mr-2 h-4 w-4" />
-                        Meu Perfil
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate("/meu-plano")}>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Meu Plano
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate("/orders")}>
-                        <Package className="mr-2 h-4 w-4" />
-                        Meus Pedidos
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => navigate("/suporte")}>
-                        <HelpCircle className="mr-2 h-4 w-4" />
-                        Suporte
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" type="button">
+                            <Settings className="h-5 w-5" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48 z-[100]">
+                          <DropdownMenuLabel>Configurações</DropdownMenuLabel>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => navigate("/perfil")}>
+                            <User className="mr-2 h-4 w-4" />
+                            Meu Perfil
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate("/meu-plano")}>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Meu Plano
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate("/orders")}>
+                            <Package className="mr-2 h-4 w-4" />
+                            Meus Pedidos
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onClick={() => navigate("/suporte")}>
+                            <HelpCircle className="mr-2 h-4 w-4" />
+                            Suporte
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </>
+                  )}
                   <Button
                     variant="ghost"
                     size="sm"

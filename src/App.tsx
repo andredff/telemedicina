@@ -15,6 +15,8 @@ import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import ProfileSettings from "./pages/ProfileSettings";
 import MyPlan from "./pages/MyPlan";
+import MyCheckups from "./pages/MyCheckups";
+import LabPanel from "./pages/LabPanel";
 import PrescriptionDetail from "./pages/PrescriptionDetail";
 import Prescriptions from "./pages/Prescriptions";
 import Orders from "./pages/Orders";
@@ -90,6 +92,8 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/perfil" element={<ProfileSettings />} />
           <Route path="/meu-plano" element={<MyPlan />} />
+          <Route path="/meus-checkups" element={<MyCheckups />} />
+          <Route path="/laboratorio" element={<LabPanel />} />
           <Route path="/prescriptions" element={<Prescriptions />} />
           <Route path="/orders" element={<Orders />} />
           <Route path="/order/:id" element={<OrderDetail />} />
