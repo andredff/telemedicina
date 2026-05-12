@@ -92,7 +92,7 @@
     --novita-primary: 44 100% 46%;        /* #EDAF00 */
     --novita-secondary: 46 100% 40%;      /* #CC9B00 */
     --novita-text: 0 0% 29%;              /* #4B4B4B */
-    --novita-link: 43 93% 34%;            /* #A67705 */
+    --novita-link: 221 100% 47%;            /* #0066EE - azul padrão */
     --novita-highlight: 49 44% 62%;       /* #CAB772 */
     --novita-gray: 0 0% 69%;              /* #B1B1B1 */
     --novita-bg-light: 0 0% 98%;          /* #F9F9F9 */
@@ -183,11 +183,11 @@
   }
 
   a {
-    color: var(--novita-link, var(--color-accent, #A67705));
+    color: #0066ee;
   }
 
   a:hover {
-    color: var(--novita-primary, var(--color-primary, #EDAF00));
+    color: #0044cc;
   }
 }
 

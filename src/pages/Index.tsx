@@ -253,7 +253,7 @@ function Index(): JSX.Element {
                     {index < arr.length - 1 && (
                       <a
                         href="/planos"
-                        className="text-primary font-semibold hover:underline inline-flex items-center gap-1"
+                        className="font-semibold hover:underline inline-flex items-center gap-1"
                         onClick={(e) => { e.preventDefault(); navigate('/planos'); }}
                       >
                         {SOBRE_EMPRESA.planosLinkText}

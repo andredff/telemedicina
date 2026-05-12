@@ -78,8 +78,8 @@ const Blog = () => {
       <section className="py-16 lg:py-24">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h1 className="text-4xl md:text-5xl font-heading font-bold text-foreground mb-4">
-              Blog <span className="gradient-text">Você Sabia?</span>
+            <h1 className="text-4xl md:text-5xl font-heading font-bold text-primary mb-4">
+              Blog <span className="text-primary">Você Sabia?</span>
             </h1>
             <p className="text-lg text-muted-foreground">
               Dicas de saúde, bem-estar e novidades sobre telemedicina.

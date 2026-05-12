@@ -271,7 +271,7 @@ const Cart = () => {
 
         <div className="flex items-center gap-3 mt-4 mb-6">
           <ShoppingCart className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-heading font-bold text-foreground">
+          <h1 className="text-2xl font-heading font-bold text-primary">
             Carrinho
           </h1>
           {totalItems > 0 && (

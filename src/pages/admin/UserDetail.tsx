@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AdminQueries, supabaseAdmin } from '@/integrations/supabase/adminClient';
-import { formatOrderStatus, formatSubscriptionStatus, formatPrescriptionStatus, formatBillingCycle } from '@/lib/labels';
+import { formatOrderStatus, formatSubscriptionStatus, formatBillingCycle } from '@/lib/labels';
 import { assemedClient } from '@/integrations/assemed';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
 import { Button } from '@/components/ui/button';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { Loader2, Plus, Trash2, Crown, Stethoscope, HeartPulse } from 'lucide-react';
 
 
 export default function AdminUserDetail() {
@@ -20,6 +20,7 @@ export default function AdminUserDetail() {
   const [plan, setPlan] = useState(null);
   const [singlePurchases, setSinglePurchases] = useState([]);
   const [addingCredit, setAddingCredit] = useState(false);
+  const [checkups, setCheckups] = useState<any[]>([]);
 
   useEffect(() => {
     if (!userId) return;
@@ -27,15 +28,13 @@ export default function AdminUserDetail() {
     (async () => {
       try {
         // Busca dados do usuário e dados locais
-        const [usersRes, ordersRes, prescriptionsRes] = await Promise.all([
+        const [usersRes, ordersRes] = await Promise.all([
           AdminQueries.getAllUsers(),
           AdminQueries.getOrdersByUserId(userId),
-          AdminQueries.getAllPrescriptions()
         ]);
         const userData = (usersRes.data || []).find((u) => u.id === userId);
         setUser(userData || null);
         setOrders(ordersRes.data || []);
-        setPrescriptions((prescriptionsRes.data || []).filter((p) => p.patient_id === userId));
 
         // Buscar plano contratado
         const { data: planData } = await supabaseAdmin
@@ -54,8 +53,17 @@ export default function AdminUserDetail() {
           .order('created_at', { ascending: false });
         setSinglePurchases(creditsData || []);
 
+        // Buscar check-ups realizados
+        const { data: checkupsData } = await supabaseAdmin
+          .from('checkup_usages')
+          .select('*')
+          .eq('user_id', userId)
+          .order('performed_at', { ascending: false });
+        setCheckups(checkupsData || []);
+
         // Buscar histórico de consultas reais do Assemed
-        let assemedConsultations = [];
+        let assemedConsultations: any[] = [];
+        let assemedPrescriptions: any[] = [];
         if (userData && (userData.cpf || userData.email)) {
           let cpf = userData.cpf;
           if (!cpf && userData.email && userData.email.includes('+')) {
@@ -76,13 +84,29 @@ export default function AdminUserDetail() {
                 if (response && response.items) {
                   assemedConsultations = response.items;
                 }
+                // Buscar receituários por consulta
+                const rxResults = await Promise.allSettled(
+                  assemedConsultations.map(async (c: any) => {
+                    const items = await assemedClient.getReceituarios(c.id);
+                    return (items || []).filter((it: any) => it.urlPdf).map((it: any, idx: number) => ({
+                      id: `${c.id}-${idx}`,
+                      consultationId: c.id,
+                      doctor_name: c.profissionalNome || '-',
+                      especialidade: c.especialidadeNome || '-',
+                      created_at: c.dataHoraFim || c.dataHoraCriacao || c.dataCriacao,
+                      urlPdf: it.urlPdf,
+                    }));
+                  })
+                );
+                assemedPrescriptions = rxResults.flatMap(r => r.status === 'fulfilled' ? r.value : []);
               }
             } catch (err) {
-              // Se der erro, ignora e mostra só as locais
+              // Se der erro, ignora
             }
           }
         }
         setConsultations(assemedConsultations);
+        setPrescriptions(assemedPrescriptions);
         setLoading(false);
       } catch (err) {
         toast({ title: 'Erro', description: 'Falha ao buscar dados do usuário', variant: 'destructive' });
@@ -150,8 +174,56 @@ export default function AdminUserDetail() {
   if (loading) return <div>Carregando...</div>;
   if (!user) return <div>Usuário não encontrado.</div>;
 
+  const consultasRealizadas = consultations.filter((c: any) => {
+    const status = (c.status || c.situacao || '').toString().toUpperCase();
+    const desc = (c.situacaoAtendimentoDescricao || '').toLowerCase();
+    return status === 'CONCLUIDO' || desc.includes('conclu') || desc.includes('finaliz');
+  }).length;
+
   return (
     <div className="space-y-8">
+      {/* Resumo */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Plano contratado</CardTitle>
+            <Crown className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl font-bold">
+              {plan?.plan?.name || <span className="text-muted-foreground">Sem plano ativo</span>}
+            </div>
+            {plan && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {formatSubscriptionStatus(plan.status)} · {formatBillingCycle(plan.billing_cycle)}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Consultas realizadas</CardTitle>
+            <Stethoscope className="h-4 w-4 text-emerald-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{consultasRealizadas}</div>
+            <p className="text-xs text-muted-foreground mt-1">de {consultations.length} agendadas</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2 flex flex-row items-center justify-between space-y-0">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Check-ups realizados</CardTitle>
+            <HeartPulse className="h-4 w-4 text-rose-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{checkups.length}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {checkups.length === 0 ? 'Nenhum registrado' : 'Último: ' + new Date(checkups[0].performed_at).toLocaleDateString('pt-BR')}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Dados do Usuário</CardTitle>
@@ -340,27 +412,67 @@ export default function AdminUserDetail() {
 
       <Card>
         <CardHeader>
+          <CardTitle>Histórico de Check-ups</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Data</TableHead>
+                <TableHead>Laboratório</TableHead>
+                <TableHead>Plano</TableHead>
+                <TableHead>Ciclo</TableHead>
+                <TableHead>Registrado por</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {checkups.length === 0 ? (
+                <TableRow><TableCell colSpan={5}>Nenhum check-up realizado</TableCell></TableRow>
+              ) : checkups.map((ck: any) => (
+                <TableRow key={ck.id}>
+                  <TableCell>{ck.performed_at ? new Date(ck.performed_at).toLocaleString('pt-BR') : '-'}</TableCell>
+                  <TableCell>{ck.lab_name || '-'}</TableCell>
+                  <TableCell>{ck.plan_type || '-'}</TableCell>
+                  <TableCell>{ck.billing_cycle ? formatBillingCycle(ck.billing_cycle) : '-'}</TableCell>
+                  <TableCell>{ck.performed_by_name || '-'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Histórico de Receitas</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>ID</TableHead>
+                <TableHead>Consulta</TableHead>
                 <TableHead>Médico</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Especialidade</TableHead>
                 <TableHead>Data</TableHead>
+                <TableHead>PDF</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {prescriptions.length === 0 ? (
-                <TableRow><TableCell colSpan={4}>Nenhuma receita encontrada</TableCell></TableRow>
-              ) : prescriptions.map((rx) => (
+                <TableRow><TableCell colSpan={5}>Nenhuma receita encontrada</TableCell></TableRow>
+              ) : prescriptions.map((rx: any) => (
                 <TableRow key={rx.id}>
-                  <TableCell>{rx.id}</TableCell>
-                  <TableCell>{rx.doctor_name || rx.doctor}</TableCell>
-                  <TableCell>{formatPrescriptionStatus(rx.status)}</TableCell>
-                  <TableCell>{new Date(rx.created_at).toLocaleString('pt-BR')}</TableCell>
+                  <TableCell>#{rx.consultationId}</TableCell>
+                  <TableCell>{rx.doctor_name}</TableCell>
+                  <TableCell>{rx.especialidade}</TableCell>
+                  <TableCell>{rx.created_at ? new Date(rx.created_at).toLocaleString('pt-BR') : '-'}</TableCell>
+                  <TableCell>
+                    {rx.urlPdf ? (
+                      <a href={rx.urlPdf} target="_blank" rel="noopener noreferrer" className="text-primary underline">
+                        Abrir
+                      </a>
+                    ) : '-'}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>

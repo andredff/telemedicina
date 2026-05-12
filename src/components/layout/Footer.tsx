@@ -168,7 +168,7 @@ function Footer(): JSX.Element {
                 <Link
                   key={link.href}
                   to={link.href}
-                  className="hover:text-background transition-colors"
+                  className="hover:text-background transition-colors text-background/70"
                 >
                   {link.label}
                 </Link>

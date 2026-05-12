@@ -1878,7 +1878,7 @@ const fetchProfile = useCallback(async (userId: string) => {
         {/* Consultations history */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-heading font-semibold text-foreground">
+            <h2 className="text-xl font-heading font-semibold text-primary">
               Minhas Consultas
             </h2>
             {accessToken && (

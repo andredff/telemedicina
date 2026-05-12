@@ -107,7 +107,7 @@ const MyCheckups = () => {
             <HeartPulse className="h-5 w-5 text-rose-500" />
           </div>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-primary">
               Meus check-ups
             </h1>
             <p className="text-muted-foreground text-sm">

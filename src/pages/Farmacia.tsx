@@ -228,7 +228,7 @@ const Farmacia = () => {
 
         {/* Page Header */}
         <div>
-          <h1 className="text-3xl font-heading font-bold text-foreground mb-1">
+          <h1 className="text-3xl font-heading font-bold text-primary mb-1">
             Farmácia Online
           </h1>
           <p className="text-muted-foreground">

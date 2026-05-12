@@ -6,7 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Heart, ArrowLeft, Eye, EyeOff, Mail, CheckCircle } from "lucide-react";
+import { ArrowLeft, Eye, EyeOff, Mail, CheckCircle } from "lucide-react";
+import logoNovita from "@/assets/logo-novita.png";
+import heroDoctorImg from "@/assets/hero-doctor.png";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -366,27 +368,35 @@ const Auth = () => {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left side - Hero image */}
-      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/30 to-accent/30" />
-        <img 
-          src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=1200&q=80" 
-          alt="Profissional de saúde" 
-          className="object-cover w-full h-full"
-        />
-        <div className="absolute bottom-0 left-0 right-0 p-12 bg-gradient-to-t from-foreground/95 to-transparent">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="gradient-hero rounded-xl p-3">
-              <Heart className="h-8 w-8 text-primary-foreground" fill="currentColor" />
-            </div>
-            <div>
-              <h1 className="text-3xl font-heading font-bold text-background">Novità</h1>
-              <p className="text-sm text-primary">Home Care & Telemedicina</p>
-            </div>
+      <div className="hidden lg:flex lg:w-1/2 relative overflow-hidden flex-col">
+        {/* Background */}
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-100 to-gray-200" />
+
+        {/* Top content */}
+        <div className="relative z-10 p-10">
+          <div className="flex items-center gap-3">
+            <img src={logoNovita} alt="Novità" className="h-16 w-auto" />
           </div>
-          <h2 className="text-3xl font-heading font-bold text-background mb-2">
+        </div>
+
+        {/* Doctor image anchored to bottom */}
+        <div className="relative z-10 flex-1 flex items-end justify-center">
+          <div className="relative flex items-end justify-center w-[85%]">
+            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-[90%] h-[80%] bg-white/60 rounded-t-full" />
+            <img
+              src="/medica-nvt.png"
+              alt="Profissional de saúde"
+              className="relative z-10 object-contain object-bottom w-full max-h-[80vh]"
+            />
+          </div>
+        </div>
+
+        {/* Bottom overlay text */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 px-10 py-8 bg-gradient-to-t from-gray-200/90 via-gray-100/50 to-transparent">
+          <h2 className="text-2xl font-heading font-bold text-gray-800 mb-1">
             Sua saúde ao alcance de um clique
           </h2>
-          <p className="text-background/80 text-lg">
+          <p className="text-gray-500 text-sm">
             Consultas online 24h, receitas digitais e medicamentos entregues em casa.
           </p>
         </div>
@@ -396,7 +406,7 @@ const Auth = () => {
       <div className="flex-1 flex flex-col">
         {/* Back button */}
         <div className="p-4">
-          <Button variant="ghost" size="sm" asChild>
+          <Button variant="ghost" size="sm" asChild className="text-gray-700 hover:text-gray-900 hover:bg-gray-100">
             <Link to="/" className="gap-2">
               <ArrowLeft className="h-4 w-4" />
               Voltar ao início
@@ -408,8 +418,8 @@ const Auth = () => {
           <div className="w-full max-w-md">
             {/* Mobile logo */}
             <div className="lg:hidden flex items-center gap-3 justify-center mb-8">
-              <div className="gradient-hero rounded-xl p-2.5">
-                <Heart className="h-6 w-6 text-primary-foreground" fill="currentColor" />
+              <div className="rounded-xl p-1">
+                <img src={logoNovita} alt="Novità" className="h-8 w-auto" />
               </div>
               <div>
                 <h1 className="text-2xl font-heading font-bold text-foreground">Novità</h1>
@@ -453,6 +463,7 @@ const Auth = () => {
                         setShowForgotPassword(false);
                         setForgotPasswordSent(false);
                       }}
+                      className="text-gray-700 hover:text-gray-900"
                     >
                       Voltar ao login
                     </Button>
@@ -493,7 +504,7 @@ const Auth = () => {
                       <button
                         type="button"
                         onClick={() => setShowForgotPassword(false)}
-                        className="w-full text-sm text-muted-foreground hover:text-foreground"
+                        className="w-full text-sm text-gray-600 hover:text-gray-900"
                       >
                         Voltar ao login
                       </button>

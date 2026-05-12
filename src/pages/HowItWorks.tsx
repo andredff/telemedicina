@@ -114,9 +114,9 @@ const HowItWorks = () => {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
         <div className="container mx-auto px-4 relative">
           <div className="text-center max-w-3xl mx-auto space-y-6">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-primary">
               Como funciona a{" "}
-              <span className="gradient-text">Novità Telemedicina</span>
+              <span className="text-primary">Novità Telemedicina</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Em apenas 4 passos simples, você tem acesso a consultas médicas de qualidade 
@@ -139,14 +139,14 @@ const HowItWorks = () => {
               >
                 <div className={`space-y-6 ${index % 2 === 1 ? "lg:order-2" : ""}`}>
                   <div className="flex items-center gap-4">
-                    <span className="text-6xl font-heading font-bold gradient-text opacity-50">
+                    <span className="text-6xl font-heading font-bold text-primary opacity-40">
                       {step.number}
                     </span>
                     <div className="w-16 h-16 rounded-2xl gradient-hero flex items-center justify-center">
                       <step.icon className="h-8 w-8 text-primary-foreground" />
                     </div>
                   </div>
-                  <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
+                  <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
                     {step.title}
                   </h2>
                   <p className="text-lg text-muted-foreground leading-relaxed">
@@ -191,7 +191,7 @@ const HowItWorks = () => {
       <section className="py-20 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Vantagens exclusivas
             </h2>
             <p className="text-muted-foreground text-lg">

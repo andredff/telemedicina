@@ -14,6 +14,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { usePrescriptionById } from "@/hooks/use-prescription-search";
+import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
+import { CheckCircle2 } from "lucide-react";
 
 type PharmacyOption = {
   id: string;
@@ -41,6 +43,23 @@ const PrescriptionDetail = () => {
 
   const { prescription, loading: prescriptionLoading, error: prescriptionError } = usePrescriptionById(id);
   const [loading, setLoading] = useState(true);
+  const { isPaid, markAsUnpaid } = usePaidPrescriptions();
+  const pago = id ? isPaid(id) : false;
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from("orders")
+        .select("receita_id, receita_review_status")
+        .eq("receita_id", String(id))
+        .eq("receita_review_status", "rejected");
+      if (cancelled) return;
+      if (data && data.length > 0) markAsUnpaid([String(id)]);
+    })();
+    return () => { cancelled = true; };
+  }, [id, markAsUnpaid]);
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -283,7 +302,7 @@ const PrescriptionDetail = () => {
                       <Checkbox
                         checked={selectedMeds.has(medication.id)}
                         onCheckedChange={() => toggleMedication(medication.id)}
-                        disabled={!medication.in_stock}
+                        disabled={!medication.in_stock || pago}
                       />
                       <div className="flex-1 space-y-2">
                         <div className="flex items-start justify-between">
@@ -340,7 +359,14 @@ const PrescriptionDetail = () => {
                       </span>
                     </div>
 
-                    {selectedMeds.size === 0 && (
+                    {pago ? (
+                      <Alert className="mb-4 border-blue-200 bg-blue-50 text-blue-700">
+                        <CheckCircle2 className="h-4 w-4" />
+                        <AlertDescription>
+                          Você já adquiriu os medicamentos deste receituário.
+                        </AlertDescription>
+                      </Alert>
+                    ) : selectedMeds.size === 0 && (
                       <Alert className="mb-4">
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
@@ -352,12 +378,23 @@ const PrescriptionDetail = () => {
                     <Button
                       className="w-full gap-2 gradient-hero text-primary-foreground"
                       onClick={handleComparePharmacies}
-                      disabled={selectedMeds.size === 0}
+                      disabled={pago || selectedMeds.size === 0}
                     >
-                      <Store className="h-4 w-4" />
-                      Comparar Farmácias
-                      <ChevronRight className="h-4 w-4" />
+                      {pago ? (
+                        <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
+                      ) : (
+                        <><Store className="h-4 w-4" />Comparar Farmácias<ChevronRight className="h-4 w-4" /></>
+                      )}
                     </Button>
+                    {pago && (
+                      <Button
+                        variant="outline"
+                        className="w-full mt-2"
+                        onClick={() => navigate("/orders")}
+                      >
+                        Ver meus pedidos
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>

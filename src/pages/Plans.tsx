@@ -110,9 +110,9 @@ function Plans(): JSX.Element {
             <Badge variant="secondary" className="px-4 py-2">
               Por menos de R$ 1,00 por dia
             </Badge>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground">
+            <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-primary">
               Escolha o plano ideal{" "}
-              <span className="gradient-text">para você</span>
+              <span className="text-primary">para você</span>
             </h1>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
               Consultas ilimitadas com clínico geral 24h em todos os planos.
@@ -306,7 +306,7 @@ function Plans(): JSX.Element {
               <HelpCircle className="h-4 w-4" />
               <span>Perguntas Frequentes</span>
             </div>
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
               Tire suas dúvidas
             </h2>
           </div>

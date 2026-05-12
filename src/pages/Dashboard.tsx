@@ -29,9 +29,9 @@ interface AssemedReceituario {
   especialidade: string;
   profissional: string | null;
   data: string;
+  kind: "receita" | "exame" | "atestado";
+  docIndex: number;
   urlPdf: string;
-  pedidoExameUrl: string | null;
-  atestadoUrl: string | null;
 }
 
 interface ProfileData {
@@ -166,35 +166,32 @@ const Dashboard = () => {
         const validItems = items.filter(i => i.urlPdf);
         if (validItems.length === 0) continue;
 
-        // Classifica PDFs: pedido de exame vs atestado vs receita
+        // Classifica PDFs: atestado > exame > receita
         const classified = await Promise.all(
           validItems.map(async (item) => {
-            if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false, isAtestado: false };
+            let kind: "receita" | "exame" | "atestado" = "receita";
             try {
               const text = await extractTextFromUrl(item.urlPdf);
-              return {
-                urlPdf: item.urlPdf,
-                isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text),
-                isAtestado: !!text && /atestado/i.test(text),
-              };
+              if (text && /atestado/i.test(text)) kind = "atestado";
+              else if (text && /\bexames?\b/i.test(text)) kind = "exame";
             } catch {
-              return { urlPdf: item.urlPdf, isPedidoExame: false, isAtestado: false };
+              // mantém "receita" como fallback
             }
+            return { urlPdf: item.urlPdf, kind };
           })
         );
 
-        const receita = classified.find(c => !c.isPedidoExame && !c.isAtestado) ?? classified[0];
-        const pedidoExame = classified.find(c => c.isPedidoExame) ?? null;
-        const atestado = classified.find(c => c.isAtestado) ?? null;
-
-        found.push({
-          consultationId: consultation.id,
-          especialidade: consultation.especialidadeNome || "Consulta",
-          profissional: consultation.profissionalNome || null,
-          data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
-          urlPdf: receita.urlPdf,
-          pedidoExameUrl: pedidoExame?.urlPdf ?? null,
-          atestadoUrl: atestado?.urlPdf ?? null,
+        // Um card por documento
+        classified.forEach((doc, docIndex) => {
+          found.push({
+            consultationId: consultation.id,
+            especialidade: consultation.especialidadeNome || "Consulta",
+            profissional: consultation.profissionalNome || null,
+            data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+            kind: doc.kind,
+            docIndex,
+            urlPdf: doc.urlPdf,
+          });
         });
 
         if (found.length >= 3) break;
@@ -386,7 +383,7 @@ const Dashboard = () => {
             <p className="text-sm text-muted-foreground font-medium mb-0.5">
               {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
             </p>
-            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
+            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-primary">
               {greeting}, {firstName}!
             </h1>
             <p className="text-muted-foreground mt-1 text-sm sm:text-base">
@@ -432,7 +429,7 @@ const Dashboard = () => {
                   <Crown className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <h2 className="text-base sm:text-lg font-heading font-bold text-foreground">
+                  <h2 className="text-base sm:text-lg font-heading font-bold text-primary">
                     Você ainda não tem um plano
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
@@ -477,7 +474,7 @@ const Dashboard = () => {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-base font-heading font-bold text-foreground leading-tight">
+              <h2 className="text-base font-heading font-bold text-primary leading-tight">
                 Meus Receituários
               </h2>
               <p className="text-xs text-muted-foreground mt-0.5">Últimas prescrições das suas consultas</p>
@@ -527,7 +524,7 @@ const Dashboard = () => {
               </>
             ) : receituarios.length > 0 ? (
               receituarios.map((rec) => {
-                const pago = isPaid(rec.consultationId);
+                const pago = rec.kind === "receita" && isPaid(rec.consultationId);
                 const dataFormatada = (() => {
                   try { return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR }); } catch { return rec.data; }
                 })();
@@ -536,40 +533,66 @@ const Dashboard = () => {
                 })();
                 return (
                 <Card
-                  key={rec.consultationId}
+                  key={`${rec.consultationId}-${rec.docIndex}`}
                   className={`flex flex-col overflow-hidden border transition-all duration-200 hover:shadow-md ${
-                    pago
-                      ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
-                      : "border-border/60 bg-card hover:border-primary/30"
+                    rec.kind === "exame"
+                      ? "border-violet-200 bg-violet-50/30 hover:border-violet-300"
+                      : rec.kind === "atestado"
+                        ? "border-teal-200 bg-teal-50/30 hover:border-teal-300"
+                        : pago
+                          ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
+                          : "border-border/60 bg-card hover:border-primary/30"
                   }`}
                 >
                   {/* Status bar */}
-                  <div className={`h-1 w-full ${pago ? "bg-blue-400" : "bg-emerald-500"}`} />
+                  <div className={`h-1 w-full ${
+                    rec.kind === "exame" ? "bg-violet-400"
+                      : rec.kind === "atestado" ? "bg-teal-400"
+                      : pago ? "bg-blue-400" : "bg-emerald-500"
+                  }`} />
 
                   <div className="p-4 flex flex-col flex-1 gap-3">
                     {/* Header */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                          pago ? "bg-blue-100" : "bg-primary/10"
+                          rec.kind === "exame" ? "bg-violet-100"
+                            : rec.kind === "atestado" ? "bg-teal-100"
+                            : pago ? "bg-blue-100" : "bg-primary/10"
                         }`}>
-                          <FileText className={`h-4 w-4 ${pago ? "text-blue-600" : "text-primary"}`} />
+                          <FileText className={`h-4 w-4 ${
+                            rec.kind === "exame" ? "text-violet-600"
+                              : rec.kind === "atestado" ? "text-teal-600"
+                              : pago ? "text-blue-600" : "text-primary"
+                          }`} />
                         </div>
                         <div className="min-w-0">
-                          <p className="font-semibold text-sm text-foreground leading-tight">Receituário</p>
+                          <p className="font-semibold text-sm text-foreground leading-tight">
+                            {rec.kind === "exame" ? "Pedido de Exame" : rec.kind === "atestado" ? "Atestado" : "Receituário"}
+                          </p>
                           <p className="text-xs text-muted-foreground">#{rec.consultationId}</p>
                         </div>
                       </div>
-                      <Badge className={`shrink-0 text-[10px] font-medium px-2 py-0.5 ${
-                        pago
-                          ? "bg-blue-100 text-blue-700 border-blue-200"
-                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                      }`}>
-                        {pago
-                          ? <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
-                          : <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
-                        }
-                      </Badge>
+                      {rec.kind === "exame" ? (
+                        <Badge className="shrink-0 text-[10px] font-medium px-2 py-0.5 bg-violet-100 text-violet-700 border-violet-200">
+                          Exame
+                        </Badge>
+                      ) : rec.kind === "atestado" ? (
+                        <Badge className="shrink-0 text-[10px] font-medium px-2 py-0.5 bg-teal-100 text-teal-700 border-teal-200">
+                          Atestado
+                        </Badge>
+                      ) : (
+                        <Badge className={`shrink-0 text-[10px] font-medium px-2 py-0.5 ${
+                          pago
+                            ? "bg-blue-100 text-blue-700 border-blue-200"
+                            : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                        }`}>
+                          {pago
+                            ? <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
+                            : <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
+                          }
+                        </Badge>
+                      )}
                     </div>
 
                     {/* Info */}
@@ -592,60 +615,62 @@ const Dashboard = () => {
 
                     {/* Action */}
                     <div className="mt-auto flex flex-col gap-2">
-                      <Button
-                        size="sm"
-                        className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
-                          pago
-                            ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                        }`}
-                        disabled={pago}
-                        onClick={() => openMedicModal(rec)}
-                        variant="ghost"
-                      >
-                        {pago
-                          ? <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
-                          : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
-                        }
-                      </Button>
-                      {pago && rec.urlPdf && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full gap-2 h-9 text-sm font-medium border-slate-200 text-slate-600 hover:bg-slate-50"
-                          asChild
-                        >
-                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer">
-                            <FileText className="h-4 w-4" />
-                            Ver receita
-                          </a>
-                        </Button>
-                      )}
-                      {rec.pedidoExameUrl && (
+                      {rec.kind === "exame" ? (
                         <Button
                           size="sm"
                           variant="outline"
                           className="w-full gap-2 h-9 text-sm font-medium border-violet-200 text-violet-700 hover:bg-violet-50"
                           asChild
                         >
-                          <a href={rec.pedidoExameUrl} target="_blank" rel="noopener noreferrer" download>
+                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer" download>
                             <Download className="h-4 w-4" />
                             Baixar Pedido de Exame
                           </a>
                         </Button>
-                      )}
-                      {rec.atestadoUrl && (
+                      ) : rec.kind === "atestado" ? (
                         <Button
                           size="sm"
                           variant="outline"
                           className="w-full gap-2 h-9 text-sm font-medium border-teal-200 text-teal-700 hover:bg-teal-50"
                           asChild
                         >
-                          <a href={rec.atestadoUrl} target="_blank" rel="noopener noreferrer" download>
+                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer" download>
                             <Download className="h-4 w-4" />
                             Baixar Atestado
                           </a>
                         </Button>
+                      ) : (
+                        <>
+                          <Button
+                            size="sm"
+                            className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
+                              pago
+                                ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                            }`}
+                            disabled={pago}
+                            onClick={() => openMedicModal(rec)}
+                            variant="ghost"
+                          >
+                            {pago
+                              ? <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
+                              : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
+                            }
+                          </Button>
+                          {pago && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="w-full gap-2 h-9 text-sm font-medium border-slate-200 text-slate-600 hover:bg-slate-50"
+                              asChild
+                            >
+                              <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer">
+                                <FileText className="h-4 w-4" />
+                                Ver receita
+                              </a>
+                            </Button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>

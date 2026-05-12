@@ -251,7 +251,7 @@ const LabPanel = () => {
               <FlaskConical className="h-5 w-5 text-emerald-600" />
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl font-heading font-bold text-foreground">
+              <h1 className="text-2xl sm:text-3xl font-heading font-bold text-primary">
                 Painel do Laboratório
               </h1>
               <p className="text-muted-foreground text-sm">

@@ -23,14 +23,17 @@ import { supabase } from "@/integrations/supabase/client";
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
+type DocKind = "receita" | "exame";
+
 interface AssemedReceituario {
   consultationId: number;
+  docIndex: number;
+  kind: DocKind;
   especialidade: string;
   profissional: string | null;
   data: string;
   status: string;
-  urlPdf: string;           // PDF da receita
-  pedidoExameUrl: string | null; // PDF do pedido de exame (se existir)
+  urlPdf: string;
 }
 
 // ─── Cart helpers ─────────────────────────────────────────────────────────────
@@ -125,28 +128,28 @@ const Prescriptions = () => {
           // Classifica cada PDF — pedido de exame vs receita
           const classified = await Promise.all(
             validItems.map(async (item) => {
-              if (validItems.length === 1) return { urlPdf: item.urlPdf, isPedidoExame: false };
               try {
                 const text = await extractTextFromUrl(item.urlPdf);
-                return { urlPdf: item.urlPdf, isPedidoExame: !!text && /pedido\s*de\s*exame/i.test(text) };
+                const kind: DocKind = !!text && /\bexames?\b/i.test(text) ? "exame" : "receita";
+                return { urlPdf: item.urlPdf, kind };
               } catch {
-                return { urlPdf: item.urlPdf, isPedidoExame: false };
+                return { urlPdf: item.urlPdf, kind: "receita" as DocKind };
               }
             })
           );
 
-          // Agrupa: primeira receita + primeiro pedido de exame → um card por consulta
-          const receita = classified.find(c => !c.isPedidoExame) ?? classified[0];
-          const pedidoExame = classified.find(c => c.isPedidoExame) ?? null;
-
-          receituarios.push({
-            consultationId: consultation.id,
-            especialidade: consultation.especialidadeNome || "Consulta",
-            profissional: consultation.profissionalNome || null,
-            data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
-            status: normalizeConsultationStatus(consultation),
-            urlPdf: receita.urlPdf,
-            pedidoExameUrl: pedidoExame?.urlPdf ?? null,
+          // Um card por documento
+          classified.forEach((doc, docIndex) => {
+            receituarios.push({
+              consultationId: consultation.id,
+              docIndex,
+              kind: doc.kind,
+              especialidade: consultation.especialidadeNome || "Consulta",
+              profissional: consultation.profissionalNome || null,
+              data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
+              status: normalizeConsultationStatus(consultation),
+              urlPdf: doc.urlPdf,
+            });
           });
         }
 
@@ -254,7 +257,7 @@ const Prescriptions = () => {
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total de Receituários</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{assemedReceituarios.length}</div>
+                <div className="text-2xl font-bold">{assemedReceituarios.filter(r => r.kind === "receita").length}</div>
               </CardContent>
             </Card>
             <Card>
@@ -301,8 +304,9 @@ const Prescriptions = () => {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filteredReceituarios.map((rec, index) => {
-              const pago = isPaid(rec.consultationId);
+            {filteredReceituarios.map((rec) => {
+              const isExame = rec.kind === "exame";
+              const pago = !isExame && isPaid(rec.consultationId);
               const dataFormatada = (() => {
                 try { return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR }); } catch { return rec.data; }
               })();
@@ -311,38 +315,50 @@ const Prescriptions = () => {
               })();
               return (
               <Card
-                key={`assemed-rec-${rec.consultationId}-${index}`}
+                key={`assemed-rec-${rec.consultationId}-${rec.docIndex}`}
                 className={`flex flex-col overflow-hidden border transition-all duration-200 hover:shadow-md ${
-                  pago
-                    ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
-                    : "border-border/60 bg-card hover:border-primary/30"
+                  isExame
+                    ? "border-violet-200 bg-violet-50/30 hover:border-violet-300"
+                    : pago
+                      ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
+                      : "border-border/60 bg-card hover:border-primary/30"
                 }`}
               >
-                <div className={`h-1 w-full ${pago ? "bg-blue-400" : "bg-emerald-500"}`} />
+                <div className={`h-1 w-full ${isExame ? "bg-violet-400" : pago ? "bg-blue-400" : "bg-emerald-500"}`} />
 
                 <div className="p-5 flex flex-col flex-1 gap-4">
                   {/* Header */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${pago ? "bg-blue-100" : "bg-primary/10"}`}>
-                        <FileText className={`h-5 w-5 ${pago ? "text-blue-600" : "text-primary"}`} />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        isExame ? "bg-violet-100" : pago ? "bg-blue-100" : "bg-primary/10"
+                      }`}>
+                        <FileText className={`h-5 w-5 ${isExame ? "text-violet-600" : pago ? "text-blue-600" : "text-primary"}`} />
                       </div>
                       <div className="min-w-0">
-                        <p className="font-semibold text-sm text-foreground leading-tight">Receituário</p>
+                        <p className="font-semibold text-sm text-foreground leading-tight">
+                          {isExame ? "Pedido de Exame" : "Receituário"}
+                        </p>
                         <p className="text-xs text-muted-foreground">Consulta #{rec.consultationId}</p>
                       </div>
                     </div>
-                    <Badge className={`shrink-0 text-[11px] font-medium px-2 py-0.5 ${
-                      pago
-                        ? "bg-blue-100 text-blue-700 border-blue-200"
-                        : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                    }`}>
-                      {pago ? (
-                        <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
-                      ) : (
-                        <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
-                      )}
-                    </Badge>
+                    {isExame ? (
+                      <Badge className="shrink-0 text-[11px] font-medium px-2 py-0.5 bg-violet-100 text-violet-700 border-violet-200">
+                        Exame
+                      </Badge>
+                    ) : (
+                      <Badge className={`shrink-0 text-[11px] font-medium px-2 py-0.5 ${
+                        pago
+                          ? "bg-blue-100 text-blue-700 border-blue-200"
+                          : "bg-emerald-100 text-emerald-700 border-emerald-200"
+                      }`}>
+                        {pago ? (
+                          <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
+                        ) : (
+                          <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
+                        )}
+                      </Badge>
+                    )}
                   </div>
 
                   {/* Info grid */}
@@ -365,34 +381,35 @@ const Prescriptions = () => {
 
                   {/* Actions */}
                   <div className="mt-auto pt-1 flex flex-col gap-2">
-                    <Button
-                      size="sm"
-                      className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
-                        pago
-                          ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-                          : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      }`}
-                      disabled={pago}
-                      onClick={() => openMedicModal(rec)}
-                      variant="ghost"
-                    >
-                      {pago ? (
-                        <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
-                      ) : (
-                        <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
-                      )}
-                    </Button>
-                    {rec.pedidoExameUrl && (
+                    {isExame ? (
                       <Button
                         size="sm"
                         variant="outline"
                         className="w-full gap-2 h-9 text-sm font-medium border-violet-200 text-violet-700 hover:bg-violet-50"
                         asChild
                       >
-                        <a href={rec.pedidoExameUrl} target="_blank" rel="noopener noreferrer" download>
+                        <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer" download>
                           <Download className="h-4 w-4" />
                           Baixar Pedido de Exame
                         </a>
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
+                          pago
+                            ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                        disabled={pago}
+                        onClick={() => openMedicModal(rec)}
+                        variant="ghost"
+                      >
+                        {pago ? (
+                          <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
+                        ) : (
+                          <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
+                        )}
                       </Button>
                     )}
                   </div>

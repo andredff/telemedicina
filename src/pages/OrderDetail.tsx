@@ -243,7 +243,7 @@ const OrderDetail = () => {
         {/* Header */}
         <div className="flex items-center gap-4 mb-8">
           <div className="flex-1">
-            <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground">
+            <h1 className="text-2xl md:text-3xl font-heading font-bold text-primary">
               Pedido #{order.id.slice(-8).toUpperCase()}
             </h1>
             <p className="text-muted-foreground">

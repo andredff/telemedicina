@@ -1957,9 +1957,44 @@ app.post("/api/receitas/extrair", uploadLegacy.single("file"), async (req, res) 
 // Busca um PDF externo (ex: receituário Assemed) e serve como blob,
 // evitando bloqueio de CORS/X-Frame-Options no iframe do frontend.
 //
-// GET /api/proxy/pdf?url=<encoded_url>
+// Busca um PDF na origem testando múltiplas estratégias de auth (Memed exige token).
+// Retorna { ok, buffer, status }.
+async function fetchPdfWithAuth(url, { assemedToken } = {}) {
+  const memedToken = process.env.MEMED_SECRET_TOKEN || process.env.MEMED_API_KEY || "";
+  const attempts = [
+    { label: "no-auth", headers: { Accept: "application/pdf,*/*" } },
+  ];
+  if (memedToken) {
+    attempts.push({ label: "memed-bearer", headers: { Accept: "application/pdf,*/*", Authorization: `Bearer ${memedToken}` } });
+    attempts.push({ label: "memed-x-api-key", headers: { Accept: "application/pdf,*/*", "X-API-Key": memedToken } });
+  }
+  if (assemedToken) {
+    attempts.push({ label: "assemed-bearer", headers: { Accept: "application/pdf,*/*", Authorization: `Bearer ${assemedToken}` } });
+  }
+
+  let lastStatus = 0;
+  for (const attempt of attempts) {
+    try {
+      const response = await fetch(url, { headers: attempt.headers, signal: AbortSignal.timeout(15000) });
+      lastStatus = response.status;
+      if (response.ok) {
+        const buffer = await response.arrayBuffer();
+        console.log(`[proxy/pdf] sucesso com estratégia="${attempt.label}" (${buffer.byteLength} bytes)`);
+        return { ok: true, buffer, status: response.status };
+      }
+      console.warn(`[proxy/pdf] tentativa "${attempt.label}" retornou ${response.status}`);
+    } catch (err) {
+      console.error(`[proxy/pdf] tentativa "${attempt.label}" falhou:`, err.message);
+    }
+  }
+  return { ok: false, status: lastStatus };
+}
+
+// GET /api/proxy/pdf?url=<encoded_url>&orderId=<id>
+// Se orderId for fornecido e o upload for bem-sucedido, faz cache em Supabase Storage
+// e atualiza orders.receita_url_pdf para a URL pública (próximas chamadas pulam a Memed).
 app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
-  const { url } = req.query;
+  const { url, orderId } = req.query;
   if (!url || typeof url !== "string") {
     return res.status(400).json({ error: "Parâmetro 'url' obrigatório." });
   }
@@ -1971,35 +2006,52 @@ app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "URL inválida." });
   }
 
-  // Permite apenas HTTPS para evitar SSRF em redes internas
   if (parsed.protocol !== "https:") {
     return res.status(400).json({ error: "Apenas URLs HTTPS são permitidas." });
   }
 
-  try {
-    const response = await fetch(url, {
-      headers: { Accept: "application/pdf,*/*" },
-      signal: AbortSignal.timeout(15000),
-    });
+  const assemedToken = req.headers["x-assemed-token"];
+  const result = await fetchPdfWithAuth(url, { assemedToken: typeof assemedToken === "string" ? assemedToken : undefined });
 
-    if (!response.ok) {
-      return res.status(502).json({ error: `Origem retornou ${response.status}` });
-    }
-
-    const contentType = response.headers.get("content-type") || "application/pdf";
-    const buffer = await response.arrayBuffer();
-
-    res.setHeader("Content-Type", contentType);
-    res.setHeader("Content-Length", buffer.byteLength);
-    // Permite embedding no iframe do mesmo domínio
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
-    res.setHeader("Cache-Control", "private, max-age=300");
-    res.send(Buffer.from(buffer));
-  } catch (err) {
-    console.error("[proxy/pdf] Erro ao buscar PDF:", err.message);
-    res.status(502).json({ error: "Não foi possível buscar o PDF.", detail: err.message });
+  if (!result.ok) {
+    return res.status(502).json({ error: `Origem retornou ${result.status || "erro"}. Verifique credenciais Memed.` });
   }
+
+  const buffer = Buffer.from(result.buffer);
+
+  // Cache no Supabase Storage se temos orderId e service-role configurado
+  if (orderId && supabase && typeof orderId === "string") {
+    try {
+      const path = `${orderId}.pdf`;
+      const { error: upErr } = await supabase.storage.from("receitas").upload(path, buffer, {
+        contentType: "application/pdf",
+        upsert: true,
+      });
+      if (upErr) {
+        console.error("[proxy/pdf] Falha ao salvar no Storage:", upErr.message);
+      } else {
+        const { data: pub } = supabase.storage.from("receitas").getPublicUrl(path);
+        if (pub?.publicUrl) {
+          const { error: updErr } = await supabase.from("orders").update({ receita_url_pdf: pub.publicUrl }).eq("id", orderId);
+          if (updErr) {
+            console.error("[proxy/pdf] Falha ao atualizar orders.receita_url_pdf:", updErr.message);
+          } else {
+            console.log(`[proxy/pdf] PDF cacheado em Storage e orders.${orderId} atualizado → ${pub.publicUrl}`);
+          }
+        }
+      }
+    } catch (cacheErr) {
+      console.error("[proxy/pdf] Erro no cache:", cacheErr.message);
+    }
+  }
+
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", "inline; filename=\"receita.pdf\"");
+  res.setHeader("Content-Length", buffer.length);
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  res.setHeader("Content-Security-Policy", "frame-ancestors 'self'");
+  res.setHeader("Cache-Control", "private, max-age=300");
+  res.send(buffer);
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────

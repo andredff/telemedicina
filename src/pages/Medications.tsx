@@ -155,9 +155,9 @@ const Medications = () => {
                 <span>Medicamento em Casa</span>
               </div>
               
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-foreground leading-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-primary leading-tight">
                 Seus medicamentos{" "}
-                <span className="gradient-text">entregues em casa</span>
+                <span className="text-primary">entregues em casa</span>
               </h1>
               
               <p className="text-lg text-muted-foreground max-w-lg leading-relaxed">
@@ -245,7 +245,7 @@ const Medications = () => {
       <section className="py-20 bg-muted/30">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Como funciona
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -282,7 +282,7 @@ const Medications = () => {
       <section className="py-20">
         <div className="container mx-auto px-4">
           <div className="text-center max-w-2xl mx-auto mb-16">
-            <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground mb-4">
+            <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary mb-4">
               Vantagens do programa
             </h2>
             <p className="text-muted-foreground text-lg">
@@ -323,7 +323,7 @@ const Medications = () => {
                 <span>Entrega Programada</span>
               </div>
               
-              <h2 className="text-3xl md:text-4xl font-heading font-bold text-foreground">
+              <h2 className="text-3xl md:text-4xl font-heading font-bold text-primary">
                 Medicamentos de uso contínuo? Deixa com a gente
               </h2>
               

@@ -82,6 +82,11 @@ export async function deleteMedication(id: string): Promise<void> {
   if (error) throw error;
 }
 
+export async function deleteAllMedications(): Promise<void> {
+  const { error } = await supabase.from('medication_catalog').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+  if (error) throw error;
+}
+
 /**
  * Upsert medications in bulk. Deduplicates by (name, dosage):
  * if a row with the same name+dosage already exists it is updated,

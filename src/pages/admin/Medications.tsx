@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { MedicationCatalog, MedicationImportRow, PharmacyFull } from '@/types/inventory';
 import {
-  getMedicationCatalog, getPharmacies, deleteMedication,
+  getMedicationCatalog, getPharmacies, deleteMedication, deleteAllMedications,
   updateMedication, upsertMedication, bulkUpsertMedications,
   getMedicationCategories,
 } from '@/services/inventoryService';
@@ -274,8 +274,11 @@ export default function AdminMedications() {
     setImportProgress(0);
 
     try {
-      // Default pharmacy: first available, or null
-      const defaultPharmacyId = pharmacies[0]?.id ?? null;
+      // Default pharmacy: NOVITA (fallback to first available)
+      const defaultPharmacyId =
+        pharmacies.find((p) => p.name?.toUpperCase() === 'NOVITA')?.id
+        ?? pharmacies[0]?.id
+        ?? null;
 
       // Deduplicate by (name, dosage) — keep last occurrence (mirrors upsert behaviour)
       const seen = new Map<string, typeof importable[number]>();
@@ -413,6 +416,33 @@ export default function AdminMedications() {
     loadAll();
   }
 
+  const [deletingAll, setDeletingAll] = useState(false);
+  async function handleDeleteAll() {
+    const count = medications.length;
+    if (count === 0) {
+      toast({ title: 'Nada para excluir', description: 'O catálogo já está vazio.' });
+      return;
+    }
+    const confirmation = prompt(
+      `Esta ação vai apagar TODOS os ${count} medicamentos do catálogo. Esta operação é irreversível.\n\nDigite EXCLUIR para confirmar:`
+    );
+    if (confirmation !== 'EXCLUIR') return;
+    setDeletingAll(true);
+    try {
+      await deleteAllMedications();
+      toast({ title: 'Catálogo limpo', description: `${count} medicamentos foram excluídos.` });
+      loadAll();
+    } catch (err) {
+      toast({
+        title: 'Erro ao excluir',
+        description: err instanceof Error ? err.message : 'Falha desconhecida',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingAll(false);
+    }
+  }
+
   // ── Filter + pagination ────────────────────────────────────────────────────
 
   const PAGE_SIZE = 20;
@@ -496,6 +526,15 @@ export default function AdminMedications() {
           </Button>
           <Button onClick={openNew} className="gap-2">
             <Plus className="h-4 w-4" />Novo Medicamento
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleDeleteAll}
+            disabled={deletingAll || medications.length === 0}
+            className="gap-2"
+          >
+            <Trash2 className="h-4 w-4" />
+            {deletingAll ? 'Excluindo...' : 'Excluir Todos'}
           </Button>
         </div>
       </div>

@@ -686,7 +686,7 @@ const MyPlan = () => {
 
         {/* Page Title */}
         <div className="mb-8">
-          <h1 className="text-2xl md:text-3xl font-heading font-bold text-foreground mb-2">
+          <h1 className="text-2xl md:text-3xl font-heading font-bold text-primary mb-2">
             {subscription?.plan ? 'Alterar Plano' : 'Escolha seu Plano'}
           </h1>
           <p className="text-muted-foreground">

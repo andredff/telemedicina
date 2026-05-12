@@ -285,7 +285,7 @@ const CheckoutConsultation = () => {
 
         <div className="mx-auto max-w-5xl">
           <div className="mb-6 sm:mb-10 text-center px-2">
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-foreground mb-2 tracking-tight">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-heading font-bold text-primary mb-2 tracking-tight">
               Comprar Consultas Avulsas
             </h1>
             <p className="text-sm sm:text-base text-muted-foreground">

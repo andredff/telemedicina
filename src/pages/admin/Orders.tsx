@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AdminQueries } from '@/integrations/supabase/adminClient';
+import { supabase } from '@/integrations/supabase/client';
 import {
   sendOrderStatusNotification,
   sendLogisticsServiceOrder,
@@ -321,22 +322,32 @@ export default function AdminOrders() {
     }
   };
 
-  const loadPdfViaProxy = async (pdfUrl: string) => {
+  const loadPdfViaProxy = async (pdfUrl: string, orderId?: string) => {
     setLoadingPdf(true);
     setPdfBlobUrl(null);
     try {
       const LOCAL_SERVER = import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:5174';
-      const res = await fetch(
-        `${LOCAL_SERVER}/api/proxy/pdf?url=${encodeURIComponent(pdfUrl)}`,
-        { credentials: 'include' }
-      );
+      const { data: { session } } = await supabase.auth.getSession();
+      const assemedToken = (() => {
+        try { return sessionStorage.getItem('assemed_access_token') || ''; } catch { return ''; }
+      })();
+
+      const qs = new URLSearchParams({ url: pdfUrl });
+      if (orderId) qs.set('orderId', orderId);
+
+      const headers: Record<string, string> = {};
+      if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+      if (assemedToken) headers['X-Assemed-Token'] = assemedToken;
+
+      const res = await fetch(`${LOCAL_SERVER}/api/proxy/pdf?${qs.toString()}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      setPdfBlobUrl(URL.createObjectURL(blob));
+      const rawBlob = await res.blob();
+      // Reembrulha com type application/pdf para o Chrome usar o viewer interno em vez de baixar
+      const pdfBlob = new Blob([rawBlob], { type: 'application/pdf' });
+      setPdfBlobUrl(URL.createObjectURL(pdfBlob));
     } catch (err) {
       logger.error('[AdminOrders] Erro ao carregar PDF via proxy:', err);
-      // Fallback: tenta direto (pode falhar por CORS)
-      setPdfBlobUrl(pdfUrl);
+      setPdfBlobUrl(null);
     } finally {
       setLoadingPdf(false);
     }
@@ -541,7 +552,7 @@ export default function AdminOrders() {
                           onClick={() => {
                             setReviewOrder(order);
                             setReviewNotes('');
-                            if (order.receita_url_pdf) loadPdfViaProxy(order.receita_url_pdf);
+                            if (order.receita_url_pdf) loadPdfViaProxy(order.receita_url_pdf, order.id);
                           }}
                           title="Revisar receita"
                         >
