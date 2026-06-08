@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import PageHeader from "@/components/PageHeader";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
-import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -202,7 +201,7 @@ const Orders = () => {
   const [loading, setLoading] = useState(true);
   const [, setUser] = useState<User | null>(null);
   const [, setSession] = useState<Session | null>(null);
-  const { accessToken } = useAssemedToken();
+
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -535,7 +534,7 @@ const Orders = () => {
         </div>
       </main>
 
-      <ActiveConsultationBanner accessToken={accessToken} />
+      <ActiveConsultationBanner />
     </div>
   );
 };

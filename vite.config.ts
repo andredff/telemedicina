@@ -114,11 +114,6 @@ const docsRoutesPlugin = () => ({
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const isSandbox = env.VITE_ASSEMED_SANDBOX === "true";
-  const assemedApiUrl = isSandbox
-    ? "https://dev-api-assemed.azurewebsites.net"
-    : "https://api.assemedtelemedicina.com";
-
   const resendApiKey = env.RESEND_API_KEY || "";
 
   return {
@@ -126,14 +121,6 @@ export default defineConfig(({ mode }) => {
       host: "::",
       port: 5173,
       proxy: {
-        // Proxy para API Assemed - remove apenas "/api/assemed" e mantém o resto
-        // Ex: /api/assemed/api/Auth/login-externo -> /api/Auth/login-externo
-        "/api/assemed": {
-          target: assemedApiUrl,
-          changeOrigin: true,
-          secure: false,
-          rewrite: (path) => path.replace(/^\/api\/assemed/, ""),
-        },
         // Proxy para endpoints de integrações no Express server (dev)
         "/api/integrations": {
           target: "http://localhost:5174",

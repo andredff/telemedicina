@@ -24,7 +24,6 @@ import {
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
-import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   Crown,
   Star,
@@ -126,8 +125,6 @@ const MyPlan = () => {
   const [selectedPlan, setSelectedPlan] = useState<PlanData | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const [planAction, setPlanAction] = useState<'upgrade' | 'downgrade' | 'subscribe'>('subscribe');
-  const { accessToken } = useAssemedToken();
-  
   // Dependentes
   const [dependents, setDependents] = useState<Dependent[]>([]);
   const [loadingDependents, setLoadingDependents] = useState(false);
@@ -854,7 +851,7 @@ const MyPlan = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      <ActiveConsultationBanner accessToken={accessToken} />
+      <ActiveConsultationBanner />
     </div>
   );
 };

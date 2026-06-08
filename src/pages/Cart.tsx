@@ -6,7 +6,6 @@ import { Separator } from "@/components/ui/separator";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
-import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { useCart } from "@/hooks/useCart";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -200,7 +199,7 @@ const Cart = () => {
   const catalogItems = cart.catalogItems;
   const [loading, setLoading] = useState(true);
   const [shippingConfig, setShippingConfig] = useState<ShippingConfig | null>(null);
-  const { accessToken: assemedAccessToken } = useAssemedToken();
+
 
   const totalItems = cartItems.length + catalogItems.length;
 
@@ -509,7 +508,7 @@ const Cart = () => {
         </div>
       )}
 
-      <ActiveConsultationBanner accessToken={assemedAccessToken} />
+      <ActiveConsultationBanner />
     </div>
   );
 };

@@ -1,18 +1,18 @@
 import { useState } from "react";
-import { Loader2, AlertCircle, RefreshCw, X, ExternalLink } from "lucide-react";
+import { Loader2, AlertCircle, RefreshCw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { getWhiteLabelConsultationUrl } from "@/integrations/assemed/config";
 
 interface TelemedicineFrameProps {
-  accessToken: string;
+  accessToken?: string;
+  iframeUrl?: string;
   tipoConsulta?: "imediata" | "agendada";
   onClose?: () => void;
   title?: string;
 }
 
 export function TelemedicineFrame({
-  accessToken,
+  iframeUrl = "",
   tipoConsulta = "imediata",
   onClose,
   title = "Telemedicina Novità",
@@ -20,8 +20,6 @@ export function TelemedicineFrame({
   const [isLoading, setIsLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
   const [key, setKey] = useState(0);
-
-  const iframeUrl = getWhiteLabelConsultationUrl(accessToken, tipoConsulta);
 
   const handleLoad = () => {
     setIsLoading(false);

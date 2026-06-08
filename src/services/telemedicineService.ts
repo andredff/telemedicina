@@ -1,4 +1,3 @@
-import { TELEMEDICINA_IFRAME_URL } from "@/integrations/assemed";
 import { supabase } from "@/integrations/supabase/client";
 
 // ==========================================
@@ -126,13 +125,3 @@ export async function canAccessTelemedicine(userId: string): Promise<{
   };
 }
 
-// ==========================================
-// IFRAME URL
-// ==========================================
-
-/**
- * Obtém a URL do iframe de telemedicina
- */
-export function getTelemedicineIframeUrl(): string {
-  return TELEMEDICINA_IFRAME_URL;
-}

@@ -1,16 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import Header from "@/components/Header";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
-import { useAssemedToken } from "@/hooks/useAssemedToken";
 import {
   FileText, Calendar, ChevronRight, Video, Pill, Crown,
-  Stethoscope, ArrowRight, Sparkles, Package, CheckCircle2,
-  ShoppingCart, User, Download, HeartPulse,
+  Stethoscope, ArrowRight, Sparkles, Package, HeartPulse,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
@@ -18,21 +14,7 @@ import { getPlanColor } from "@/data/plansData";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { normalizeConsultationStatus } from "@/integrations/assemed/types";
-import { PrescriptionMedicationsModal } from "@/components/prescription/PrescriptionMedicationsModal";
-import { usePaidPrescriptions } from "@/hooks/usePaidPrescriptions";
-import { extractTextFromUrl } from "@/services/prescriptionParserService";
 import SupportFAB from "@/components/SupportFAB";
-
-interface AssemedReceituario {
-  consultationId: number;
-  especialidade: string;
-  profissional: string | null;
-  data: string;
-  kind: "receita" | "exame" | "atestado";
-  docIndex: number;
-  urlPdf: string;
-}
 
 interface ProfileData {
   full_name: string;
@@ -69,21 +51,6 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [subscription, setSubscription] = useState<UserSubscription | null>(null);
-  const [receituarios, setReceituarios] = useState<AssemedReceituario[]>([]);
-  const [loadingReceituarios, setLoadingReceituarios] = useState(true);
-
-  // ── Prescription modal state ───────────────────────────────────────────────
-  const [medicModalOpen, setMedicModalOpen] = useState(false);
-  const [selectedRec, setSelectedRec] = useState<AssemedReceituario | null>(null);
-
-  const { accessToken: assemedAccessToken } = useAssemedToken();
-  const { isPaid, markAsUnpaid } = usePaidPrescriptions();
-
-  const openMedicModal = (rec: AssemedReceituario) => {
-    setSelectedRec(rec);
-    setMedicModalOpen(true);
-  };
-
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -139,70 +106,6 @@ const Dashboard = () => {
     };
 
     setProfile(profileData);
-  };
-
-  const fetchReceituarios = async (token: string) => {
-    setLoadingReceituarios(true);
-    try {
-      const { assemedClient } = await import("@/integrations/assemed/client");
-      assemedClient.setAccessToken(token);
-
-      const response = await assemedClient.getConsultations(20, 0);
-      const consultations = (response.items || []).filter(
-        c => normalizeConsultationStatus(c) !== "CANCELADO"
-      );
-
-      const results = await Promise.allSettled(
-        consultations.map(async (c) => {
-          const items = await assemedClient.getReceituarios(c.id);
-          return { consultation: c, items };
-        })
-      );
-
-      const found: AssemedReceituario[] = [];
-      for (const result of results) {
-        if (result.status !== "fulfilled") continue;
-        const { consultation, items } = result.value;
-        const validItems = items.filter(i => i.urlPdf);
-        if (validItems.length === 0) continue;
-
-        // Classifica PDFs: atestado > exame > receita
-        const classified = await Promise.all(
-          validItems.map(async (item) => {
-            let kind: "receita" | "exame" | "atestado" = "receita";
-            try {
-              const text = await extractTextFromUrl(item.urlPdf);
-              if (text && /atestado/i.test(text)) kind = "atestado";
-              else if (text && /\bexames?\b/i.test(text)) kind = "exame";
-            } catch {
-              // mantém "receita" como fallback
-            }
-            return { urlPdf: item.urlPdf, kind };
-          })
-        );
-
-        // Um card por documento
-        classified.forEach((doc, docIndex) => {
-          found.push({
-            consultationId: consultation.id,
-            especialidade: consultation.especialidadeNome || "Consulta",
-            profissional: consultation.profissionalNome || null,
-            data: consultation.dataHoraFim || consultation.dataHoraCriacao || consultation.dataCriacao,
-            kind: doc.kind,
-            docIndex,
-            urlPdf: doc.urlPdf,
-          });
-        });
-
-        if (found.length >= 3) break;
-      }
-
-      setReceituarios(found);
-    } catch (err) {
-      logger.error("Error fetching receituarios:", err);
-    } finally {
-      setLoadingReceituarios(false);
-    }
   };
 
   const fetchSubscription = async (userId: string) => {
@@ -272,35 +175,6 @@ const Dashboard = () => {
 
     return () => subscription.unsubscribe();
   }, [navigate]);
-
-  useEffect(() => {
-    if (assemedAccessToken) {
-      fetchReceituarios(assemedAccessToken);
-    } else {
-      setLoadingReceituarios(false);
-    }
-  }, [assemedAccessToken]);
-
-  // Verifica pedidos rejeitados e libera o botão "Adquirir medicamentos"
-  useEffect(() => {
-    if (receituarios.length === 0) return;
-
-    const checkRejectedOrders = async () => {
-      const consultationIds = receituarios.map(r => String(r.consultationId));
-      const { data } = await supabase
-        .from("orders")
-        .select("receita_id, receita_review_status")
-        .in("receita_id", consultationIds)
-        .eq("receita_review_status", "rejected");
-
-      if (data && data.length > 0) {
-        const rejectedIds = data.map(o => String(o.receita_id));
-        markAsUnpaid(rejectedIds);
-      }
-    };
-
-    checkRejectedOrders();
-  }, [receituarios, markAsUnpaid]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -490,225 +364,23 @@ const Dashboard = () => {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {loadingReceituarios ? (
-              <>
-                {[0, 1, 2].map((i) => (
-                  <Card key={i} className="bg-card border-border/50">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-2">
-                          <Skeleton className="h-5 w-5 rounded" />
-                          <Skeleton className="h-4 w-28" />
-                        </div>
-                        <Skeleton className="h-5 w-16 rounded-full" />
-                      </div>
-                      <Skeleton className="h-3 w-36 mt-2" />
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="flex justify-between">
-                        <div className="space-y-1">
-                          <Skeleton className="h-3 w-16" />
-                          <Skeleton className="h-4 w-24" />
-                        </div>
-                        <div className="space-y-1">
-                          <Skeleton className="h-3 w-16" />
-                          <Skeleton className="h-4 w-20" />
-                        </div>
-                      </div>
-                      <Skeleton className="h-8 w-full rounded-md" />
-                      <Skeleton className="h-8 w-full rounded-md" />
-                    </CardContent>
-                  </Card>
-                ))}
-              </>
-            ) : receituarios.length > 0 ? (
-              receituarios.map((rec) => {
-                const pago = rec.kind === "receita" && isPaid(rec.consultationId);
-                const dataFormatada = (() => {
-                  try { return format(new Date(rec.data), "dd/MM/yyyy", { locale: ptBR }); } catch { return rec.data; }
-                })();
-                const horaFormatada = (() => {
-                  try { return format(new Date(rec.data), "HH:mm", { locale: ptBR }); } catch { return ""; }
-                })();
-                return (
-                <Card
-                  key={`${rec.consultationId}-${rec.docIndex}`}
-                  className={`flex flex-col overflow-hidden border transition-all duration-200 hover:shadow-md ${
-                    rec.kind === "exame"
-                      ? "border-violet-200 bg-violet-50/30 hover:border-violet-300"
-                      : rec.kind === "atestado"
-                        ? "border-teal-200 bg-teal-50/30 hover:border-teal-300"
-                        : pago
-                          ? "border-blue-200 bg-blue-50/30 hover:border-blue-300"
-                          : "border-border/60 bg-card hover:border-primary/30"
-                  }`}
-                >
-                  {/* Status bar */}
-                  <div className={`h-1 w-full ${
-                    rec.kind === "exame" ? "bg-violet-400"
-                      : rec.kind === "atestado" ? "bg-teal-400"
-                      : pago ? "bg-blue-400" : "bg-emerald-500"
-                  }`} />
-
-                  <div className="p-4 flex flex-col flex-1 gap-3">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                          rec.kind === "exame" ? "bg-violet-100"
-                            : rec.kind === "atestado" ? "bg-teal-100"
-                            : pago ? "bg-blue-100" : "bg-primary/10"
-                        }`}>
-                          <FileText className={`h-4 w-4 ${
-                            rec.kind === "exame" ? "text-violet-600"
-                              : rec.kind === "atestado" ? "text-teal-600"
-                              : pago ? "text-blue-600" : "text-primary"
-                          }`} />
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-sm text-foreground leading-tight">
-                            {rec.kind === "exame" ? "Pedido de Exame" : rec.kind === "atestado" ? "Atestado" : "Receituário"}
-                          </p>
-                          <p className="text-xs text-muted-foreground">#{rec.consultationId}</p>
-                        </div>
-                      </div>
-                      {rec.kind === "exame" ? (
-                        <Badge className="shrink-0 text-[10px] font-medium px-2 py-0.5 bg-violet-100 text-violet-700 border-violet-200">
-                          Exame
-                        </Badge>
-                      ) : rec.kind === "atestado" ? (
-                        <Badge className="shrink-0 text-[10px] font-medium px-2 py-0.5 bg-teal-100 text-teal-700 border-teal-200">
-                          Atestado
-                        </Badge>
-                      ) : (
-                        <Badge className={`shrink-0 text-[10px] font-medium px-2 py-0.5 ${
-                          pago
-                            ? "bg-blue-100 text-blue-700 border-blue-200"
-                            : "bg-emerald-100 text-emerald-700 border-emerald-200"
-                        }`}>
-                          {pago
-                            ? <><CheckCircle2 className="h-3 w-3 mr-1" />Adquirido</>
-                            : <><span className="h-1.5 w-1.5 rounded-full bg-emerald-500 mr-1.5 inline-block" />Disponível</>
-                          }
-                        </Badge>
-                      )}
-                    </div>
-
-                    {/* Info */}
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Stethoscope className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                        <span className="text-foreground font-medium truncate">{rec.especialidade}</span>
-                      </div>
-                      {rec.profissional && (
-                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                          <User className="h-3.5 w-3.5 shrink-0" />
-                          <span className="truncate">{rec.profissional}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Calendar className="h-3.5 w-3.5 shrink-0" />
-                        <span>{dataFormatada}{horaFormatada && <span className="ml-1 opacity-70">· {horaFormatada}</span>}</span>
-                      </div>
-                    </div>
-
-                    {/* Action */}
-                    <div className="mt-auto flex flex-col gap-2">
-                      {rec.kind === "exame" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full gap-2 h-9 text-sm font-medium border-violet-200 text-violet-700 hover:bg-violet-50"
-                          asChild
-                        >
-                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer" download>
-                            <Download className="h-4 w-4" />
-                            Baixar Pedido de Exame
-                          </a>
-                        </Button>
-                      ) : rec.kind === "atestado" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="w-full gap-2 h-9 text-sm font-medium border-teal-200 text-teal-700 hover:bg-teal-50"
-                          asChild
-                        >
-                          <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer" download>
-                            <Download className="h-4 w-4" />
-                            Baixar Atestado
-                          </a>
-                        </Button>
-                      ) : (
-                        <>
-                          <Button
-                            size="sm"
-                            className={`w-full gap-2 h-9 text-sm font-medium transition-all ${
-                              pago
-                                ? "bg-blue-50 text-blue-700 border border-blue-200 hover:bg-blue-100"
-                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                            }`}
-                            disabled={pago}
-                            onClick={() => openMedicModal(rec)}
-                            variant="ghost"
-                          >
-                            {pago
-                              ? <><CheckCircle2 className="h-4 w-4" />Medicamentos adquiridos</>
-                              : <><ShoppingCart className="h-4 w-4" />Adquirir medicamentos</>
-                            }
-                          </Button>
-                          {pago && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="w-full gap-2 h-9 text-sm font-medium border-slate-200 text-slate-600 hover:bg-slate-50"
-                              asChild
-                            >
-                              <a href={rec.urlPdf} target="_blank" rel="noopener noreferrer">
-                                <FileText className="h-4 w-4" />
-                                Ver receita
-                              </a>
-                            </Button>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-                );
-              })
-            ) : (
-              <div className="col-span-full">
-                <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border bg-muted/30">
-                  <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
-                    <FileText className="h-7 w-7 text-muted-foreground" />
-                  </div>
-                  <p className="font-medium text-foreground mb-1">Nenhum receituário ainda</p>
-                  <p className="text-sm text-muted-foreground mb-4 text-center max-w-xs">
-                    Seus receituários aparecerão aqui após consultas realizadas.
-                  </p>
-                  <Button variant="outline" size="sm" onClick={() => navigate("/prescriptions")}>
-                    Ver receituários
-                  </Button>
-                </div>
-              </div>
-            )}
+          <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border bg-muted/30">
+            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
+              <FileText className="h-7 w-7 text-muted-foreground" />
+            </div>
+            <p className="font-medium text-foreground mb-1">Nenhum receituário ainda</p>
+            <p className="text-sm text-muted-foreground mb-4 text-center max-w-xs">
+              Seus receituários aparecerão aqui após consultas realizadas.
+            </p>
+            <Button variant="outline" size="sm" onClick={() => navigate("/prescriptions")}>
+              Ver receituários
+            </Button>
           </div>
         </div>
 
       </main>
 
-      {/* Floating consultation banner */}
-      <ActiveConsultationBanner accessToken={assemedAccessToken} />
-
-
-      <PrescriptionMedicationsModal
-        open={medicModalOpen}
-        onOpenChange={setMedicModalOpen}
-        prescriptionPdfUrl={selectedRec?.urlPdf}
-        prescriptionTitle={selectedRec ? `Consulta #${selectedRec.consultationId}` : undefined}
-        consultationId={selectedRec?.consultationId}
-      />
+      <ActiveConsultationBanner />
 
       <SupportFAB />
     </div>

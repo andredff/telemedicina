@@ -15,7 +15,6 @@ import BackLink from "@/components/BackLink";
 import { useToast } from "@/hooks/use-toast";
 import { TelemedicineFrame, AccessBlockedModal } from "@/components/telemedicine";
 import { useSubscriptionStatus, useCanAccessTelemedicine } from "@/hooks/use-telemedicine";
-import { useAssemedAuth } from "@/hooks/useAssemedAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import type { User } from "@supabase/supabase-js";
@@ -32,7 +31,7 @@ interface UserProfile {
 const Telemedicine = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { authenticate, isAuthenticating } = useAssemedAuth();
+  const isAuthenticating = false;
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -154,24 +153,10 @@ const Telemedicine = () => {
     }
 
     toast({
-      title: "Autenticando...",
-      description: tipo === "imediata"
-        ? "Preparando consulta imediata..."
-        : "Preparando agendamento de consulta...",
+      title: "Serviço indisponível",
+      description: "O serviço de telemedicina está temporariamente indisponível.",
+      variant: "destructive",
     });
-
-    try {
-      const token = await authenticate(cpf, profile);
-      setAccessToken(token);
-      setTipoConsulta(tipo);
-    } catch (error: unknown) {
-      logger.error("Erro ao acessar telemedicina:", error);
-      toast({
-        title: "Erro ao acessar telemedicina",
-        description: error instanceof Error ? error.message : "Não foi possível acessar a telemedicina. Tente novamente.",
-        variant: "destructive",
-      });
-    }
   };
 
   if (loading) {

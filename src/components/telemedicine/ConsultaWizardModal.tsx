@@ -16,7 +16,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import type { AnamneseResposta } from "@/integrations/assemed/types";
+interface AnamneseResposta {
+  perguntaQuestionarioAnamneseId: number;
+  opcoesRespondidas: { opcoesPerguntaQuestionarioAnamneseId: number }[];
+  texto: string;
+}
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 

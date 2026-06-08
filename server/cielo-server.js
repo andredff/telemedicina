@@ -25,71 +25,6 @@ const ALLOWED_ORIGINS = process.env.CORS_ORIGINS
 app.use(cors(ALLOWED_ORIGINS ? { origin: ALLOWED_ORIGINS } : undefined));
 app.use(express.json());
 
-// ─── Proxy Assemed — injeta credenciais server-side ──────────────────────────
-const ASSEMED_TARGET = process.env.ASSEMED_SANDBOX === "true"
-  ? "https://dev-api-assemed.azurewebsites.net"
-  : "https://api.assemedtelemedicina.com";
-
-const ASSEMED_CLIENT_ID     = process.env.ASSEMED_CLIENT_ID     || "";
-const ASSEMED_CLIENT_SECRET = process.env.ASSEMED_CLIENT_SECRET || "";
-const ASSEMED_CNPJ          = process.env.ASSEMED_CNPJ          || "";
-
-app.options("/api/assemed/*", (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  res.sendStatus(204);
-});
-
-app.all("/api/assemed/*", async (req, res) => {
-  const assemedPath = req.path.replace(/^\/api\/assemed/, "");
-  const url = `${ASSEMED_TARGET}${assemedPath}`;
-
-  try {
-    const headers = { "Content-Type": "application/json" };
-    if (req.headers.authorization) headers["Authorization"] = req.headers.authorization;
-
-    // Injeta credenciais no body para rotas que as exigem
-    let body;
-    if (req.method !== "GET" && req.method !== "HEAD") {
-      const merged = { ...req.body };
-      console.log("[Assemed Proxy] ENV clientId presente:", !!ASSEMED_CLIENT_ID, "| body keys:", Object.keys(merged));
-      if ("clientId"     in merged) merged.clientId     = ASSEMED_CLIENT_ID;
-      if ("clientSecret" in merged) merged.clientSecret = ASSEMED_CLIENT_SECRET;
-      if ("cnpj"         in merged && !merged.cnpj) merged.cnpj = ASSEMED_CNPJ;
-      // cadastro-externo usa identificacao.clientId / identificacao.clientSecret
-      if (merged.identificacao) {
-        merged.identificacao = {
-          ...merged.identificacao,
-          clientId:     ASSEMED_CLIENT_ID,
-          clientSecret: ASSEMED_CLIENT_SECRET,
-        };
-      }
-      body = JSON.stringify(merged);
-      console.log("[Assemed Proxy] Body enviado para Assemed:", body.substring(0, 300));
-    }
-
-    const upstream = await fetch(url, { method: req.method, headers, body });
-    const contentType = upstream.headers.get("content-type") || "";
-
-    res.status(upstream.status);
-    res.setHeader("Access-Control-Allow-Origin", "*");
-    if (contentType) res.setHeader("Content-Type", contentType);
-
-    if (contentType.includes("application/json")) {
-      const data = await upstream.json();
-      console.log("[Assemed Proxy] Resposta", upstream.status, url, JSON.stringify(data).substring(0, 200));
-      return res.json(data);
-    }
-    const text = await upstream.text();
-    console.log("[Assemed Proxy] Resposta", upstream.status, url, text.substring(0, 200));
-    return res.send(text);
-  } catch (err) {
-    console.error("[Assemed Proxy] Erro:", err.message);
-    res.status(502).json({ error: "Erro ao conectar com a API Assemed" });
-  }
-});
-
 // ─── Rate limiting ──────────────────────────────────────────────────────────
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
@@ -1954,12 +1889,12 @@ app.post("/api/receitas/extrair", uploadLegacy.single("file"), async (req, res) 
 });
 
 // ─── PDF Proxy ────────────────────────────────────────────────────────────────
-// Busca um PDF externo (ex: receituário Assemed) e serve como blob,
+// Busca um PDF externo e serve como blob,
 // evitando bloqueio de CORS/X-Frame-Options no iframe do frontend.
 //
 // Busca um PDF na origem testando múltiplas estratégias de auth (Memed exige token).
 // Retorna { ok, buffer, status }.
-async function fetchPdfWithAuth(url, { assemedToken } = {}) {
+async function fetchPdfWithAuth(url) {
   const memedToken = process.env.MEMED_SECRET_TOKEN || process.env.MEMED_API_KEY || "";
   const attempts = [
     { label: "no-auth", headers: { Accept: "application/pdf,*/*" } },
@@ -1967,9 +1902,6 @@ async function fetchPdfWithAuth(url, { assemedToken } = {}) {
   if (memedToken) {
     attempts.push({ label: "memed-bearer", headers: { Accept: "application/pdf,*/*", Authorization: `Bearer ${memedToken}` } });
     attempts.push({ label: "memed-x-api-key", headers: { Accept: "application/pdf,*/*", "X-API-Key": memedToken } });
-  }
-  if (assemedToken) {
-    attempts.push({ label: "assemed-bearer", headers: { Accept: "application/pdf,*/*", Authorization: `Bearer ${assemedToken}` } });
   }
 
   let lastStatus = 0;
@@ -2010,8 +1942,7 @@ app.get("/api/proxy/pdf", requireAuth, async (req, res) => {
     return res.status(400).json({ error: "Apenas URLs HTTPS são permitidas." });
   }
 
-  const assemedToken = req.headers["x-assemed-token"];
-  const result = await fetchPdfWithAuth(url, { assemedToken: typeof assemedToken === "string" ? assemedToken : undefined });
+  const result = await fetchPdfWithAuth(url);
 
   if (!result.ok) {
     return res.status(502).json({ error: `Origem retornou ${result.status || "erro"}. Verifique credenciais Memed.` });

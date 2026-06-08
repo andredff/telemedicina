@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import Header from "@/components/Header";
 import BackLink from "@/components/BackLink";
 import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
-import { useAssemedToken } from "@/hooks/useAssemedToken";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,8 +36,6 @@ interface Prescription {
 const Farmacia = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { accessToken: assemedAccessToken } = useAssemedToken();
-
   // Auth
   const [user, setUser] = useState<SupabaseUser | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -149,9 +146,7 @@ const Farmacia = () => {
     setIsSearching(true);
     setReceituarios([]);
     try {
-      const { assemedClient } = await import("@/integrations/assemed/client");
-      if (assemedAccessToken) assemedClient.setAccessToken(assemedAccessToken);
-      const items = await assemedClient.getReceituarios(Number(consultationId.trim()));
+      const items: { urlPdf: string }[] = [];
       setIsSearching(false);
       if (items && items.length > 0) {
         // Se vier mais de 1 PDF, tenta detectar "PEDIDO DE EXAME" no texto de cada um
@@ -516,7 +511,7 @@ const Farmacia = () => {
         />
       )}
 
-      <ActiveConsultationBanner accessToken={assemedAccessToken} />
+      <ActiveConsultationBanner />
     </div>
   );
 };

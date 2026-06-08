@@ -2,7 +2,15 @@ import { Stethoscope, Baby, Heart, Brain, Bone, Eye, Loader2 } from "lucide-reac
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { Specialty } from "@/integrations/assemed";
+
+export interface Specialty {
+  id: number;
+  nome: string;
+  tipoProfissionalId: number;
+  tipoProfissionalDescricao: string;
+  precoConsulta: number;
+  triagem: boolean;
+}
 
 interface SpecialtyCardProps {
   specialty: Specialty;
@@ -11,7 +19,6 @@ interface SpecialtyCardProps {
   disabled?: boolean;
 }
 
-// Mapeamento de icones por nome de especialidade
 const specialtyIcons: Record<string, React.ComponentType<{ className?: string }>> = {
   "Clínico Geral": Stethoscope,
   "Clinico Geral": Stethoscope,
@@ -45,29 +52,20 @@ export function SpecialtyCard({
     >
       <CardContent className="p-6">
         <div className="flex flex-col items-center text-center gap-4">
-          {/* Icone */}
           <div
             className={`
               w-16 h-16 rounded-2xl flex items-center justify-center
               ${isIncluded ? "bg-primary/10" : "bg-accent/10"}
             `}
           >
-            <Icon
-              className={`h-8 w-8 ${isIncluded ? "text-primary" : "text-accent"}`}
-            />
+            <Icon className={`h-8 w-8 ${isIncluded ? "text-primary" : "text-accent"}`} />
           </div>
 
-          {/* Nome e tipo profissional */}
           <div>
-            <h3 className="font-semibold text-lg text-foreground">
-              {specialty.nome}
-            </h3>
-            <p className="text-sm text-muted-foreground">
-              {specialty.tipoProfissionalDescricao}
-            </p>
+            <h3 className="font-semibold text-lg text-foreground">{specialty.nome}</h3>
+            <p className="text-sm text-muted-foreground">{specialty.tipoProfissionalDescricao}</p>
           </div>
 
-          {/* Preco ou incluido no plano */}
           {isIncluded ? (
             <Badge variant="secondary" className="bg-primary/10 text-primary">
               Incluido no plano
@@ -81,7 +79,6 @@ export function SpecialtyCard({
             </div>
           )}
 
-          {/* Botao */}
           <Button
             onClick={() => onSelect(specialty)}
             disabled={disabled || isLoading}
@@ -99,12 +96,9 @@ export function SpecialtyCard({
           </Button>
         </div>
 
-        {/* Indicador de triagem */}
         {specialty.triagem && (
           <div className="absolute top-2 right-2">
-            <Badge variant="outline" className="text-xs">
-              Triagem
-            </Badge>
+            <Badge variant="outline" className="text-xs">Triagem</Badge>
           </div>
         )}
       </CardContent>

@@ -14,8 +14,35 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { Consultation, ConsultationStatus } from "@/integrations/assemed";
-import { normalizeConsultationStatus } from "@/integrations/assemed";
+
+export type ConsultationStatus = "AGUARDANDO" | "EM_ATENDIMENTO" | "CONCLUIDO" | "CANCELADO";
+
+export interface Consultation {
+  id: number;
+  pacienteId: number;
+  pacienteNome: string;
+  especialidadeId: number;
+  especialidadeNome: string;
+  tipoProfissionalId: number;
+  profissionalNome: string | null;
+  status: string;
+  situacao?: string;
+  dataHoraCriacao: string;
+  dataCriacao?: string;
+  dataHoraInicio: string | null;
+  dataHoraFim: string | null;
+  pacienteToken: string | null;
+  dataAgendamento?: string;
+  tipoAtendimento?: number;
+}
+
+function normalizeConsultationStatus(c: Consultation): ConsultationStatus {
+  const raw = (c.situacao || c.status || "").toUpperCase();
+  if (raw.includes("ATENDIMENTO")) return "EM_ATENDIMENTO";
+  if (raw.includes("CONCLU")) return "CONCLUIDO";
+  if (raw.includes("CANCEL")) return "CANCELADO";
+  return "AGUARDANDO";
+}
 
 interface ConsultationCardProps {
   consultation: Consultation;
@@ -59,7 +86,6 @@ export function ConsultationCard({
     ? "Consulta cancelada"
     : consultation.profissionalNome || (normalizedStatus === "AGUARDANDO" ? "Buscando médico..." : "—");
 
-  // ── Top bar config per state ────────────────────────────────────────────────
   let barBg: string;
   let borderColor: string;
   let iconBg: string;
@@ -96,7 +122,6 @@ export function ConsultationCard({
 
   return (
     <div className={`rounded-2xl overflow-hidden shadow-md border ${borderColor} bg-white hover:shadow-lg transition-shadow`}>
-      {/* ── Top status bar ── */}
       <div className={`${barBg} px-4 py-2.5 flex items-center gap-2`}>
         {hasPingDot && (
           <span className="relative flex h-2 w-2 shrink-0">
@@ -110,9 +135,7 @@ export function ConsultationCard({
         <span className="text-xs text-white/60 font-mono">#{consultation.id}</span>
       </div>
 
-      {/* ── Body ── */}
       <div className="p-4 space-y-3">
-        {/* Specialty + doctor row */}
         <div className="flex items-center gap-3">
           <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center shrink-0`}>
             <Stethoscope className={`h-5 w-5 ${iconColor}`} />
@@ -123,7 +146,6 @@ export function ConsultationCard({
           </div>
         </div>
 
-        {/* Scheduled info card — blue (waiting for time) */}
         {isAgendada && agendamentoDate && normalizedStatus === "AGUARDANDO" && !canEnterAgendada && scheduledDateStr && scheduledTimeStr && (
           <div className="bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5 flex items-center gap-3">
             <div className="text-center shrink-0">
@@ -147,7 +169,6 @@ export function ConsultationCard({
           </div>
         )}
 
-        {/* Scheduled released — amber info pill */}
         {isAgendada && agendamentoDate && normalizedStatus === "AGUARDANDO" && canEnterAgendada && scheduledTimeStr && (
           <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2">
             <Calendar className="h-3.5 w-3.5 shrink-0" />
@@ -155,7 +176,6 @@ export function ConsultationCard({
           </div>
         )}
 
-        {/* Date / duration row */}
         {(!isAgendada || normalizedStatus !== "AGUARDANDO") && (
           <div className="flex items-center gap-2 text-xs text-gray-400">
             <Clock className="h-3.5 w-3.5 shrink-0" />
@@ -172,7 +192,6 @@ export function ConsultationCard({
           </div>
         )}
 
-        {/* ── Actions ── */}
         <div className="flex gap-2 pt-1">
           {onJoin && showJoinButton && (
             <Button

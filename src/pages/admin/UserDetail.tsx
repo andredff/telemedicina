@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { AdminQueries, supabaseAdmin } from '@/integrations/supabase/adminClient';
 import { formatOrderStatus, formatSubscriptionStatus, formatBillingCycle } from '@/lib/labels';
-import { assemedClient } from '@/integrations/assemed';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { toast } from '@/components/ui/use-toast';
@@ -61,52 +60,8 @@ export default function AdminUserDetail() {
           .order('performed_at', { ascending: false });
         setCheckups(checkupsData || []);
 
-        // Buscar histórico de consultas reais do Assemed
-        let assemedConsultations: any[] = [];
-        let assemedPrescriptions: any[] = [];
-        if (userData && (userData.cpf || userData.email)) {
-          let cpf = userData.cpf;
-          if (!cpf && userData.email && userData.email.includes('+')) {
-            // Exemplo: paciente+andredff4@novitatelemedicina.com.br
-            const match = userData.email.match(/\+([0-9]+)/);
-            if (match) cpf = match[1];
-          }
-          if (cpf && cpf.length >= 8) {
-            try {
-              // Remove pontuação do CPF
-              const cleanCpf = cpf.replace(/\D/g, "");
-              // Login externo para obter accessToken
-              const loginResp = await assemedClient.login(cleanCpf);
-              if (loginResp && loginResp.accessToken) {
-                assemedClient.setAccessToken(loginResp.accessToken);
-                // Buscar consultas reais do Assemed
-                const response = await assemedClient.getConsultations(50, 0);
-                if (response && response.items) {
-                  assemedConsultations = response.items;
-                }
-                // Buscar receituários por consulta
-                const rxResults = await Promise.allSettled(
-                  assemedConsultations.map(async (c: any) => {
-                    const items = await assemedClient.getReceituarios(c.id);
-                    return (items || []).filter((it: any) => it.urlPdf).map((it: any, idx: number) => ({
-                      id: `${c.id}-${idx}`,
-                      consultationId: c.id,
-                      doctor_name: c.profissionalNome || '-',
-                      especialidade: c.especialidadeNome || '-',
-                      created_at: c.dataHoraFim || c.dataHoraCriacao || c.dataCriacao,
-                      urlPdf: it.urlPdf,
-                    }));
-                  })
-                );
-                assemedPrescriptions = rxResults.flatMap(r => r.status === 'fulfilled' ? r.value : []);
-              }
-            } catch (err) {
-              // Se der erro, ignora
-            }
-          }
-        }
-        setConsultations(assemedConsultations);
-        setPrescriptions(assemedPrescriptions);
+        setConsultations([]);
+        setPrescriptions([]);
         setLoading(false);
       } catch (err) {
         toast({ title: 'Erro', description: 'Falha ao buscar dados do usuário', variant: 'destructive' });

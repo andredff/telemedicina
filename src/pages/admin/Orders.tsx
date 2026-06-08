@@ -328,16 +328,11 @@ export default function AdminOrders() {
     try {
       const LOCAL_SERVER = import.meta.env.VITE_LOCAL_SERVER_URL || 'http://localhost:5174';
       const { data: { session } } = await supabase.auth.getSession();
-      const assemedToken = (() => {
-        try { return sessionStorage.getItem('assemed_access_token') || ''; } catch { return ''; }
-      })();
-
       const qs = new URLSearchParams({ url: pdfUrl });
       if (orderId) qs.set('orderId', orderId);
 
       const headers: Record<string, string> = {};
       if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
-      if (assemedToken) headers['X-Assemed-Token'] = assemedToken;
 
       const res = await fetch(`${LOCAL_SERVER}/api/proxy/pdf?${qs.toString()}`, { headers });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
