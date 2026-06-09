@@ -113,50 +113,17 @@ const Telemedicine = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Mostra modal de bloqueio se não pode acessar
-  useEffect(() => {
-    if (!isCheckingAccess && !canAccess && !loading) {
-      setShowBlockedModal(true);
-    }
-  }, [isCheckingAccess, canAccess, loading]);
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     navigate("/auth");
   };
 
-  const handleStartConsultation = async (tipo: "imediata" | "agendada") => {
-    if (!canAccess) {
-      setShowBlockedModal(true);
-      return;
+  const handleStartConsultation = (tipo: "imediata" | "agendada") => {
+    if (tipo === "imediata") {
+      navigate("/teleconsultas");
+    } else {
+      navigate("/especialistas");
     }
-
-    if (!profile?.cpf) {
-      toast({
-        title: "CPF necessário",
-        description: "É necessário ter CPF cadastrado no perfil para acessar a telemedicina.",
-        variant: "destructive",
-      });
-      navigate("/perfil");
-      return;
-    }
-
-    const cpf = profile.cpf.replace(/\D/g, "");
-    if (cpf.length !== 11) {
-      toast({
-        title: "CPF inválido",
-        description: "O CPF cadastrado no perfil é inválido. Por favor, atualize seus dados.",
-        variant: "destructive",
-      });
-      navigate("/perfil");
-      return;
-    }
-
-    toast({
-      title: "Serviço indisponível",
-      description: "O serviço de telemedicina está temporariamente indisponível.",
-      variant: "destructive",
-    });
   };
 
   if (loading) {

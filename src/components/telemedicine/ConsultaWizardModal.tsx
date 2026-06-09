@@ -12,14 +12,17 @@ import {
   Video,
   AlertCircle,
   Pill,
+  Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-interface AnamneseResposta {
-  perguntaQuestionarioAnamneseId: number;
-  opcoesRespondidas: { opcoesPerguntaQuestionarioAnamneseId: number }[];
-  texto: string;
+
+/** Structured pre-consultation data the patient fills before starting the call. */
+export interface WizardIntake {
+  sintomas: string[];
+  sintomaPrincipal: string | null;
+  medicamentos: string;
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -32,22 +35,13 @@ const SINTOMAS_OPTIONS = [
   { id: 5, label: "Dor de garganta" },
 ];
 
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 type WizardStep = "saude" | "exames" | "confirmar";
 
 interface WizardData {
   sintomasSelecionados: number[];
   sintomaForteId: number | null;
   medicamentos: string;
-  exames: { name: string; base64: string }[];
+  exames: { name: string; file: File }[];
 }
 
 const WIZARD_STEPS_CONFIG: { key: WizardStep; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
@@ -96,7 +90,7 @@ function WizardStepper({ currentStep }: { currentStep: WizardStep }) {
 
 interface ConsultaWizardModalProps {
   onClose: () => void;
-  onSubmit: (respostasAnamnese: AnamneseResposta[], exames: { arquivoBase64: string }[]) => void;
+  onSubmit: (intake: WizardIntake, exames: File[]) => void | Promise<void>;
   /** Título exibido no card de confirmação. Padrão: "Consulta Imediata" */
   titulo?: string;
   /** Subtítulo exibido no card de confirmação. Padrão: "Clínico Geral · Telemedicina Novità" */
@@ -122,6 +116,7 @@ export function ConsultaWizardModal({
     exames: [],
   });
   const [isAddingFile, setIsAddingFile] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const sintomasMarcados = SINTOMAS_OPTIONS.filter((s) =>
@@ -141,13 +136,11 @@ export function ConsultaWizardModal({
     }));
   };
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (!files.length) return;
     setIsAddingFile(true);
-    const newExames = await Promise.all(
-      files.map(async (f) => ({ name: f.name, base64: await fileToBase64(f) }))
-    );
+    const newExames = files.map((f) => ({ name: f.name, file: f }));
     setData((prev) => ({ ...prev, exames: [...prev.exames, ...newExames] }));
     setIsAddingFile(false);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -157,31 +150,24 @@ export function ConsultaWizardModal({
     setData((prev) => ({ ...prev, exames: prev.exames.filter((_, i) => i !== index) }));
   };
 
-  const handleSubmit = () => {
-    const sintomaForteLabel =
-      SINTOMAS_OPTIONS.find((s) => s.id === data.sintomaForteId)?.label || "";
-    const sintomaTexto = data.sintomaForteId
-      ? `Sintomas mais fortes: ${sintomaForteLabel}.`
-      : data.sintomasSelecionados.length > 0
-      ? `Sintomas: ${sintomasMarcados.map((s) => s.label).join(", ")}.`
-      : "Nenhum sintoma selecionado.";
+  const handleSubmit = async () => {
+    if (submitting) return;
+    const sintomaPrincipal =
+      SINTOMAS_OPTIONS.find((s) => s.id === data.sintomaForteId)?.label ?? null;
 
-    const respostasAnamnese: AnamneseResposta[] = [
-      {
-        perguntaQuestionarioAnamneseId: 1,
-        opcoesRespondidas: data.sintomasSelecionados.map((id) => ({
-          opcoesPerguntaQuestionarioAnamneseId: id,
-        })),
-        texto: sintomaTexto,
-      },
-      {
-        perguntaQuestionarioAnamneseId: 2,
-        opcoesRespondidas: [],
-        texto: data.medicamentos.trim() || "Nenhum",
-      },
-    ];
+    const intake: WizardIntake = {
+      sintomas: sintomasMarcados.map((s) => s.label),
+      sintomaPrincipal,
+      medicamentos: data.medicamentos.trim(),
+    };
 
-    onSubmit(respostasAnamnese, data.exames.map((e) => ({ arquivoBase64: e.base64 })));
+    try {
+      setSubmitting(true);
+      await onSubmit(intake, data.exames.map((e) => e.file));
+      // On success the parent navigates away and unmounts this modal.
+    } catch {
+      setSubmitting(false);
+    }
   };
 
   const canAdvanceFromSaude = sintomasMarcados.length === 0 || !!data.sintomaForteId;
@@ -463,17 +449,27 @@ export function ConsultaWizardModal({
               </div>
 
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => setStep("exames")} className="flex-none">
+                <Button variant="outline" onClick={() => setStep("exames")} className="flex-none" disabled={submitting}>
                   <ArrowLeft className="h-4 w-4 mr-1" />
                   Voltar
                 </Button>
                 <Button
                   onClick={handleSubmit}
+                  disabled={submitting}
                   className="flex-1 gap-2 gradient-hero text-primary-foreground"
                   size="lg"
                 >
-                  <Video className="h-4 w-4" />
-                  Iniciar Consulta Agora
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Preparando consulta...
+                    </>
+                  ) : (
+                    <>
+                      <Video className="h-4 w-4" />
+                      Iniciar Consulta Agora
+                    </>
+                  )}
                 </Button>
               </div>
             </div>

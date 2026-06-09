@@ -29,6 +29,7 @@ export async function getMedicationCatalog(filters?: {
   category?: string;
   search?: string;
   inStockOnly?: boolean;
+  limit?: number;
 }): Promise<MedicationCatalog[]> {
   let query = supabase
     .from('medication_catalog')
@@ -46,6 +47,9 @@ export async function getMedicationCatalog(filters?: {
   }
   if (filters?.search) {
     query = query.ilike('name', `%${filters.search}%`);
+  }
+  if (filters?.limit) {
+    query = query.limit(filters.limit);
   }
 
   const { data, error } = await query;

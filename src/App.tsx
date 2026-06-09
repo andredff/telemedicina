@@ -51,6 +51,23 @@ import Cancellation from "./pages/Cancellation";
 import AdminUserDetail from "./pages/admin/UserDetail";
 import ServiceOrderView from "./pages/admin/ServiceOrderView";
 import Support from "./pages/Support";
+import PreparacaoConsulta from "./pages/consulta/PreparacaoConsulta";
+import ConsultaPage from "./pages/consulta/ConsultaPage";
+import ConsultaDetalhes from "./pages/consulta/ConsultaDetalhes";
+import MedicoLayout from "./pages/medico/MedicoLayout";
+import MedicoDashboard from "./pages/medico/MedicoDashboard";
+import MedicoSalaEspera from "./pages/medico/MedicoSalaEspera";
+import MedicoConsultas from "./pages/medico/MedicoConsultas";
+import MedicoAtendimento from "./pages/medico/MedicoAtendimento";
+import MedicoPacientes from "./pages/medico/MedicoPacientes";
+import MedicoPrescricoes from "./pages/medico/MedicoPrescricoes";
+import MedicoExames from "./pages/medico/MedicoExames";
+import MedicoAtestados from "./pages/medico/MedicoAtestados";
+import MedicoChat from "./pages/medico/MedicoChat";
+import MedicoDocumentos from "./pages/medico/MedicoDocumentos";
+import MedicoConfiguracoes from "./pages/medico/MedicoPerfil";
+import MedicoAgenda from "./pages/medico/MedicoAgenda";
+import MedicoSuporte from "./pages/medico/MedicoSuporte";
 
 const queryClient = new QueryClient();
 
@@ -106,6 +123,9 @@ const App = () => (
           <Route path="/telemedicina" element={<Telemedicine />} />
           <Route path="/teleconsultas" element={<Teleconsultas />} />
           <Route path="/sala-espera/:id" element={<SalaEspera />} />
+          <Route path="/consulta/:id/preparacao" element={<PreparacaoConsulta />} />
+          <Route path="/consulta/:id/chamada" element={<ConsultaPage />} />
+          <Route path="/consulta/:id/detalhes" element={<ConsultaDetalhes />} />
           <Route path="/especialistas" element={<Especialistas />} />
           <Route path="/farmacia" element={<Farmacia />} />
           <Route path="/termos" element={<Terms />} />
@@ -118,6 +138,23 @@ const App = () => (
           <Route path="/compare/index.html" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
           <Route path="/compare/status.html" element={<StaticHtmlRedirect to="/docs/compare/status.html" />} />
           <Route path="/docs/fluxo-os-pedidos" element={<StaticHtmlRedirect to="/docs/APRESENTACAO_FLUXO_OS_PEDIDOS.html" />} />
+
+          {/* Médico Routes */}
+          <Route path="/medico" element={<MedicoLayout />}>
+            <Route index element={<MedicoDashboard />} />
+            <Route path="sala-espera" element={<MedicoSalaEspera />} />
+            <Route path="consultas" element={<MedicoConsultas />} />
+            <Route path="atendimento/:id" element={<MedicoAtendimento />} />
+            <Route path="pacientes" element={<MedicoPacientes />} />
+            <Route path="prescricoes" element={<MedicoPrescricoes />} />
+            <Route path="exames" element={<MedicoExames />} />
+            <Route path="atestados" element={<MedicoAtestados />} />
+            <Route path="chat" element={<MedicoChat />} />
+            <Route path="documentos" element={<MedicoDocumentos />} />
+            <Route path="agenda" element={<MedicoAgenda />} />
+            <Route path="configuracoes" element={<MedicoConfiguracoes />} />
+            <Route path="suporte" element={<MedicoSuporte />} />
+          </Route>
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>

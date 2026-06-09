@@ -9,6 +9,7 @@ import {
   Stethoscope, ArrowRight, Sparkles, Package, HeartPulse,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { RBAC } from "@/integrations/supabase/adminClient";
 import { logger } from "@/lib/logger";
 import { getPlanColor } from "@/data/plansData";
 import { User as SupabaseUser, Session } from "@supabase/supabase-js";
@@ -160,13 +161,23 @@ const Dashboard = () => {
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
 
       if (!session) {
         navigate("/auth");
       } else if (session.user) {
+        // Role-based redirect: doctors and admins go to their panels
+        const role = await RBAC.getUserRole(session.user.id);
+        if (role === RBAC.ROLES.DOCTOR) {
+          navigate("/medico");
+          return;
+        }
+        if (role === RBAC.ROLES.ADMIN) {
+          navigate("/admin");
+          return;
+        }
         fetchProfile(session.user.id);
         fetchSubscription(session.user.id);
       }
