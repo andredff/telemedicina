@@ -43,3 +43,11 @@ novita.migrai.com.br
 *.claude
 .agents/
 .claude/CREDENCIAIS.md
+.claude/settings.json
+.claude/settings.local.json
+
+# Scripts locais de launch do Claude (contêm credenciais — NUNCA versionar)
+claude-full*.sh
+
+# Arquivos temporários/lock do Office
+~$*
