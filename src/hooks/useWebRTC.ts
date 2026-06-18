@@ -91,9 +91,22 @@ export function useWebRTC(callbacks: WebRTCCallbacks) {
       video: { width: { ideal: 1280 }, height: { ideal: 720 } },
       audio: true,
     };
+
+    // Release any stream this hook still holds before re-acquiring. A camera can be
+    // opened by only one consumer at a time, so re-acquiring while we still hold it
+    // would itself throw NotReadableError ("Could not start video source").
+    localStream.current?.getTracks().forEach(t => t.stop());
+    localStream.current = null;
+
+    // Escalating backoff between attempts. After a reload / leg switch the OS can
+    // take a couple of seconds to free the camera (Windows especially), so we give
+    // a busy device up to ~5.4s before giving up — otherwise reentry races the
+    // release and fails with NotReadableError.
+    const BUSY_BACKOFF = [300, 600, 1000, 1500, 2000];
     let lastErr: unknown = new DOMException('Camera is not producing video', 'CameraBlack');
 
-    for (let attempt = 0; attempt < 4; attempt++) {
+    for (let attempt = 0; attempt <= BUSY_BACKOFF.length; attempt++) {
+      const isLast = attempt === BUSY_BACKOFF.length;
       let stream: MediaStream;
       try {
         stream = await navigator.mediaDevices.getUserMedia(HD);
@@ -101,10 +114,19 @@ export function useWebRTC(callbacks: WebRTCCallbacks) {
         const name = (err as Error)?.name;
         if (name === 'OverconstrainedError' || name === 'ConstraintNotSatisfiedError') {
           // Requested resolution unsupported → fall back to defaults.
-          try { stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); }
-          catch (e2) { throw e2; }
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+          } catch (e2) {
+            lastErr = e2;
+            if (isLast) throw e2;
+            await delay(BUSY_BACKOFF[attempt]);
+            continue;
+          }
         } else if (name === 'NotReadableError' || name === 'AbortError' || name === 'TrackStartError') {
-          lastErr = err; await delay(400); continue; // device still busy (handoff) → retry
+          lastErr = err; // device still busy (handoff / slow release) → wait longer and retry
+          if (isLast) throw err;
+          await delay(BUSY_BACKOFF[attempt]);
+          continue;
         } else {
           throw err; // NotAllowed / NotFound → no point retrying; surface a clear message
         }
@@ -114,7 +136,8 @@ export function useWebRTC(callbacks: WebRTCCallbacks) {
       if (!track) {
         stream.getTracks().forEach(t => t.stop());
         lastErr = new DOMException('No video track', 'NotFoundError');
-        await delay(300);
+        if (isLast) throw lastErr;
+        await delay(BUSY_BACKOFF[attempt]);
         continue;
       }
 
@@ -124,7 +147,8 @@ export function useWebRTC(callbacks: WebRTCCallbacks) {
         // a few hundred ms once the previous leg fully frees it.
         stream.getTracks().forEach(t => t.stop());
         lastErr = new DOMException('Camera is not producing video', 'CameraBlack');
-        await delay(400);
+        if (isLast) throw lastErr;
+        await delay(BUSY_BACKOFF[attempt]);
         continue;
       }
 
