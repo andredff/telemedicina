@@ -133,22 +133,36 @@ export default function PreparacaoConsulta() {
   const requestMedia = async () => {
     setCameraStatus('requesting');
     setMicStatus('requesting');
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      // Navigated away (e.g. doctor rang) while acquiring → release immediately,
-      // otherwise the camera stays busy and the call room fails to open it.
-      if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
-      streamRef.current = stream;
-      if (videoRef.current) videoRef.current.srcObject = stream;
-      setCameraStatus('ok');
-      setMicStatus('ok');
-    } catch (err) {
-      const name = (err as Error).name;
-      const status: DeviceStatus = (name === 'NotAllowedError' || name === 'PermissionDeniedError')
-        ? 'denied'
-        : name === 'NotFoundError' ? 'unavailable' : 'denied';
-      setCameraStatus(status);
-      setMicStatus(status);
+    // Escalating backoff: on reentry the camera may still be releasing from the
+    // previous leg (NotReadableError). Wait it out instead of failing immediately
+    // and mislabeling a busy device as "permission denied".
+    const BUSY_BACKOFF = [300, 600, 1000, 1500, 2000];
+    for (let attempt = 0; attempt <= BUSY_BACKOFF.length; attempt++) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        // Navigated away (e.g. doctor rang) while acquiring → release immediately,
+        // otherwise the camera stays busy and the call room fails to open it.
+        if (!mountedRef.current) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
+        if (videoRef.current) videoRef.current.srcObject = stream;
+        setCameraStatus('ok');
+        setMicStatus('ok');
+        return;
+      } catch (err) {
+        const name = (err as Error).name;
+        const busy = name === 'NotReadableError' || name === 'AbortError' || name === 'TrackStartError';
+        if (busy && attempt < BUSY_BACKOFF.length && mountedRef.current) {
+          await new Promise(r => setTimeout(r, BUSY_BACKOFF[attempt]));
+          continue; // camera still releasing from the previous leg → wait & retry
+        }
+        if (!mountedRef.current) return;
+        const status: DeviceStatus = (name === 'NotAllowedError' || name === 'PermissionDeniedError')
+          ? 'denied'
+          : name === 'NotFoundError' ? 'unavailable' : 'denied';
+        setCameraStatus(status);
+        setMicStatus(status);
+        return;
+      }
     }
   };
 
