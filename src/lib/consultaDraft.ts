@@ -44,13 +44,24 @@ export interface ConsultaDraft {
 
 export interface IntakeExam {
   name: string;
-  url: string;
+  /** Storage path in the private `consulta-exames` bucket (signed on demand). */
+  path?: string;
+  /** Legacy public URL (records created before the bucket went private). */
+  url?: string;
 }
 
 export interface IntakeData {
   sintomas: string[];
   sintomaPrincipal: string | null;
+  /** Free-text description of the chief complaint. */
+  descricao?: string;
+  /** How long the patient has had the symptoms (label, e.g. "1 a 3 dias"). */
+  duracao?: string | null;
+  /** Self-reported intensity, 1–10. */
+  intensidade?: number | null;
   medicamentos: string;
+  /** Known allergies (free text). */
+  alergias?: string;
   exames: IntakeExam[];
   submittedAt: string;
 }
@@ -59,7 +70,9 @@ export function intakeHasContent(d: IntakeData | null | undefined): boolean {
   if (!d) return false;
   return (
     d.sintomas.length > 0 ||
+    !!d.descricao?.trim() ||
     !!d.medicamentos?.trim() ||
+    !!d.alergias?.trim() ||
     d.exames.length > 0
   );
 }
@@ -133,7 +146,10 @@ function printMedicalDocument(title: string, content: string, meta: PrintMeta) {
   w.document.close();
 }
 
-export function printReceita(meds: DraftMedication[], meta: PrintMeta) {
+export function printReceita(
+  meds: { name: string; dosage?: string; quantity?: string; instructions?: string }[],
+  meta: PrintMeta,
+) {
   const content = meds.map((m, i) => `<div class="item"><strong>${i + 1}. ${m.name}</strong>
     ${m.dosage ? `<p>Posologia: ${m.dosage}</p>` : ''}
     ${m.quantity ? `<p>Quantidade: ${m.quantity}</p>` : ''}

@@ -5,8 +5,6 @@ import Footer from "@/components/layout/Footer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Switch } from "@/components/ui/switch";
-import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Check, Star, Users, ArrowRight, HelpCircle, Gem, Crown, Award, Clock, Building, FileCheck, Shield, LucideIcon } from "lucide-react";
 import {
@@ -19,10 +17,8 @@ import {
   INDIVIDUAL_PLANS,
   COLETIVO_PLANS,
   SINGLE_CONSULTATION_PRICES,
-  ANNUAL_DISCOUNT,
   formatPrice,
   getPlanColor,
-  getFeaturesForBilling,
   PlanData,
 } from "@/data/plansData";
 import { FAQ_ITEMS, DIFERENCIAIS } from "@/data/landingContent";
@@ -86,13 +82,9 @@ const SINGLE_CONSULTATION_OPTIONS = [
 
 function Plans(): JSX.Element {
   const navigate = useNavigate();
-  const [isYearly, setIsYearly] = useState(false);
   const [activeTab, setActiveTab] = useState<"individual" | "coletivo">("individual");
 
   function getPrice(plan: PlanData): number {
-    if (isYearly) {
-      return plan.price_yearly / 12;
-    }
     return plan.price_monthly;
   }
 
@@ -107,9 +99,6 @@ function Plans(): JSX.Element {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5" />
         <div className="container mx-auto px-4 relative">
           <div className="text-center max-w-3xl mx-auto space-y-6">
-            <Badge variant="secondary" className="px-4 py-2">
-              Por menos de R$ 1,00 por dia
-            </Badge>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-heading font-bold text-primary">
               Escolha o plano ideal{" "}
               <span className="text-primary">para você</span>
@@ -118,30 +107,6 @@ function Plans(): JSX.Element {
               Consultas ilimitadas com clínico geral 24h em todos os planos.
               Planos individuais ou familiares com até 3 beneficiários.
             </p>
-
-            {/* Billing Toggle */}
-            <div className="flex items-center justify-center gap-4 pt-4">
-              <Label
-                htmlFor="billing-toggle"
-                className={`text-sm font-medium ${!isYearly ? "text-foreground" : "text-muted-foreground"}`}
-              >
-                Mensal
-              </Label>
-              <Switch
-                id="billing-toggle"
-                checked={isYearly}
-                onCheckedChange={setIsYearly}
-              />
-              <Label
-                htmlFor="billing-toggle"
-                className={`text-sm font-medium ${isYearly ? "text-foreground" : "text-muted-foreground"}`}
-              >
-                Anual
-                <Badge className="ml-2 bg-accent text-accent-foreground">
-                  {Math.round(ANNUAL_DISCOUNT * 100)}% OFF
-                </Badge>
-              </Label>
-            </div>
           </div>
         </div>
       </section>
@@ -212,23 +177,13 @@ function Plans(): JSX.Element {
                       </span>
                       <span className="text-sm text-muted-foreground">/mês</span>
                     </div>
-                    {isYearly && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        R$ {formatPrice(plan.price_yearly)}/ano
-                        <Badge variant="secondary" className="ml-2 text-xs">
-                          Economia de R$ {formatPrice(plan.price_monthly * 12 - plan.price_yearly)}
-                        </Badge>
-                      </p>
-                    )}
-                    {!isYearly && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Cobrado em 12x de R$ {formatPrice(plan.price_monthly)}
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Plano anual · 12x de R$ {formatPrice(plan.price_monthly)}
+                    </p>
                   </div>
 
                   <ul className="space-y-3 mb-6 flex-1">
-                    {getFeaturesForBilling(plan, isYearly ? 'yearly' : 'monthly').map((feature, index) => (
+                    {plan.features.map((feature, index) => (
                       <li key={index} className="flex items-start gap-2 text-sm text-muted-foreground">
                         <Check className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                         <span>{feature}</span>
@@ -243,7 +198,7 @@ function Plans(): JSX.Element {
                         : ""
                     }`}
                     variant={plan.highlight ? "default" : "outline"}
-                    onClick={() => navigate(`/auth?plan=${plan.type}&billing=${isYearly ? 'yearly' : 'monthly'}`)}
+                    onClick={() => navigate(`/auth?plan=${plan.type}`)}
                   >
                     Assinar Agora
                     <ArrowRight className="ml-2 h-4 w-4" />
@@ -290,8 +245,7 @@ function Plans(): JSX.Element {
           <div className="mt-8 p-6 bg-muted/30 rounded-2xl border border-border/50">
             <h4 className="font-heading font-semibold text-foreground mb-4">Informações sobre pagamento:</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <FeatureItem text="Pagamento mensal: Cobrado em 12 parcelas do valor apresentado (vide política de cancelamento)." />
-              <FeatureItem text={`Pagamento anual: Cobrado em uma única vez com ${Math.round(ANNUAL_DISCOUNT * 100)}% de desconto.`} />
+              <FeatureItem text="Plano com vigência anual e cobrança mensal recorrente: 12 parcelas mensais e sucessivas, sem juros (vide política de cancelamento)." />
               <FeatureItem text="Aceitamos cartão de crédito e PIX." />
             </ul>
           </div>

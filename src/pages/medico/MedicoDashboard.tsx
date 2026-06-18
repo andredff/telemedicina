@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import {
   ClipboardList, CheckCircle, Clock, ArrowRight,
-  User, Calendar, Plus, Video, FileText,
+  User, Calendar, Video, FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -26,8 +26,14 @@ function getGreeting() {
 
 function statusConfig(status: string) {
   switch (status) {
+    case 'waiting_attendant':
+    case 'with_attendant':
+      return { label: 'Em triagem', cls: 'bg-slate-100 text-slate-600 border-slate-200' };
+    case 'waiting_doctor':
     case 'pending':
       return { label: 'Aguardando', cls: 'bg-amber-100 text-amber-700 border-amber-200' };
+    case 'routed_to_doctor':
+    case 'in_consultation':
     case 'in_progress':
       return { label: 'Em Atendimento', cls: 'bg-blue-100 text-blue-700 border-blue-200' };
     case 'completed':
@@ -63,19 +69,27 @@ export default function MedicoDashboard() {
         const name = profile?.full_name || user.email || 'Médico';
         setFirstName(name.split(' ')[0]);
 
-        const { data: consultations } = await supabase
+        // Exact counts per status — not derived from a capped recent slice
+        // (which under-counted once volume grew past the limit).
+        const countByStatus = (status: string) =>
+          supabase.from('consultations').select('id', { count: 'exact', head: true }).eq('status', status);
+        const [pendingRes, inProgressRes, completedRes] = await Promise.all([
+          countByStatus('waiting_doctor'),
+          countByStatus('in_consultation'),
+          countByStatus('completed'),
+        ]);
+        setStats({
+          pending: pendingRes.count ?? 0,
+          inProgress: inProgressRes.count ?? 0,
+          completed: completedRes.count ?? 0,
+        });
+
+        const { data: recentRows } = await supabase
           .from('consultations')
           .select('id, patient_name, date, status')
           .order('created_at', { ascending: false })
-          .limit(50);
-
-        const all = consultations ?? [];
-        setStats({
-          pending: all.filter(c => c.status === 'pending').length,
-          inProgress: all.filter(c => c.status === 'in_progress').length,
-          completed: all.filter(c => c.status === 'completed').length,
-        });
-        setRecent(all.slice(0, 6));
+          .limit(6);
+        setRecent((recentRows ?? []) as unknown as ConsultaSummary[]);
       } finally {
         setLoading(false);
       }
@@ -100,10 +114,6 @@ export default function MedicoDashboard() {
               : 'Nenhum paciente aguardando no momento.'}
           </p>
         </div>
-        <Button className="gap-2 shrink-0" onClick={() => navigate('/medico/consultas')}>
-          <Plus className="h-4 w-4" />
-          Nova Consulta
-        </Button>
       </div>
 
       {/* Stats */}
@@ -115,7 +125,7 @@ export default function MedicoDashboard() {
             icon: Clock,
             iconBg: 'bg-amber-50',
             iconColor: 'text-amber-600',
-            route: '/medico/consultas',
+            route: '/medico/sala-espera',
           },
           {
             label: 'Em Atendimento',
@@ -156,16 +166,16 @@ export default function MedicoDashboard() {
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-4">
         <button
-          onClick={() => navigate('/medico/consultas')}
+          onClick={() => navigate('/medico/sala-espera')}
           className="flex items-center gap-4 p-5 rounded-xl border-2 border-dashed border-primary/30 bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-all text-left"
         >
           <div className="w-11 h-11 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
             <ClipboardList className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <p className="font-semibold text-foreground text-sm">Ver Consultas Pendentes</p>
+            <p className="font-semibold text-foreground text-sm">Sala de Espera</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              {stats.pending > 0 ? `${stats.pending} paciente${stats.pending > 1 ? 's' : ''} aguardando` : 'Nenhuma pendente'}
+              {stats.pending > 0 ? `${stats.pending} paciente${stats.pending > 1 ? 's' : ''} aguardando` : 'Nenhum paciente aguardando'}
             </p>
           </div>
         </button>
@@ -214,11 +224,18 @@ export default function MedicoDashboard() {
             <div className="divide-y divide-gray-100">
               {recent.map((c) => {
                 const { label, cls } = statusConfig(c.status);
-                const canClick = c.status === 'pending' || c.status === 'in_progress';
+                const canClick = c.status === 'waiting_doctor' || c.status === 'in_consultation';
+                // Waiting patients must be accepted in the waiting room (sets
+                // in_consultation + doctor + CRM) — opening the chart directly
+                // would leave a dead screen with no video and bypass the accept guard.
+                const goTo = () => {
+                  if (c.status === 'in_consultation') navigate(`/medico/atendimento/${c.id}`);
+                  else if (c.status === 'waiting_doctor') navigate('/medico/sala-espera');
+                };
                 return (
                   <div
                     key={c.id}
-                    onClick={() => canClick && navigate(`/medico/atendimento/${c.id}`)}
+                    onClick={() => canClick && goTo()}
                     className={`flex items-center justify-between px-6 py-3.5 transition-colors ${canClick ? 'cursor-pointer hover:bg-gray-50' : ''}`}
                   >
                     <div className="flex items-center gap-3">

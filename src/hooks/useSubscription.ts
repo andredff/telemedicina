@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
 import type { Database } from '@/integrations/supabase/types';
+import { isPlanValid, isPlanExpired } from '@/lib/subscription';
 
 type UserSubscription = Database['public']['Tables']['user_subscriptions']['Row'];
 type SubscriptionPlan = Database['public']['Tables']['subscription_plans']['Row'];
@@ -85,8 +86,9 @@ export function useSubscription(): UseSubscriptionReturn {
     if (subscription.status !== 'active') return false;
 
     if (subscription.expires_at) {
-      const endDate = new Date(subscription.expires_at);
-      return endDate > new Date();
+      // O plano vale até o FIM do dia da expiração, não até a hora exata em que
+      // foi contratado. Ex.: vencimento em 12/06 → ativo até 12/06 23:59:59.
+      return isPlanValid(subscription.expires_at);
     }
     return true;
   }, [subscription]);
@@ -94,8 +96,8 @@ export function useSubscription(): UseSubscriptionReturn {
   const checkIsPastDue = useCallback((): boolean => {
     if (!subscription) return false;
     if (subscription.expires_at) {
-      const endDate = new Date(subscription.expires_at);
-      return endDate < new Date() && subscription.status === 'active';
+      // Só fica em atraso depois de encerrado o dia da expiração.
+      return isPlanExpired(subscription.expires_at) && subscription.status === 'active';
     }
     return false;
   }, [subscription]);

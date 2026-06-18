@@ -1,43 +1,37 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ElementType } from "react";
 import { useNavigate } from "react-router-dom";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import Header from "@/components/Header";
-import { ActiveConsultationBanner } from "@/components/ActiveConsultationBanner";
 import {
-  FileText, Calendar, ChevronRight, Video, Pill, Crown,
-  Stethoscope, ArrowRight, Sparkles, Package, HeartPulse,
+  Video, Stethoscope, FileText, FlaskConical, Pill, Crown,
+  ChevronRight, ArrowRight, Clock, Package, ClipboardCheck,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { RBAC } from "@/integrations/supabase/adminClient";
 import { logger } from "@/lib/logger";
-import { getPlanColor } from "@/data/plansData";
-import { User as SupabaseUser, Session } from "@supabase/supabase-js";
+import type { ConsultaDraft } from "@/lib/consultaDraft";
+import { isActive, isInCall, patientStageLabel } from "@/lib/consultationStatus";
+import { User as SupabaseUser } from "@supabase/supabase-js";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import SupportFAB from "@/components/SupportFAB";
 
-interface ProfileData {
-  full_name: string;
-  email: string;
-  cpf?: string;
-  phone?: string;
-  birth_date?: string;
-  gender?: string;
-}
+// Rótulo + cor por status da consulta (usado no histórico).
+const STATUS_META: Record<string, { label: string; dot: string; text: string }> = {
+  pending:     { label: "Na fila",       dot: "bg-amber-500",   text: "text-amber-600" },
+  in_progress: { label: "Em andamento",  dot: "bg-blue-500",    text: "text-blue-600" },
+  completed:   { label: "Realizada",     dot: "bg-emerald-500", text: "text-emerald-600" },
+  cancelled:   { label: "Cancelada",     dot: "bg-slate-400",   text: "text-slate-500" },
+};
 
-interface UserSubscription {
+interface ConsultaRow {
   id: string;
   status: string;
-  expires_at: string | null;
-  plan: {
-    name: string;
-    type: string;
-    description: string;
-  } | null;
+  doctor_name: string | null;
+  created_at: string;
+  date: string;
+  clinical_data?: ConsultaDraft | null;
 }
 
-// ─── Time-based greeting ─────────────────────────────────────────────────────
 function getGreeting(): string {
   const hour = new Date().getHours();
   if (hour < 12) return "Bom dia";
@@ -48,138 +42,55 @@ function getGreeting(): string {
 const Dashboard = () => {
   const navigate = useNavigate();
   const [user, setUser] = useState<SupabaseUser | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<ProfileData | null>(null);
-  const [subscription, setSubscription] = useState<UserSubscription | null>(null);
+  const [fullName, setFullName] = useState("Paciente");
+  const [consultas, setConsultas] = useState<ConsultaRow[]>([]);
+
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
-
-      if (error && error.code === '42703') {
-        const { data: fallbackData } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("id", userId)
-          .single();
-
-        await fetchCpfFromMetadata(fallbackData);
-        return;
-      }
-
-      if (data) {
-        await fetchCpfFromMetadata(data);
-      } else {
-        await fetchCpfFromMetadata(undefined);
-      }
+      const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).single();
+      const { data: userData } = await supabase.auth.getUser();
+      setFullName((data?.full_name as string) || (userData?.user?.user_metadata?.full_name as string) || userData?.user?.email?.split("@")[0] || "Paciente");
     } catch (error) {
       logger.error("Error fetching profile:", error);
-      await fetchCpfFromMetadata(undefined);
     }
   };
 
-  const fetchCpfFromMetadata = async (existingData?: Record<string, unknown>) => {
-    let cpf: string | undefined;
-
-    const { data: userData } = await supabase.auth.getUser();
-    if (userData?.user?.user_metadata?.cpf) {
-      cpf = userData.user.user_metadata.cpf as string;
-    }
-
-    if (!cpf && userData?.user?.identities) {
-      const identity = userData.user.identities[0];
-      if (identity?.identity_data?.cpf) {
-        cpf = identity.identity_data.cpf as string;
-      }
-    }
-
-    const profileData: ProfileData = {
-      full_name: (existingData?.full_name as string) || (userData?.user?.user_metadata?.full_name as string) || userData?.user?.email?.split('@')[0] || "",
-      email: (existingData?.email as string) || userData?.user?.email || "",
-      phone: (existingData?.phone as string) || (userData?.user?.user_metadata?.phone as string) || "",
-      birth_date: (existingData?.birth_date as string) || (userData?.user?.user_metadata?.birth_date as string) || "",
-      gender: (existingData?.gender as "M" | "F") || (userData?.user?.user_metadata?.gender as "M" | "F") || "M",
-      cpf: cpf || "",
-    };
-
-    setProfile(profileData);
-  };
-
-  const fetchSubscription = async (userId: string) => {
+  const fetchConsultas = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("user_subscriptions")
-        .select(`
-          id,
-          status,
-          expires_at,
-          plan:subscription_plans (
-            name,
-            type,
-            description
-          )
-        `)
+      const { data } = await supabase
+        .from("consultations")
+        .select("id, status, doctor_name, created_at, date, clinical_data")
         .eq("user_id", userId)
-        .eq("status", "active")
-        .maybeSingle();
-
-      if (error) {
-        logger.error("Error fetching subscription:", error);
-        return;
-      }
-
-      if (data) {
-        const subscriptionData: UserSubscription = {
-          id: data.id,
-          status: data.status,
-          expires_at: data.expires_at,
-          plan: Array.isArray(data.plan) ? data.plan[0] : data.plan
-        };
-        setSubscription(subscriptionData);
-      }
+        .order("created_at", { ascending: false })
+        .limit(50);
+      setConsultas((data as unknown as ConsultaRow[]) ?? []);
     } catch (error) {
-      logger.error("Error fetching subscription:", error);
+      logger.error("Error fetching consultations:", error);
     }
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-
-        if (!session) {
-          navigate("/auth");
-        } else if (session.user) {
-          fetchProfile(session.user.id);
-          fetchSubscription(session.user.id);
-        }
-      }
-    );
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      setSession(session);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-
       if (!session) {
         navigate("/auth");
       } else if (session.user) {
-        // Role-based redirect: doctors and admins go to their panels
-        const role = await RBAC.getUserRole(session.user.id);
-        if (role === RBAC.ROLES.DOCTOR) {
-          navigate("/medico");
-          return;
-        }
-        if (role === RBAC.ROLES.ADMIN) {
-          navigate("/admin");
-          return;
-        }
         fetchProfile(session.user.id);
-        fetchSubscription(session.user.id);
+        fetchConsultas(session.user.id);
+      }
+    });
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (!session) {
+        navigate("/auth");
+      } else if (session.user) {
+        const role = await RBAC.getUserRole(session.user.id);
+        if (role === RBAC.ROLES.DOCTOR) { navigate("/medico"); return; }
+        if (role === RBAC.ROLES.ADMIN) { navigate("/admin"); return; }
+        fetchProfile(session.user.id);
+        fetchConsultas(session.user.id);
       }
       setLoading(false);
     });
@@ -187,211 +98,249 @@ const Dashboard = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate("/auth");
-  };
-
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <div className="h-12 w-12 animate-spin rounded-full border-b-2 border-primary" />
       </div>
     );
   }
 
-  const firstName = (profile?.full_name || user?.user_metadata?.full_name || "Paciente").split(" ")[0];
-  const greeting = getGreeting();
+  const firstName = (fullName || user?.user_metadata?.full_name || "Paciente").split(" ")[0];
 
-  const formatExpirationDate = (dateStr: string | null) => {
-    if (!dateStr) return "Sem data definida";
-    return new Date(dateStr).toLocaleDateString("pt-BR");
+  // ── Derived data ────────────────────────────────────────────────────────────
+  const hasDoc = (c: ConsultaRow, k: "medications" | "examRequests") => (c.clinical_data?.[k]?.length ?? 0) > 0;
+  const activeConsulta = consultas.find(c => isActive(c.status)) ?? null;
+  const completedCount = consultas.filter(c => c.status === "completed").length;
+  const receitasCount = consultas.filter(c => c.status === "completed" && hasDoc(c, "medications")).length;
+  const examesCount = consultas.filter(c => c.status === "completed" && hasDoc(c, "examRequests")).length;
+
+  const recentDocs = consultas
+    .filter(c => c.status === "completed" && c.clinical_data &&
+      (hasDoc(c, "medications") || hasDoc(c, "examRequests") || !!c.clinical_data.certificate))
+    .slice(0, 3);
+
+  const docChips = (c: ConsultaRow): { icon: ElementType; label: string }[] => {
+    const chips: { icon: ElementType; label: string }[] = [];
+    if (hasDoc(c, "medications")) chips.push({ icon: FileText, label: "Receita" });
+    if (hasDoc(c, "examRequests")) chips.push({ icon: FlaskConical, label: "Exames" });
+    if (c.clinical_data?.certificate) chips.push({ icon: ClipboardCheck, label: "Atestado" });
+    return chips;
   };
 
-  const getPlanDescription = () => {
-    if (!subscription?.plan) return "Você ainda não possui um plano ativo";
-    return subscription.plan.description || "Consultas ilimitadas com clínico geral";
+  const goToActive = () => {
+    if (!activeConsulta) return;
+    navigate(isInCall(activeConsulta.status)
+      ? `/consulta/${activeConsulta.id}/chamada`
+      : `/consulta/${activeConsulta.id}/preparacao`);
   };
 
-  const quickActions = [
+  // ── Histórico de consultas (coluna direita) ─────────────────────────────────
+  const recentConsultas = consultas.slice(0, 4);
+  const openConsulta = (c: ConsultaRow) => {
+    if (isInCall(c.status)) navigate(`/consulta/${c.id}/chamada`);
+    else if (isActive(c.status)) navigate(`/consulta/${c.id}/preparacao`);
+    else navigate(`/consulta/${c.id}/detalhes`);
+  };
+
+  const kpis: { label: string; value: string | number; hint: string; icon: ElementType; tint: string }[] = [
     {
-      label: "Consulta Imediata",
-      sublabel: "Clínico geral 24h",
-      icon: Video,
-      color: "text-primary",
-      bg: "bg-primary/10 group-hover:bg-primary/20",
-      route: "/teleconsultas",
+      label: "Próxima consulta",
+      value: activeConsulta ? (isInCall(activeConsulta.status) ? "Agora" : "Na fila") : "—",
+      hint: activeConsulta ? "Toque para entrar" : "Nenhuma agendada",
+      icon: Video, tint: "bg-amber-50 text-amber-700",
     },
-    {
-      label: "Especialista",
-      sublabel: "Agendar consulta",
-      icon: Stethoscope,
-      color: "text-accent",
-      bg: "bg-accent/10 group-hover:bg-accent/20",
-      route: "/especialistas",
-    },
-    {
-      label: "Check-ups",
-      sublabel: "Saldo e histórico",
-      icon: HeartPulse,
-      color: "text-rose-500",
-      bg: "bg-rose-500/10 group-hover:bg-rose-500/20",
-      route: "/meus-checkups",
-    },
-    {
-      label: "Farmácia",
-      sublabel: "Entrega em casa",
-      icon: Pill,
-      color: "text-emerald-600",
-      bg: "bg-emerald-500/10 group-hover:bg-emerald-500/20",
-      route: "/farmacia",
-    },
-    {
-      label: "Meus Pedidos",
-      sublabel: "Acompanhar entregas",
-      icon: Package,
-      color: "text-orange-500",
-      bg: "bg-orange-500/10 group-hover:bg-orange-500/20",
-      route: "/orders",
-    },
+    { label: "Consultas realizadas", value: completedCount, hint: "No seu histórico", icon: Stethoscope, tint: "bg-emerald-50 text-emerald-600" },
+    { label: "Receitas digitais", value: receitasCount, hint: "Disponíveis", icon: FileText, tint: "bg-amber-50 text-amber-700" },
+    { label: "Exames", value: examesCount, hint: "Solicitados", icon: FlaskConical, tint: "bg-emerald-50 text-emerald-600" },
   ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <Header isAuthenticated onLogout={handleLogout} />
+    <div className="space-y-6 p-4 sm:p-6 lg:p-8">
 
-      <main className="page-container">
+      {/* Greeting */}
+      <div>
+        <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{getGreeting()}, {firstName}</h1>
+        <p className="mt-1 text-slate-500">Aqui está um resumo da sua saúde e atendimentos.</p>
+      </div>
 
-        {/* ── Greeting ─────────────────────────────────────────────────── */}
-        <div className="flex items-start justify-between">
-          <div>
-            <p className="text-sm text-muted-foreground font-medium mb-0.5">
-              {format(new Date(), "EEEE, d 'de' MMMM", { locale: ptBR })}
-            </p>
-            <h1 className="text-2xl sm:text-3xl font-heading font-bold text-primary">
-              {greeting}, {firstName}!
-            </h1>
-            <p className="text-muted-foreground mt-1 text-sm sm:text-base">
-              Como podemos te ajudar hoje?
-            </p>
+      {/* KPIs */}
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {kpis.map(({ label, value, hint, icon: Icon, tint }) => (
+          <div key={label} className="rounded-2xl border border-white/60 bg-white/80 p-4 shadow-sm backdrop-blur-md sm:p-5">
+            <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tint}`}>
+              <Icon className="h-5 w-5" />
+            </span>
+            <p className="mt-3 text-2xl font-bold text-slate-900">{value}</p>
+            <p className="text-sm font-medium text-slate-700">{label}</p>
+            <p className="mt-0.5 text-xs text-slate-400">{hint}</p>
+          </div>
+        ))}
+      </div>
+
+      {/* Main grid */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+
+        {/* Left column */}
+        <div className="space-y-6 lg:col-span-2">
+
+          {/* Next consultation / Entrar na consulta */}
+          <div className="relative overflow-hidden rounded-3xl gradient-hero p-6 text-white shadow-lg sm:p-7">
+            <div className="pointer-events-none absolute -right-10 -top-14 h-44 w-44 rounded-full bg-white/10 blur-2xl" aria-hidden />
+            <div className="pointer-events-none absolute -bottom-12 left-12 h-32 w-32 rounded-full bg-white/10 blur-xl" aria-hidden />
+            <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-start gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/20 backdrop-blur-sm">
+                  {activeConsulta && isInCall(activeConsulta.status) ? <Video className="h-7 w-7" /> : <Clock className="h-7 w-7" />}
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium uppercase tracking-wide text-white/85">
+                    {activeConsulta ? patientStageLabel(activeConsulta.status) : "Consulta imediata"}
+                  </p>
+                  <h2 className="mt-1 text-xl font-bold sm:text-2xl">
+                    {activeConsulta
+                      ? (isInCall(activeConsulta.status) ? "O médico está te esperando" : "Sua consulta vai começar")
+                      : "Fale com um clínico agora"}
+                  </h2>
+                  <p className="mt-1 max-w-md text-sm text-white/90">
+                    {activeConsulta
+                      ? (isInCall(activeConsulta.status)
+                          ? `${activeConsulta.doctor_name || "O médico"} já está na sala de atendimento.`
+                          : "Um atendente confirma seus dados e te encaminha ao médico. Vamos verificar câmera e microfone enquanto isso.")
+                      : "Atendimento com clínico geral, 24h por dia, sem agendar."}
+                  </p>
+                </div>
+              </div>
+              <Button
+                onClick={activeConsulta ? goToActive : () => navigate("/teleconsultas")}
+                className="h-14 w-full gap-2 rounded-2xl bg-white text-base font-semibold text-amber-700 shadow-md hover:bg-amber-50 sm:w-auto sm:px-7"
+              >
+                <Video className="h-5 w-5" />
+                {activeConsulta ? "Entrar na Consulta" : "Iniciar consulta"}
+                <ArrowRight className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Recent documents */}
+          <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-sm backdrop-blur-md sm:p-6">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-900">Documentos recentes</h2>
+                <p className="text-xs text-slate-500">Receitas, exames e atestados</p>
+              </div>
+              <Button variant="ghost" size="sm" className="gap-1 text-amber-700 hover:text-amber-800" onClick={() => navigate("/teleconsultas")}>
+                Ver todos <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            {recentDocs.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 py-10 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-100">
+                  <FileText className="h-6 w-6 text-slate-400" />
+                </div>
+                <p className="max-w-xs text-sm text-slate-500">Seus documentos aparecerão aqui após as consultas.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {recentDocs.map((c) => (
+                  <button
+                    key={c.id}
+                    onClick={() => navigate(`/consulta/${c.id}/detalhes`)}
+                    className="flex min-h-[68px] w-full items-center gap-4 rounded-2xl border border-slate-100 bg-white p-4 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                  >
+                    <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-slate-800">Consulta · Clínico Geral</p>
+                      <p className="text-xs text-slate-400">{format(new Date(c.created_at || c.date), "dd/MM/yyyy", { locale: ptBR })}</p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {docChips(c).map((d) => (
+                          <span key={d.label} className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+                            <d.icon className="h-3 w-3" /> {d.label}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-slate-300" />
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {/* ── Plan Hero ────────────────────────────────────────────────── */}
-        {subscription?.plan ? (
-          <div className={`rounded-2xl p-6 sm:p-8 text-primary-foreground bg-gradient-to-br ${getPlanColor(subscription.plan.type)} shadow-lg`}>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-5">
-              <div className="flex items-start gap-4">
-                <div className="w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
-                  <Crown className="h-6 w-6 text-white" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-white/70 uppercase tracking-wider mb-1">Seu plano ativo</p>
-                  <h2 className="text-xl sm:text-2xl font-heading font-bold text-white">
-                    Plano {subscription.plan.name}
-                  </h2>
-                  <p className="text-sm text-white/80 mt-1">{getPlanDescription()}</p>
-                  <p className="text-xs text-white/60 mt-1">
-                    Válido até {formatExpirationDate(subscription.expires_at)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                variant="secondary"
-                className="bg-white/20 hover:bg-white/30 text-white border-0 shrink-0 gap-2 backdrop-blur-sm"
-                onClick={() => navigate("/meu-plano")}
-              >
-                <Sparkles className="h-4 w-4" />
-                Fazer upgrade
-              </Button>
-            </div>
-          </div>
-        ) : (
-          <div className="rounded-2xl border-2 border-dashed border-primary/30 bg-primary/5 p-6 sm:p-8">
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                  <Crown className="h-6 w-6 text-primary" />
-                </div>
-                <div>
-                  <h2 className="text-base sm:text-lg font-heading font-bold text-primary">
-                    Você ainda não tem um plano
-                  </h2>
-                  <p className="text-sm text-muted-foreground mt-0.5">
-                    Assine agora e tenha acesso à telemedicina e muito mais.
-                  </p>
-                </div>
-              </div>
-              <Button
-                className="gradient-hero gap-2 shrink-0"
-                onClick={() => navigate("/planos")}
-              >
-                Ver planos
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
+        {/* Right column */}
+        <div className="space-y-6">
 
-        {/* ── Quick Actions ─────────────────────────────────────────────── */}
-        <div>
-          <p className="section-title">Acesso rápido</p>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
-            {quickActions.map(({ label, sublabel, icon: Icon, color, bg, route }) => (
+          {/* Consultation history */}
+          <div className="rounded-3xl border border-white/60 bg-white/80 p-5 shadow-sm backdrop-blur-md">
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="font-bold text-slate-900">Histórico de consultas</h2>
+                <p className="text-xs text-slate-500">Seus últimos atendimentos</p>
+              </div>
+              <Button variant="ghost" size="sm" className="h-8 gap-1 text-amber-700 hover:text-amber-800" onClick={() => navigate("/teleconsultas")}>
+                Ver todas <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+            {recentConsultas.length === 0 ? (
+              <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 py-8 text-center">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100">
+                  <Stethoscope className="h-5 w-5 text-slate-400" />
+                </div>
+                <p className="max-w-[14rem] text-sm text-slate-500">Suas consultas aparecerão aqui após o primeiro atendimento.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {recentConsultas.map((c) => {
+                  const meta = STATUS_META[c.status] ?? STATUS_META.completed;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => openConsulta(c)}
+                      className="flex w-full items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 text-left transition-colors hover:border-amber-200 hover:bg-amber-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+                        <Stethoscope className="h-5 w-5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-800">{c.doctor_name || "Clínico Geral"}</p>
+                        <div className="mt-0.5 flex items-center gap-2">
+                          <span className="text-xs text-slate-400">{format(new Date(c.created_at || c.date), "dd/MM/yyyy", { locale: ptBR })}</span>
+                          <span className={`inline-flex items-center gap-1 text-[11px] font-medium ${meta.text}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} /> {meta.label}
+                          </span>
+                        </div>
+                      </div>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-slate-300" />
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Quick links */}
+          <div className="rounded-3xl border border-white/60 bg-white/80 p-3 shadow-sm backdrop-blur-md">
+            {[
+              { label: "Meus pedidos", icon: Package, route: "/orders" },
+              { label: "Farmácia", icon: Pill, route: "/farmacia" },
+              { label: "Meu plano", icon: Crown, route: "/meu-plano" },
+            ].map(({ label, icon: Icon, route }) => (
               <button
                 key={route}
-                className="group text-left bg-card border border-border/50 rounded-xl p-3 sm:p-4 flex flex-col gap-2 hover:shadow-md hover:border-primary/20 transition-all duration-200 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
                 onClick={() => navigate(route)}
+                className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100"
               >
-                <div className={`w-9 h-9 rounded-lg ${bg} flex items-center justify-center transition-colors group-hover:scale-105 duration-200`}>
-                  <Icon className={`h-4 w-4 ${color}`} />
-                </div>
-                <div>
-                  <p className="font-semibold text-sm text-foreground leading-tight">{label}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5 leading-snug">{sublabel}</p>
-                </div>
+                <Icon className="h-[18px] w-[18px] text-slate-400" />
+                <span className="flex-1 text-left">{label}</span>
+                <ChevronRight className="h-4 w-4 text-slate-300" />
               </button>
             ))}
           </div>
         </div>
-
-        {/* ── Receituários ─────────────────────────────────────────────── */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h2 className="text-base font-heading font-bold text-primary leading-tight">
-                Meus Receituários
-              </h2>
-              <p className="text-xs text-muted-foreground mt-0.5">Últimas prescrições das suas consultas</p>
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-primary hover:text-primary gap-1"
-              onClick={() => navigate("/prescriptions")}
-            >
-              Ver todos
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-
-          <div className="flex flex-col items-center justify-center py-14 rounded-xl border border-dashed border-border bg-muted/30">
-            <div className="w-14 h-14 rounded-2xl bg-muted flex items-center justify-center mb-4">
-              <FileText className="h-7 w-7 text-muted-foreground" />
-            </div>
-            <p className="font-medium text-foreground mb-1">Nenhum receituário ainda</p>
-            <p className="text-sm text-muted-foreground mb-4 text-center max-w-xs">
-              Seus receituários aparecerão aqui após consultas realizadas.
-            </p>
-            <Button variant="outline" size="sm" onClick={() => navigate("/prescriptions")}>
-              Ver receituários
-            </Button>
-          </div>
-        </div>
-
-      </main>
-
-      <ActiveConsultationBanner />
+      </div>
 
       <SupportFAB />
     </div>

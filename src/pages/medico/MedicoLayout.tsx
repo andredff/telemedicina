@@ -1,14 +1,16 @@
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { RBAC } from '@/integrations/supabase/adminClient';
 import { Button } from '@/components/ui/button';
-import DoctorStatusToggle from '@/components/medico/DoctorStatusToggle';
+import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
+import { playNotificationSound } from '@/lib/sound';
+import DoctorStatusToggle, { useDoctorStatus } from '@/components/medico/DoctorStatusToggle';
 import {
   LayoutDashboard, LogOut, Stethoscope, User, CalendarDays,
-  ChevronDown, ChevronRight, Clock, Users, FileText, FlaskConical,
-  ClipboardCheck, PenLine, MessageSquare, Settings, HelpCircle,
-  ClipboardList,
+  ChevronDown, ChevronRight, Clock, Users, FileText,
+  Settings, HelpCircle, ClipboardList, Menu, X,
 } from 'lucide-react';
 
 // ─── Nav types ────────────────────────────────────────────────────────────────
@@ -57,10 +59,19 @@ interface DoctorInfo { full_name: string; email: string; specialty?: string }
 export default function MedicoLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { toast } = useToast();
   const [doctorInfo, setDoctorInfo] = useState<DoctorInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const alertedIds = useRef<Set<string>>(new Set());
+
+  // Online/offline gates the queue alerts; "Silenciar" snoozes the sound only.
+  const { online } = useDoctorStatus();
+  const onlineRef = useRef(online);
+  onlineRef.current = online;
+  const soundMutedUntilRef = useRef(0);
 
   // ── Nav sections (defined inside to access pendingCount) ─────────────────
 
@@ -85,30 +96,13 @@ export default function MedicoLayout() {
           ],
         },
         { kind: 'leaf', id: 'agenda', icon: CalendarDays, label: 'Agenda', path: '/medico/agenda' },
-        {
-          kind: 'group', id: 'pacientes', icon: Users, label: 'Pacientes',
-          basePath: '/medico/pacientes',
-          children: [
-            { id: 'hist', label: 'Histórico', path: '/medico/pacientes' },
-            { id: 'pront', label: 'Prontuário', path: '/medico/pacientes?tab=prontuario' },
-            { id: 'anex', label: 'Anexos', path: '/medico/pacientes?tab=anexos' },
-          ],
-        },
+        { kind: 'leaf', id: 'pacientes', icon: Users, label: 'Pacientes', path: '/medico/pacientes' },
       ],
     },
     {
       title: 'Documentos',
       entries: [
-        { kind: 'leaf', id: 'prescricoes', icon: FileText, label: 'Prescrições', path: '/medico/prescricoes' },
-        { kind: 'leaf', id: 'exames', icon: FlaskConical, label: 'Exames', path: '/medico/exames' },
-        { kind: 'leaf', id: 'atestados', icon: ClipboardCheck, label: 'Atestados', path: '/medico/atestados' },
-        { kind: 'leaf', id: 'documentos', icon: PenLine, label: 'Doc. Assinados', path: '/medico/documentos' },
-      ],
-    },
-    {
-      title: 'Comunicação',
-      entries: [
-        { kind: 'leaf', id: 'chat', icon: MessageSquare, label: 'Chat', path: '/medico/chat' },
+        { kind: 'leaf', id: 'documentos', icon: FileText, label: 'Documentos emitidos', path: '/medico/prescricoes' },
       ],
     },
     {
@@ -154,7 +148,7 @@ export default function MedicoLayout() {
         });
 
         const { count } = await supabase
-          .from('consultations').select('id', { count: 'exact', head: true }).eq('status', 'pending');
+          .from('consultations').select('id', { count: 'exact', head: true }).eq('status', 'waiting_doctor');
         setPendingCount(count ?? 0);
       } catch {
         navigate('/auth');
@@ -164,6 +158,70 @@ export default function MedicoLayout() {
     };
     checkAuth();
   }, [navigate]);
+
+  // ── Realtime waiting-room alert (active across the whole doctor area) ─────
+  // Plays a sound + toast and keeps the sidebar badge in sync whenever a
+  // patient joins or leaves the queue, regardless of which page is open.
+  useEffect(() => {
+    const channel = supabase
+      .channel('medico-layout-fila-realtime')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'consultations' },
+        (payload) => {
+          // New consultations enter triage ('waiting_attendant'); they reach the
+          // doctor queue only when an attendant routes them (the UPDATE handler).
+          const p = payload.new as { id: string; status: string };
+          if (p.status !== 'waiting_doctor') return;
+          // (handled below via the shared alert path on UPDATE)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'consultations' },
+        (payload) => {
+          const prev = payload.old as { status?: string };
+          const next = payload.new as { id: string; patient_name: string; status: string };
+          const enteredQueue = prev?.status !== 'waiting_doctor' && next.status === 'waiting_doctor';
+          const leftQueue    = prev?.status === 'waiting_doctor' && next.status !== 'waiting_doctor';
+
+          if (enteredQueue) {
+            if (alertedIds.current.has(next.id)) return;
+            alertedIds.current.add(next.id);
+            setPendingCount(c => c + 1);
+
+            // Offline: keep the badge in sync but stay silent.
+            if (!onlineRef.current) return;
+            if (Date.now() >= soundMutedUntilRef.current) playNotificationSound();
+
+            toast({
+              title: 'Novo paciente na fila',
+              description: `${next.patient_name} foi encaminhado pela triagem.`,
+              action: (
+                <ToastAction
+                  altText="Silenciar avisos por 10 minutos"
+                  onClick={() => { soundMutedUntilRef.current = Date.now() + 10 * 60_000; }}
+                >
+                  Silenciar 10 min
+                </ToastAction>
+              ),
+            });
+          } else if (leftQueue) {
+            alertedIds.current.delete(next.id);
+            setPendingCount(c => Math.max(0, c - 1));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [toast]);
+
+  // Reminder loop removed: a single beep per new patient (above) plus the
+  // persistent sidebar badge replaces the every-30s beep, which caused alert
+  // fatigue and ignored the doctor's online status.
 
   // ── Auto-expand groups based on current location ─────────────────────────
 
@@ -180,6 +238,11 @@ export default function MedicoLayout() {
       setExpanded(prev => new Set([...prev, ...toExpand]));
     }
   }, [location.pathname]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close the mobile drawer whenever the route (or tab) changes
+  useEffect(() => {
+    setMobileNavOpen(false);
+  }, [location.pathname, location.search]);
 
   const toggleGroup = (id: string) => {
     setExpanded(prev => {
@@ -282,11 +345,46 @@ export default function MedicoLayout() {
   return (
     <div className="flex min-h-screen bg-slate-50">
 
-      {/* ── Sidebar ── */}
-      <aside className="w-56 bg-white border-r border-gray-200 flex flex-col shrink-0 sticky top-0 h-screen">
+      {/* ── Mobile top bar (hamburger) ── */}
+      <header className="lg:hidden fixed top-0 inset-x-0 z-30 h-14 bg-white border-b border-gray-200 flex items-center gap-3 px-4">
+        <button
+          onClick={() => setMobileNavOpen(true)}
+          aria-label="Abrir menu de navegação"
+          className="p-1.5 -ml-1.5 rounded-lg text-gray-600 hover:bg-gray-100"
+        >
+          <Menu className="h-5 w-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+            <Stethoscope className="h-3.5 w-3.5 text-primary" />
+          </div>
+          <p className="text-sm font-bold text-foreground leading-none">Novità</p>
+        </div>
+        {pendingCount > 0 && (
+          <span className="ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white">
+            {pendingCount} na fila
+          </span>
+        )}
+      </header>
+
+      {/* ── Mobile drawer backdrop ── */}
+      {mobileNavOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/40"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar (static on desktop, slide-in drawer on mobile) ── */}
+      <aside
+        className={`w-56 bg-white border-r border-gray-200 flex flex-col shrink-0 h-screen z-50
+          fixed inset-y-0 left-0 transition-transform duration-200 lg:sticky lg:top-0 lg:translate-x-0
+          ${mobileNavOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}
+      >
 
         {/* Logo */}
-        <div className="px-4 py-3.5 border-b border-gray-100 shrink-0">
+        <div className="px-4 py-3.5 border-b border-gray-100 shrink-0 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
               <Stethoscope className="h-3.5 w-3.5 text-primary" />
@@ -296,6 +394,13 @@ export default function MedicoLayout() {
               <p className="text-[10px] text-muted-foreground mt-0.5 leading-none">Área do Médico</p>
             </div>
           </div>
+          <button
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Fechar menu"
+            className="lg:hidden p-1 rounded-lg text-gray-500 hover:bg-gray-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         {/* Nav */}
@@ -345,8 +450,8 @@ export default function MedicoLayout() {
         </div>
       </aside>
 
-      {/* ── Main content ── */}
-      <div className="flex-1 overflow-y-auto min-h-screen">
+      {/* ── Main content (offset below the fixed mobile top bar) ── */}
+      <div className="flex-1 overflow-y-auto min-h-screen pt-14 lg:pt-0">
         <Outlet />
       </div>
     </div>

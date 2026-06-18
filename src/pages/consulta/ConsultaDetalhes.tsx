@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Stethoscope, Clock, FileText, FlaskConical, ClipboardCheck,
   Printer, ShoppingCart, PenLine, CheckCircle, XCircle, Loader2,
-  AlertCircle, Pill, Paperclip, Activity, User,
+  AlertCircle, Pill, Paperclip, Activity, User, Download,
 } from "lucide-react";
 import Header from "@/components/Header";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,10 @@ import {
   loadConsultaDraft, draftHasDocuments, printReceita, printExames, printAtestado,
   intakeHasContent, type ConsultaDraft, type IntakeData,
 } from "@/lib/consultaDraft";
+import { openExamFile } from "@/lib/examFiles";
+import { getPrescriptionByConsultation, getSignedPrescriptionUrl, type PrescriptionRecord } from "@/services/prescriptionService";
+import { getConsultationDocuments, getSignedDocumentUrl, type ConsultationDocumentRecord } from "@/services/consultationDocumentService";
+import { logEvent } from "@/lib/audit";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -24,13 +28,20 @@ interface ConsultaInfo {
   date: string;
   status: string;
   created_at: string;
+  number?: number | null;
 }
 
 const STATUS_LABEL: Record<string, { label: string; cls: string; Icon: React.ElementType }> = {
+  waiting_attendant: { label: "Aguardando atendente", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Clock },
+  with_attendant:    { label: "Em triagem", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Clock },
+  waiting_doctor:    { label: "Aguardando médico", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Clock },
+  routed_to_doctor:  { label: "Médico chamando", cls: "bg-green-50 text-green-700 border-green-200", Icon: Stethoscope },
+  in_consultation:   { label: "Em consulta", cls: "bg-green-50 text-green-700 border-green-200", Icon: Stethoscope },
+  completed:         { label: "Concluída", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: CheckCircle },
+  cancelled:         { label: "Cancelada", cls: "bg-slate-100 text-slate-500 border-slate-200", Icon: XCircle },
+  // Legacy values (pre-triage migration)
   pending:     { label: "Aguardando", cls: "bg-amber-50 text-amber-700 border-amber-200", Icon: Clock },
   in_progress: { label: "Em atendimento", cls: "bg-green-50 text-green-700 border-green-200", Icon: Stethoscope },
-  completed:   { label: "Concluída", cls: "bg-emerald-50 text-emerald-700 border-emerald-200", Icon: CheckCircle },
-  cancelled:   { label: "Cancelada", cls: "bg-slate-100 text-slate-500 border-slate-200", Icon: XCircle },
 };
 
 const PRIORITY_CFG: Record<string, { label: string; cls: string }> = {
@@ -85,6 +96,12 @@ export default function ConsultaDetalhes() {
   const [consulta, setConsulta] = useState<ConsultaInfo | null>(null);
   const [draft, setDraft] = useState<ConsultaDraft | null>(null);
   const [intake, setIntake] = useState<IntakeData | null>(null);
+  const [signedRxUrl, setSignedRxUrl] = useState<string | null>(null);
+  const [rx, setRx] = useState<PrescriptionRecord | null>(null);
+  const [examDoc, setExamDoc] = useState<ConsultationDocumentRecord | null>(null);
+  const [certDoc, setCertDoc] = useState<ConsultationDocumentRecord | null>(null);
+  const [examPdfUrl, setExamPdfUrl] = useState<string | null>(null);
+  const [certPdfUrl, setCertPdfUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -92,7 +109,7 @@ export default function ConsultaDetalhes() {
       if (!id) return;
       const { data } = await supabase
         .from("consultations")
-        .select("id, patient_name, doctor_name, doctor_crm, date, status, created_at, clinical_data, intake_data")
+        .select("id, patient_name, doctor_name, doctor_crm, date, status, created_at, clinical_data, intake_data, number")
         .eq("id", id)
         .single();
       const row = data as unknown as
@@ -100,8 +117,42 @@ export default function ConsultaDetalhes() {
         | null;
       setConsulta(row);
       // Prefer DB-persisted clinical data; fall back to local draft (same browser)
-      setDraft(row?.clinical_data ?? loadConsultaDraft(id));
+      const clinical = row?.clinical_data ?? loadConsultaDraft(id);
+      setDraft(clinical);
       setIntake(row?.intake_data ?? null);
+      // Receita de 1ª classe (tabela consultation_prescriptions + PDF assinado).
+      // É a fonte autoritativa da receita — pode existir mesmo quando o
+      // clinical_data (rascunho) não foi persistido na linha da consulta.
+      let rxRec: PrescriptionRecord | null = null;
+      try {
+        rxRec = await getPrescriptionByConsultation(id);
+        if (rxRec) {
+          setRx(rxRec);
+          if (rxRec.pdf_path) setSignedRxUrl(await getSignedPrescriptionUrl(rxRec.pdf_path));
+        }
+      } catch { /* sem receita assinada */ }
+      // Exame/atestado assinados (tabela consultation_documents + PDF assinado).
+      try {
+        const docs = await getConsultationDocuments(id);
+        const exam = docs.find(d => d.doc_type === 'exam_request') ?? null;
+        const cert = docs.find(d => d.doc_type === 'certificate') ?? null;
+        setExamDoc(exam);
+        setCertDoc(cert);
+        if (exam?.pdf_path) setExamPdfUrl(await getSignedDocumentUrl(exam.pdf_path));
+        if (cert?.pdf_path) setCertPdfUrl(await getSignedDocumentUrl(cert.pdf_path));
+      } catch { /* sem documentos assinados */ }
+      if (row) {
+        logEvent('patient_document_viewed', {
+          consultationId: id,
+          payload: {
+            document_types: [
+              ...((clinical?.medications?.length || rxRec?.medications?.length) ? ['prescription'] : []),
+              ...(clinical?.examRequests?.length ? ['exam_request'] : []),
+              ...(clinical?.certificate ? ['certificate'] : []),
+            ],
+          },
+        });
+      }
       setLoading(false);
     };
     load();
@@ -140,7 +191,24 @@ export default function ConsultaDetalhes() {
   }
 
   const st = STATUS_LABEL[consulta.status] ?? STATUS_LABEL.completed;
-  const hasDocs = draftHasDocuments(draft);
+  // Receita: prefere os medicamentos do rascunho (clinical_data); cai para o
+  // registro assinado (consultation_prescriptions) quando o rascunho não foi
+  // persistido — assim a receita sempre aparece para o paciente.
+  const rxMeds: { id?: string; name: string; dosage?: string; quantity?: string; instructions?: string }[] =
+    (draft?.medications?.length ? draft.medications : rx?.medications) ?? [];
+  const rxSigned = draft?.signed || rx?.status === "signed";
+  const rxSignedAt = draft?.signedAt ?? rx?.signed_at ?? null;
+  // Exame/atestado: preferem o rascunho (clinical_data); caem para o documento
+  // assinado (consultation_documents) quando o rascunho não foi persistido.
+  const examItems: { id?: string; name: string; priority: string; justification?: string }[] =
+    (draft?.examRequests?.length
+      ? draft.examRequests
+      : (examDoc?.content as { exams?: { name: string; priority: string; justification?: string }[] } | undefined)?.exams) ?? [];
+  const certData = draft?.certificate
+    ?? (certDoc?.content as { days?: string; startDate?: string; cidCode?: string; reason?: string; notes?: string } | undefined)
+    ?? null;
+  const hasCert = !!(certData && (certData.days || certData.reason));
+  const hasDocs = draftHasDocuments(draft) || rxMeds.length > 0 || examItems.length > 0 || hasCert;
   const isCompleted = consulta.status === "completed";
 
   return (
@@ -183,7 +251,7 @@ export default function ConsultaDetalhes() {
                 <Clock className="h-3.5 w-3.5" />
                 {fmtDateTime(consulta.created_at || consulta.date)}
               </span>
-              <span className="font-mono">#{consulta.id.slice(0, 8)}</span>
+              <span className="font-mono">#{consulta.number ?? consulta.id.slice(0, 8)}</span>
             </div>
           </CardContent>
         </Card>
@@ -232,17 +300,16 @@ export default function ConsultaDetalhes() {
                   </p>
                   <div className="space-y-1.5">
                     {intake.exames.map((ex, i) => (
-                      <a
+                      <button
                         key={i}
-                        href={ex.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2 rounded-lg border bg-white hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm text-foreground"
+                        type="button"
+                        onClick={() => openExamFile(ex)}
+                        className="flex w-full items-center gap-2 p-2 rounded-lg border bg-white hover:border-primary/40 hover:bg-primary/5 transition-colors text-sm text-foreground text-left"
                       >
                         <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span className="flex-1 truncate">{ex.name}</span>
                         <span className="text-xs text-primary">Abrir</span>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -278,17 +345,25 @@ export default function ConsultaDetalhes() {
         )}
 
         {/* Receituário */}
-        {draft && draft.medications.length > 0 && printMeta && (
+        {rxMeds.length > 0 && printMeta && (
           <Section
             icon={Pill}
             title="Receituário"
-            count={draft.medications.length}
+            count={rxMeds.length}
             accent="bg-emerald-50 text-emerald-600"
             action={
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printReceita(draft.medications, printMeta)}>
-                  <Printer className="h-3.5 w-3.5" /> Imprimir
-                </Button>
+                {signedRxUrl ? (
+                  <Button asChild variant="outline" size="sm" className="gap-1.5 h-8">
+                    <a href={signedRxUrl} target="_blank" rel="noopener noreferrer">
+                      <Download className="h-3.5 w-3.5" /> Receita assinada
+                    </a>
+                  </Button>
+                ) : (
+                  <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printReceita(rxMeds, printMeta)}>
+                    <Printer className="h-3.5 w-3.5" /> Imprimir
+                  </Button>
+                )}
                 <Button size="sm" className="gap-1.5 h-8" onClick={() => navigate("/farmacia")}>
                   <ShoppingCart className="h-3.5 w-3.5" /> Comprar
                 </Button>
@@ -296,8 +371,8 @@ export default function ConsultaDetalhes() {
             }
           >
             <div className="space-y-2.5">
-              {draft.medications.map((m, i) => (
-                <div key={m.id} className="flex items-start gap-3 p-3 rounded-xl border bg-white">
+              {rxMeds.map((m, i) => (
+                <div key={m.id ?? i} className="flex items-start gap-3 p-3 rounded-xl border bg-white">
                   <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">{i + 1}</span>
                   <div className="min-w-0">
                     <p className="font-semibold text-sm text-foreground">{m.name}</p>
@@ -306,28 +381,42 @@ export default function ConsultaDetalhes() {
                   </div>
                 </div>
               ))}
+              {rx?.guidance?.trim() && (
+                <div className="rounded-xl border bg-muted/30 p-3">
+                  <p className="text-xs font-medium text-muted-foreground mb-1">Orientações médicas</p>
+                  <p className="text-sm text-foreground/80 whitespace-pre-wrap">{rx.guidance}</p>
+                </div>
+              )}
             </div>
           </Section>
         )}
 
         {/* Exames */}
-        {draft && draft.examRequests.length > 0 && printMeta && (
+        {examItems.length > 0 && printMeta && (
           <Section
             icon={FlaskConical}
             title="Pedidos de exame"
-            count={draft.examRequests.length}
+            count={examItems.length}
             accent="bg-violet-50 text-violet-600"
             action={
-              <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printExames(draft.examRequests, printMeta)}>
-                <Printer className="h-3.5 w-3.5" /> Imprimir
-              </Button>
+              examPdfUrl ? (
+                <Button asChild variant="outline" size="sm" className="gap-1.5 h-8">
+                  <a href={examPdfUrl} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-3.5 w-3.5" /> Pedido assinado
+                  </a>
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printExames(examItems as typeof draft.examRequests, printMeta)}>
+                  <Printer className="h-3.5 w-3.5" /> Imprimir
+                </Button>
+              )
             }
           >
             <div className="space-y-2.5">
-              {draft.examRequests.map((e) => {
+              {examItems.map((e, i) => {
                 const p = PRIORITY_CFG[e.priority] ?? PRIORITY_CFG.routine;
                 return (
-                  <div key={e.id} className="flex items-start gap-3 p-3 rounded-xl border bg-white">
+                  <div key={e.id ?? i} className="flex items-start gap-3 p-3 rounded-xl border bg-white">
                     <FlaskConical className="h-4 w-4 text-violet-500 shrink-0 mt-0.5" />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -344,40 +433,48 @@ export default function ConsultaDetalhes() {
         )}
 
         {/* Atestado */}
-        {draft?.certificate && printMeta && (
+        {hasCert && certData && printMeta && (
           <Section
             icon={ClipboardCheck}
             title="Atestado médico"
             accent="bg-amber-50 text-amber-600"
             action={
-              <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printAtestado(draft.certificate!, printMeta)}>
-                <Printer className="h-3.5 w-3.5" /> Imprimir
-              </Button>
+              certPdfUrl ? (
+                <Button asChild variant="outline" size="sm" className="gap-1.5 h-8">
+                  <a href={certPdfUrl} target="_blank" rel="noopener noreferrer">
+                    <Download className="h-3.5 w-3.5" /> Atestado assinado
+                  </a>
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="gap-1.5 h-8" onClick={() => printAtestado(certData as Parameters<typeof printAtestado>[0], printMeta)}>
+                  <Printer className="h-3.5 w-3.5" /> Imprimir
+                </Button>
+              )
             }
           >
             <div className="space-y-2 text-sm">
               <div className="flex justify-between border-b border-border/50 pb-2">
                 <span className="text-muted-foreground">Afastamento</span>
                 <span className="font-medium text-foreground">
-                  {draft.certificate.days} dia{Number(draft.certificate.days) > 1 ? "s" : ""}
+                  {certData.days} dia{Number(certData.days) > 1 ? "s" : ""}
                 </span>
               </div>
-              {draft.certificate.cidCode && (
+              {certData.cidCode && (
                 <div className="flex justify-between border-b border-border/50 pb-2">
                   <span className="text-muted-foreground">CID-10</span>
-                  <span className="font-medium text-foreground">{draft.certificate.cidCode}</span>
+                  <span className="font-medium text-foreground">{certData.cidCode}</span>
                 </div>
               )}
-              {draft.certificate.reason && (
+              {certData.reason && (
                 <div className="pt-1">
                   <p className="text-muted-foreground mb-0.5">Diagnóstico</p>
-                  <p className="text-foreground/80">{draft.certificate.reason}</p>
+                  <p className="text-foreground/80">{certData.reason}</p>
                 </div>
               )}
-              {draft.certificate.notes && (
+              {certData.notes && (
                 <div className="pt-1">
                   <p className="text-muted-foreground mb-0.5">Observações</p>
-                  <p className="text-foreground/80">{draft.certificate.notes}</p>
+                  <p className="text-foreground/80">{certData.notes}</p>
                 </div>
               )}
             </div>
@@ -385,12 +482,14 @@ export default function ConsultaDetalhes() {
         )}
 
         {/* Signature note */}
-        {hasDocs && draft?.signed && (
+        {hasDocs && (rxSigned || !!examDoc || !!certDoc) && (
           <div className="flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
             <PenLine className="h-4 w-4 shrink-0" />
             <span>
               Documentos assinados digitalmente
-              {draft.signedAt ? ` em ${fmtDateTime(draft.signedAt)}` : ""}.
+              {(rxSignedAt ?? examDoc?.signed_at ?? certDoc?.signed_at)
+                ? ` em ${fmtDateTime((rxSignedAt ?? examDoc?.signed_at ?? certDoc?.signed_at) as string)}`
+                : ""}.
             </span>
           </div>
         )}

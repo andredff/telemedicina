@@ -22,7 +22,8 @@ export const RBAC = {
     ADMIN: 'admin',
     DOCTOR: 'doctor',
     PATIENT: 'patient',
-    SUPPORT: 'support'
+    SUPPORT: 'support',
+    ATTENDANT: 'attendant'
   },
   
   // Check if user has a specific role

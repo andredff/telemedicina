@@ -1,5 +1,11 @@
 // Dados dos planos conforme Briefing Novità Telemedicina
-// Última atualização: Maio/2026
+// Última atualização: Junho/2026
+//
+// Modelo de cobrança (contrato v3):
+//   - Ciclo do plano: ANUAL (compromisso de 12 meses).
+//   - Cobrança: recorrente MENSAL, no valor fechado (price_monthly), sem juros.
+//   - Não há pré-pagamento anual com desconto. O valor anual é simplesmente
+//     12 × price_monthly (price_yearly), usado só como referência do total.
 
 export interface PlanData {
   id: string;
@@ -9,23 +15,21 @@ export interface PlanData {
   description: string;
   shortDescription: string;
   price_monthly: number;
-  price_yearly: number;
+  price_yearly: number;                // valor fechado anual = 12 × price_monthly (sem desconto)
   specialist_consultations_per_year: number;
-  checkups_per_year: number;           // check-ups no pagamento mensal
-  checkups_per_year_annual: number;    // check-ups no pagamento anual
+  checkups_per_year: number;           // check-ups por ciclo (anual)
   max_dependents: number;
   features: string[];
-  features_annual: string[];
   highlight?: boolean;
 }
 
-// Desconto anual conforme briefing: 10%
-export const ANNUAL_DISCOUNT = 0.10;
-
-// Preços de consultas avulsas
+// Preços de consultas avulsas — valores fixados na Tabela IV do contrato (v3).
+// check_up ainda não é comprável avulso (precisa de fluxo dedicado); o valor
+// fica registrado aqui por ser a referência contratual.
 export const SINGLE_CONSULTATION_PRICES = {
-  clinico_geral: 59.90,
-  especialista: 149.90,
+  clinico_geral: 150.00,
+  especialista: 500.00,
+  check_up: 250.00,
 };
 
 // Benefícios base do Bronze (comum a todos os planos)
@@ -37,8 +41,7 @@ const BASE_BRONZE_FEATURES = [
   'Programa "Medicamento em Casa" (*)',
 ];
 
-// Planos Individuais
-// Mensal e anual têm os mesmos check-ups (1 para Ouro e Diamante)
+// Planos Individuais — ciclo anual, cobrança mensal recorrente
 export const INDIVIDUAL_PLANS: PlanData[] = [
   {
     id: 'individual-bronze',
@@ -48,13 +51,11 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     description: 'Consultas médicas ilimitadas',
     shortDescription: 'Consultas médicas ilimitadas',
     price_monthly: 29.90,
-    price_yearly: 29.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 322,92/ano = R$ 26,91/mês
+    price_yearly: 29.90 * 12, // R$ 358,80/ano (12x de R$ 29,90)
     specialist_consultations_per_year: 0,
     checkups_per_year: 0,
-    checkups_per_year_annual: 0,
     max_dependents: 0,
     features: [...BASE_BRONZE_FEATURES],
-    features_annual: [...BASE_BRONZE_FEATURES],
   },
   {
     id: 'individual-prata',
@@ -64,16 +65,11 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     description: 'Consulta garantida com especialista',
     shortDescription: 'Consulta garantida com especialista',
     price_monthly: 49.90,
-    price_yearly: 49.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 538,92/ano = R$ 44,91/mês
+    price_yearly: 49.90 * 12, // R$ 598,80/ano (12x de R$ 49,90)
     specialist_consultations_per_year: 1,
     checkups_per_year: 0,
-    checkups_per_year_annual: 0,
     max_dependents: 0,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '1 consulta com médico especialista por ano',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '1 consulta com médico especialista por ano',
     ],
@@ -86,18 +82,12 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     description: 'Maiores cuidados em saúde, com check up gratuito',
     shortDescription: 'Maiores cuidados em saúde, com check up gratuito',
     price_monthly: 69.90,
-    price_yearly: 69.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 754,92/ano = R$ 62,91/mês
+    price_yearly: 69.90 * 12, // R$ 838,80/ano (12x de R$ 69,90)
     specialist_consultations_per_year: 1,
     checkups_per_year: 1,
-    checkups_per_year_annual: 1,
     max_dependents: 0,
     highlight: true,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '1 consulta com médico especialista por ano',
-      '1 check-up anual (mulher, homem ou criança)',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '1 consulta com médico especialista por ano',
       '1 check-up anual (mulher, homem ou criança)',
@@ -111,17 +101,11 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
     description: 'Melhor e mais avançado controle da saúde',
     shortDescription: 'Melhor e mais avançado controle da saúde',
     price_monthly: 89.90,
-    price_yearly: 89.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 970,92/ano = R$ 80,91/mês
+    price_yearly: 89.90 * 12, // R$ 1.078,80/ano (12x de R$ 89,90)
     specialist_consultations_per_year: 2,
     checkups_per_year: 1,
-    checkups_per_year_annual: 1,
     max_dependents: 0,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '2 consultas com médico especialista por ano',
-      '1 check-up anual (mulher, homem ou criança)',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
       '1 check-up anual (mulher, homem ou criança)',
@@ -129,8 +113,7 @@ export const INDIVIDUAL_PLANS: PlanData[] = [
   },
 ];
 
-// Planos Coletivos (Familiar - até 3 vidas)
-// Ouro e Diamante: mensal=2 check-ups, anual=1 check-up
+// Planos Coletivos (Familiar - até 3 vidas) — ciclo anual, cobrança mensal recorrente
 export const COLETIVO_PLANS: PlanData[] = [
   {
     id: 'coletivo-bronze',
@@ -140,16 +123,11 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'Consultas médicas ilimitadas para até 3 vidas no total',
     shortDescription: 'Até 3 vidas no total',
     price_monthly: 79.90,
-    price_yearly: 79.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 862,92/ano = R$ 71,91/mês
+    price_yearly: 79.90 * 12, // R$ 958,80/ano (12x de R$ 79,90)
     specialist_consultations_per_year: 0,
     checkups_per_year: 0,
-    checkups_per_year_annual: 0,
     max_dependents: 2, // titular + 2 dependentes = 3 vidas
     features: [
-      ...BASE_BRONZE_FEATURES,
-      'Até 3 beneficiários no total',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       'Até 3 beneficiários no total',
     ],
@@ -162,17 +140,11 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'Consultas com especialista para toda a família',
     shortDescription: 'Especialista incluído - até 3 pessoas',
     price_monthly: 139.90,
-    price_yearly: 139.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 1.510,92/ano = R$ 125,91/mês
+    price_yearly: 139.90 * 12, // R$ 1.678,80/ano (12x de R$ 139,90)
     specialist_consultations_per_year: 2,
     checkups_per_year: 0,
-    checkups_per_year_annual: 0,
     max_dependents: 2,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '2 consultas com médico especialista por ano',
-      'Até 3 beneficiários no total',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
       'Até 3 beneficiários no total',
@@ -186,19 +158,12 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'Maiores cuidados em saúde para toda a família',
     shortDescription: 'Check-up incluído - até 3 pessoas',
     price_monthly: 199.90,
-    price_yearly: 199.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.158,92/ano = R$ 179,91/mês
+    price_yearly: 199.90 * 12, // R$ 2.398,80/ano (12x de R$ 199,90)
     specialist_consultations_per_year: 2,
-    checkups_per_year: 2,
-    checkups_per_year_annual: 1,
+    checkups_per_year: 1,
     max_dependents: 2,
     highlight: true,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '2 consultas com médico especialista por ano',
-      '2 check-ups anuais',
-      'Até 3 beneficiários no total',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '2 consultas com médico especialista por ano',
       '1 check-up anual',
@@ -213,18 +178,11 @@ export const COLETIVO_PLANS: PlanData[] = [
     description: 'O melhor plano para toda a família',
     shortDescription: 'Plano completo - até 3 pessoas',
     price_monthly: 259.90,
-    price_yearly: 259.90 * 12 * (1 - ANNUAL_DISCOUNT), // R$ 2.806,92/ano = R$ 233,91/mês
+    price_yearly: 259.90 * 12, // R$ 3.118,80/ano (12x de R$ 259,90)
     specialist_consultations_per_year: 4,
-    checkups_per_year: 2,
-    checkups_per_year_annual: 1,
+    checkups_per_year: 1,
     max_dependents: 2,
     features: [
-      ...BASE_BRONZE_FEATURES,
-      '4 consultas com médico especialista por ano',
-      '2 check-ups anuais',
-      'Até 3 beneficiários no total',
-    ],
-    features_annual: [
       ...BASE_BRONZE_FEATURES,
       '4 consultas com médico especialista por ano',
       '1 check-up anual',
@@ -235,21 +193,6 @@ export const COLETIVO_PLANS: PlanData[] = [
 
 // Todos os planos combinados
 export const ALL_PLANS: PlanData[] = [...INDIVIDUAL_PLANS, ...COLETIVO_PLANS];
-
-// Retorna check-ups conforme periodicidade
-export const getCheckupsForBilling = (plan: PlanData, billing: 'monthly' | 'yearly'): number => {
-  return billing === 'yearly' ? plan.checkups_per_year_annual : plan.checkups_per_year;
-};
-
-// Retorna features conforme periodicidade
-export const getFeaturesForBilling = (plan: PlanData, billing: 'monthly' | 'yearly'): string[] => {
-  return billing === 'yearly' ? plan.features_annual : plan.features;
-};
-
-// Helper para calcular preço mensal no plano anual
-export const getMonthlyPriceFromYearly = (yearlyPrice: number): number => {
-  return yearlyPrice / 12;
-};
 
 // Helper para formatar preço em BRL
 export const formatPrice = (price: number): string => {

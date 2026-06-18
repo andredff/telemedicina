@@ -20,7 +20,7 @@ import { FlaskConical, Search, User, HeartPulse, CheckCircle2, AlertCircle, Load
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { logger } from "@/lib/logger";
-import { ALL_PLANS, getCheckupsForBilling } from "@/data/plansData";
+import { ALL_PLANS } from "@/data/plansData";
 
 interface PatientResult {
   user_id: string;
@@ -150,11 +150,11 @@ const LabPanel = () => {
         used = 0;
       }
 
-      const billing = (sub?.billing_cycle === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
       const planType = (sub?.plan as { type?: string } | null)?.type ?? null;
       const planName = (sub?.plan as { name?: string } | null)?.name ?? null;
       const planData = planType ? ALL_PLANS.find((p) => p.type === planType) : null;
-      const total = planData ? getCheckupsForBilling(planData, billing) : 0;
+      // Ciclo do plano é sempre anual — saldo de check-ups é o do ciclo anual.
+      const total = planData ? planData.checkups_per_year : 0;
 
       setPatient({
         user_id: profile.id,
@@ -163,7 +163,7 @@ const LabPanel = () => {
         subscription_id: sub?.id ?? null,
         plan_name: planName,
         plan_type: planType,
-        billing_cycle: billing,
+        billing_cycle: sub?.billing_cycle === "yearly" ? "yearly" : "monthly",
         total_checkups: total,
         used_checkups: used,
         available_checkups: Math.max(0, total - used),
@@ -336,9 +336,7 @@ const LabPanel = () => {
                   <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Plano</p>
                     <p className="font-semibold">{patient.plan_name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {patient.billing_cycle === "yearly" ? "Anual" : "Mensal"}
-                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">Anual</p>
                   </div>
                   <div className="rounded-xl border bg-card p-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Realizados</p>

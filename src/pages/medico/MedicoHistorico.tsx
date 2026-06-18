@@ -11,14 +11,6 @@ import {
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-interface Consultation {
-  id: string;
-  patient_name: string;
-  date: string;
-  doctor_name: string;
-  doctor_crm: string;
-}
-
 interface ConsultationDraft {
   anamnese: string;
   medications: { id: string; name: string; dosage: string; quantity: string; instructions: string }[];
@@ -28,11 +20,28 @@ interface ConsultationDraft {
   signedAt: string | null;
 }
 
-function loadDraft(id: string): ConsultationDraft | null {
+interface Consultation {
+  id: string;
+  patient_name: string;
+  date: string;
+  doctor_name: string;
+  doctor_crm: string;
+  number?: number | null;
+  clinical_data?: ConsultationDraft | null;
+}
+
+// O prontuário fica em consultations.clinical_data (banco) — fonte única que
+// aparece em qualquer dispositivo/médico. localStorage é apenas fallback de
+// rascunhos antigos criados na própria máquina, antes desta migração.
+function loadLocalDraft(id: string): ConsultationDraft | null {
   try {
     const raw = localStorage.getItem(`novita_draft_${id}`);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
+}
+
+function consultationDraft(c: Consultation): ConsultationDraft | null {
+  return c.clinical_data ?? loadLocalDraft(c.id);
 }
 
 function formatDate(d: string) {
@@ -52,7 +61,7 @@ function DocBadge({ label, icon: Icon, count }: { label: string; icon: React.Ele
 function HistoricoCard({ c }: { c: Consultation }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
-  const draft = loadDraft(c.id);
+  const draft = consultationDraft(c);
 
   const hasDocs = draft && (
     draft.medications.length > 0 ||
@@ -76,7 +85,7 @@ function HistoricoCard({ c }: { c: Consultation }) {
                   <Calendar className="h-3 w-3" />
                   {formatDate(c.date)}
                 </span>
-                <span className="text-[11px] text-muted-foreground font-mono">#{c.id.slice(0, 8)}</span>
+                <span className="text-[11px] text-muted-foreground font-mono">#{c.number ?? c.id.slice(0, 8)}</span>
               </div>
             </div>
           </div>
@@ -224,10 +233,10 @@ export default function MedicoHistorico() {
       try {
         const { data } = await supabase
           .from('consultations')
-          .select('id, patient_name, date, doctor_name, doctor_crm')
+          .select('id, patient_name, date, doctor_name, doctor_crm, number, clinical_data')
           .eq('status', 'completed')
           .order('updated_at', { ascending: false });
-        setConsultations(data ?? []);
+        setConsultations((data ?? []) as unknown as Consultation[]);
       } finally {
         setLoading(false);
       }

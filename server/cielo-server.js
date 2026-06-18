@@ -386,10 +386,6 @@ function simulatePayment(cardNumber, amountInCents, paymentType) {
 // ─── POST /api/cielo/payment ─────────────────────────────────────────────────
 app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => {
   try {
-    if (!cieloConfig.merchantId || !cieloConfig.merchantKey) {
-      return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
-    }
-
     const { orderId, customer, card, amountInCents, installments = 1, paymentType } = req.body;
 
     if (paymentType === "pix" && !cieloConfig.pixEnabled) {
@@ -405,6 +401,11 @@ app.post("/api/cielo/payment", paymentLimiter, requireAuth, async (req, res) => 
       console.log(`[Cielo] SIMULATE mode — orderId=${orderId} card=****${String(cardNumber).replace(/\D/g,"").slice(-4)}`);
       const simResult = simulatePayment(cardNumber, amountInCents, paymentType);
       return res.status(simResult.success ? 200 : 400).json(simResult);
+    }
+
+    // Fora do modo simulação, o pagamento real exige credenciais da Cielo.
+    if (!cieloConfig.merchantId || !cieloConfig.merchantKey) {
+      return res.status(500).json({ success: false, message: "Cielo credentials not configured" });
     }
 
     if (!orderId || !customer || !amountInCents) {
@@ -1581,6 +1582,109 @@ app.post("/api/admin/users/:id/reset-password", requireAuth, requireAdmin, async
     return res.json({ success: true, email: profile.email });
   } catch (err) {
     console.error("[Admin] Erro ao resetar senha:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+// ─── Admin: criar usuário ──────────────────────────────────────────────────────
+// Cria um usuário no Supabase Auth (e-mail já confirmado) e define o papel no profile.
+// O trigger handle_new_user cria o profile automaticamente, porém sem definir o role.
+app.post("/api/admin/users", requireAuth, requireAdmin, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const { email, password, full_name, role } = req.body || {};
+
+  const emailNorm = typeof email === "string" ? email.trim().toLowerCase() : "";
+  if (!emailNorm || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNorm)) {
+    return res.status(400).json({ error: "E-mail inválido" });
+  }
+  if (typeof password !== "string" || password.length < 6) {
+    return res.status(400).json({ error: "A senha deve ter ao menos 6 caracteres" });
+  }
+
+  const ALLOWED_ROLES = ["patient", "doctor", "attendant", "support", "admin"];
+  const roleNorm = ALLOWED_ROLES.includes(role) ? role : "patient";
+  const fullNameNorm = typeof full_name === "string" && full_name.trim() ? full_name.trim() : emailNorm;
+
+  try {
+    // Cria o usuário no Auth — o trigger handle_new_user gera o profile com role padrão
+    const { data: created, error: createErr } = await supabase.auth.admin.createUser({
+      email: emailNorm,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullNameNorm },
+    });
+
+    if (createErr || !created?.user) {
+      const msg = createErr?.message || "Falha ao criar usuário";
+      const status = /already.*regist|already exists|been registered/i.test(msg) ? 409 : 400;
+      return res.status(status).json({ error: status === 409 ? "Já existe um usuário com este e-mail" : msg });
+    }
+
+    const newUserId = created.user.id;
+
+    // Aplica o papel escolhido (o trigger não define role)
+    const { error: profileErr } = await supabase
+      .from("profiles")
+      .update({ role: roleNorm, full_name: fullNameNorm })
+      .eq("id", newUserId);
+
+    if (profileErr) {
+      console.error("[Admin] Erro ao definir papel do novo usuário:", profileErr.message);
+      return res.status(500).json({ error: "Usuário criado, mas houve falha ao definir o papel" });
+    }
+
+    if (!IS_PRODUCTION) console.log(`[Admin] Usuário criado ${emailNorm} (role=${roleNorm}, id=${newUserId})`);
+    return res.status(201).json({ success: true, id: newUserId, email: emailNorm, full_name: fullNameNorm, role: roleNorm });
+  } catch (err) {
+    console.error("[Admin] Erro ao criar usuário:", err.message);
+    return res.status(500).json({ error: safeErrorMessage(err) });
+  }
+});
+
+// ─── Admin: bloquear / desbloquear acesso ──────────────────────────────────────
+// Bane (ou remove o banimento) do usuário no Supabase Auth — impede login e
+// invalida sessões — e espelha o estado na coluna profiles.blocked.
+app.post("/api/admin/users/:id/block", requireAuth, requireAdmin, async (req, res) => {
+  if (!supabase) {
+    return res.status(503).json({ error: "Supabase não configurado no servidor" });
+  }
+
+  const { id } = req.params;
+  const blocked = req.body?.blocked === true;
+
+  if (id === req.user?.id) {
+    return res.status(400).json({ error: "Você não pode bloquear o próprio acesso" });
+  }
+
+  try {
+    // ban_duration: período longo para bloquear; "none" para liberar
+    const { error: banErr } = await supabase.auth.admin.updateUserById(id, {
+      ban_duration: blocked ? "876000h" : "none",
+    });
+
+    if (banErr) {
+      console.error("[Admin] Erro ao alterar banimento:", banErr.message);
+      return res.status(400).json({ error: banErr.message || "Falha ao alterar acesso do usuário" });
+    }
+
+    // Espelha o estado na coluna para a UI
+    const { error: profileErr } = await supabase
+      .from("profiles")
+      .update({ blocked })
+      .eq("id", id);
+
+    if (profileErr) {
+      console.error("[Admin] Erro ao atualizar flag blocked:", profileErr.message);
+      return res.status(500).json({ error: "Acesso alterado, mas falha ao atualizar o registro" });
+    }
+
+    if (!IS_PRODUCTION) console.log(`[Admin] Usuário ${id} ${blocked ? "bloqueado" : "desbloqueado"}`);
+    return res.json({ success: true, id, blocked });
+  } catch (err) {
+    console.error("[Admin] Erro ao bloquear/desbloquear usuário:", err.message);
     return res.status(500).json({ error: safeErrorMessage(err) });
   }
 });

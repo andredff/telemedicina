@@ -198,8 +198,8 @@ export const FAQ_ITEMS = [
     answer: 'Ao receber sua receita, você pode adquirir os medicamentos prescritos com descontos progressivos e entrega grátis. Atualmente disponível no DF e região do entorno. Outras regiões em breve.',
   },
   {
-    question: 'Qual a diferença entre o pagamento mensal e anual?',
-    answer: 'O pagamento anual oferece 10% de desconto sobre o valor total. O pagamento mensal é cobrado em 12 parcelas. Ambas as opções dão acesso a todos os benefícios do plano escolhido.',
+    question: 'Como funciona a cobrança do plano?',
+    answer: 'O plano tem vigência anual (compromisso de 12 meses), com cobrança recorrente mensal no cartão — 12 parcelas iguais e sucessivas, sem juros. Durante toda a vigência você tem acesso a todos os benefícios do plano escolhido.',
   },
 ];
 

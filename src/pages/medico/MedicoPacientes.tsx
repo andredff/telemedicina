@@ -14,20 +14,6 @@ import { ptBR } from 'date-fns/locale';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Consultation {
-  id: string;
-  patient_name: string;
-  date: string;
-  status: string;
-  doctor_name: string;
-}
-
-interface Patient {
-  name: string;
-  consultations: Consultation[];
-  lastDate: string;
-}
-
 interface ConsultationDraft {
   anamnese?: string;
   medications?: unknown[];
@@ -36,12 +22,34 @@ interface ConsultationDraft {
   signed?: boolean;
 }
 
+interface Consultation {
+  id: string;
+  patient_name: string;
+  date: string;
+  status: string;
+  doctor_name: string;
+  number?: number | null;
+  clinical_data?: ConsultationDraft | null;
+}
+
+interface Patient {
+  name: string;
+  consultations: Consultation[];
+  lastDate: string;
+}
+
 type DetailTab = 'historico' | 'prontuario' | 'anexos';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function loadDraft(id: string): ConsultationDraft | null {
+// Prontuário vem do banco (consultations.clinical_data); localStorage é só
+// fallback para rascunhos antigos criados na própria máquina.
+function loadLocalDraft(id: string): ConsultationDraft | null {
   try { const r = localStorage.getItem(`novita_draft_${id}`); return r ? JSON.parse(r) : null; } catch { return null; }
+}
+
+function consultationDraft(c: Consultation): ConsultationDraft | null {
+  return c.clinical_data ?? loadLocalDraft(c.id);
 }
 
 function fmt(d: string) {
@@ -54,7 +62,12 @@ function getInitials(name: string) {
 
 function statusBadge(status: string) {
   switch (status) {
+    case 'waiting_attendant':
+    case 'with_attendant': return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">Em triagem</span>;
+    case 'waiting_doctor':
     case 'pending': return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Aguardando</span>;
+    case 'routed_to_doctor':
+    case 'in_consultation':
     case 'in_progress': return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Em andamento</span>;
     case 'completed': return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-100 text-green-700">Concluída</span>;
     case 'cancelled': return <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-red-100 text-red-700">Cancelada</span>;
@@ -73,7 +86,7 @@ function PatientDetail({ patient, onBack }: { patient: Patient; onBack: () => vo
 
   const consultations = patient.consultations;
   const totalDocs = consultations.reduce((acc, c) => {
-    const d = loadDraft(c.id);
+    const d = consultationDraft(c);
     return acc + (d?.medications?.length ?? 0) + (d?.examRequests?.length ?? 0) + (d?.certificate ? 1 : 0);
   }, 0);
 
@@ -134,7 +147,7 @@ function PatientDetail({ patient, onBack }: { patient: Patient; onBack: () => vo
           {consultations.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">Nenhuma consulta registrada.</CardContent></Card>
           ) : consultations.map(c => {
-            const draft = loadDraft(c.id);
+            const draft = consultationDraft(c);
             return (
               <Card key={c.id} className="hover:shadow-sm transition-shadow">
                 <CardContent className="p-4">
@@ -145,7 +158,7 @@ function PatientDetail({ patient, onBack }: { patient: Patient; onBack: () => vo
                         <span className="text-xs text-muted-foreground flex items-center gap-1">
                           <Calendar className="h-3 w-3" />{fmt(c.date)}
                         </span>
-                        <span className="text-[11px] text-muted-foreground/60 font-mono">#{c.id.slice(0, 8)}</span>
+                        <span className="text-[11px] text-muted-foreground/60 font-mono">#{c.number ?? c.id.slice(0, 8)}</span>
                       </div>
                       {draft && (
                         <div className="flex gap-2 mt-2 flex-wrap">
@@ -167,7 +180,7 @@ function PatientDetail({ patient, onBack }: { patient: Patient; onBack: () => vo
                         </div>
                       )}
                     </div>
-                    {c.status === 'in_progress' && (
+                    {c.status === 'in_consultation' && (
                       <Button size="sm" className="gap-1.5 bg-blue-600 hover:bg-blue-700"
                         onClick={() => navigate(`/medico/atendimento/${c.id}`)}>
                         <Video className="h-3.5 w-3.5" /> Continuar
@@ -227,15 +240,18 @@ export default function MedicoPacientes() {
       try {
         const { data } = await supabase
           .from('consultations')
-          .select('id, patient_name, date, status, doctor_name')
+          .select('id, user_id, patient_name, date, status, doctor_name, number, clinical_data')
           .order('created_at', { ascending: false });
 
-        // Deduplicate by patient_name
+        // Agrupar por user_id (identidade real do paciente) e não por nome —
+        // homônimos não podem ter o histórico fundido. Consultas antigas sem
+        // user_id caem num fallback por nome.
+        const rows = (data ?? []) as unknown as (Consultation & { user_id?: string | null })[];
         const map = new Map<string, Patient>();
-        for (const c of data ?? []) {
-          const key = c.patient_name;
+        for (const c of rows) {
+          const key = c.user_id ?? `name:${c.patient_name}`;
           if (!map.has(key)) {
-            map.set(key, { name: key, consultations: [], lastDate: c.date });
+            map.set(key, { name: c.patient_name, consultations: [], lastDate: c.date });
           }
           const p = map.get(key)!;
           p.consultations.push(c);

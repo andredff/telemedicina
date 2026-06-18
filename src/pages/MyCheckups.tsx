@@ -10,7 +10,7 @@ import { HeartPulse, Info, Building2, Calendar, AlertCircle } from "lucide-react
 import { supabase } from "@/integrations/supabase/client";
 import { logger } from "@/lib/logger";
 import { useToast } from "@/hooks/use-toast";
-import { ALL_PLANS, getCheckupsForBilling } from "@/data/plansData";
+import { ALL_PLANS } from "@/data/plansData";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
@@ -92,8 +92,8 @@ const MyCheckups = () => {
   const planData = subscription?.plan
     ? ALL_PLANS.find((p) => p.type === subscription.plan!.type)
     : null;
-  const billing = (subscription?.billing_cycle === "yearly" ? "yearly" : "monthly") as "monthly" | "yearly";
-  const total = planData ? getCheckupsForBilling(planData, billing) : 0;
+  // Ciclo do plano é sempre anual — o saldo de check-ups é o do ciclo anual.
+  const total = planData ? planData.checkups_per_year : 0;
   const available = Math.max(0, total - used);
 
   return (
@@ -157,8 +157,7 @@ const MyCheckups = () => {
                       <span className="text-lg text-muted-foreground">de {total}</span>
                     </div>
                     <p className="text-sm text-muted-foreground mt-2">
-                      Plano <strong>{subscription.plan?.name}</strong> ·{" "}
-                      {billing === "yearly" ? "Anual" : "Mensal"}
+                      Plano <strong>{subscription.plan?.name}</strong> · Anual
                     </p>
                   </div>
                   <Badge variant="secondary" className="self-start sm:self-auto">

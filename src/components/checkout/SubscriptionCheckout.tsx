@@ -4,7 +4,6 @@ import { CheckCircle, XCircle, Crown, ArrowLeft, Calendar, Repeat } from "lucide
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { CreditCardForm } from "./CreditCardForm";
@@ -45,31 +44,18 @@ export function SubscriptionCheckout({
 }: SubscriptionCheckoutProps) {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [paymentResult, setPaymentResult] = useState<{
     success: boolean;
     recurrentPaymentId?: string;
     message: string;
   } | null>(null);
 
-  const price = billingCycle === "yearly" && plan.priceYearly
-    ? plan.priceYearly
-    : plan.priceMonthly;
-
-  const monthlyEquivalent = billingCycle === "yearly" && plan.priceYearly
-    ? plan.priceYearly / 12
-    : plan.priceMonthly;
-
-  const savings = billingCycle === "yearly" && plan.priceYearly
-    ? (plan.priceMonthly * 12) - plan.priceYearly
-    : 0;
-
-  const interval: RecurrenceInterval = billingCycle === "yearly" ? "Annual" : "Monthly";
-
-  const handleBillingCycleChange = (value: string) => {
-    const cycle = value as "monthly" | "yearly";
-    setBillingCycle(cycle);
-  };
+  // Assinatura é sempre mensal recorrente (12x sem juros), conforme contrato
+  // (Cláusula 2.2). A opção de pagamento anual foi removida.
+  const billingCycle = "monthly" as const;
+  const price = plan.priceMonthly;
+  const monthlyEquivalent = plan.priceMonthly;
+  const interval: RecurrenceInterval = "Monthly";
 
   const generateSubscriptionId = () =>
     `SUB-${plan.id.toUpperCase()}-${Date.now()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
@@ -95,11 +81,7 @@ export function SubscriptionCheckout({
 
       if (result.success) {
         const nextBillingDate = new Date();
-        if (billingCycle === "yearly") {
-          nextBillingDate.setFullYear(nextBillingDate.getFullYear() + 1);
-        } else {
-          nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
-        }
+        nextBillingDate.setMonth(nextBillingDate.getMonth() + 1);
 
         await sendPlanSubscriptionActivated({
           email: customer.email || "",
@@ -153,17 +135,16 @@ export function SubscriptionCheckout({
                     <span>Plano {plan.name}</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
+                    <Calendar className="h-4 w-4" />
+                    <span>Plano anual · vigência de 12 meses</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-sm">
                     <Repeat className="h-4 w-4" />
-                    <span>
-                      Cobrança {billingCycle === "yearly" ? "anual" : "mensal"}
-                    </span>
+                    <span>Cobrança mensal recorrente</span>
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <Calendar className="h-4 w-4" />
-                    <span>
-                      Próxima cobrança em{" "}
-                      {billingCycle === "yearly" ? "12 meses" : "30 dias"}
-                    </span>
+                    <span>Próxima cobrança em 30 dias</span>
                   </div>
                 </div>
                 <Button onClick={() => navigate("/dashboard")} className="w-full">
@@ -213,65 +194,19 @@ export function SubscriptionCheckout({
               <Crown className="h-5 w-5 text-primary" />
               Plano {plan.name}
             </CardTitle>
-            {savings > 0 && billingCycle === "yearly" && (
-              <Badge variant="secondary" className="bg-green-100 text-green-700">
-                Economia de R$ {savings.toFixed(2)}
-              </Badge>
-            )}
           </div>
           <CardDescription>
-            Assinatura recorrente com cobrança automática
+            Plano anual · cobrança mensal recorrente automática
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Ciclo de cobrança */}
-          <div className="space-y-3">
-            <Label className="text-sm font-medium">Ciclo de cobrança</Label>
-            <RadioGroup
-              value={billingCycle}
-              onValueChange={handleBillingCycleChange}
-              className="grid grid-cols-2 gap-4"
-            >
-              <Label
-                htmlFor="monthly"
-                className={`flex flex-col items-center justify-center p-4 border rounded-lg cursor-pointer transition-colors ${
-                  billingCycle === "monthly"
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <RadioGroupItem value="monthly" id="monthly" className="sr-only" />
-                <span className="text-sm font-medium">Mensal</span>
-                <span className="text-2xl font-bold">
-                  R$ {plan.priceMonthly.toFixed(2)}
-                </span>
-                <span className="text-xs text-muted-foreground">/mês</span>
-              </Label>
-
-              {plan.priceYearly && (
-                <Label
-                  htmlFor="yearly"
-                  className={`flex flex-col items-center justify-center p-4 border rounded-lg cursor-pointer transition-colors relative ${
-                    billingCycle === "yearly"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:bg-muted/50"
-                  }`}
-                >
-                  <RadioGroupItem value="yearly" id="yearly" className="sr-only" />
-                  <Badge className="absolute -top-2 right-2 text-xs">
-                    Melhor oferta
-                  </Badge>
-                  <span className="text-sm font-medium">Anual</span>
-                  <span className="text-2xl font-bold">
-                    R$ {plan.priceYearly.toFixed(2)}
-                  </span>
-                  <span className="text-xs text-muted-foreground">/ano</span>
-                  <span className="text-xs text-green-600 mt-1">
-                    R$ {(plan.priceYearly / 12).toFixed(2)}/mês
-                  </span>
-                </Label>
-              )}
-            </RadioGroup>
+          {/* Valor */}
+          <div className="flex flex-col items-center justify-center p-4 border border-primary bg-primary/5 rounded-lg">
+            <span className="text-sm font-medium">Mensalidade</span>
+            <span className="text-2xl font-bold">
+              R$ {plan.priceMonthly.toFixed(2)}
+            </span>
+            <span className="text-xs text-muted-foreground">/mês · plano anual (12x sem juros)</span>
           </div>
 
           <Separator />
@@ -298,15 +233,13 @@ export function SubscriptionCheckout({
               <span>R$ {price.toFixed(2)}</span>
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Frequência</span>
-              <span>{billingCycle === "yearly" ? "Anual" : "Mensal"}</span>
+              <span>Frequência da cobrança</span>
+              <span>Mensal</span>
             </div>
-            {billingCycle === "yearly" && (
-              <div className="flex justify-between text-sm text-green-600">
-                <span>Você economiza</span>
-                <span>R$ {savings.toFixed(2)}/ano</span>
-              </div>
-            )}
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>Ciclo do plano</span>
+              <span>Anual (12 meses)</span>
+            </div>
             <Separator className="my-2" />
             <div className="flex justify-between font-bold">
               <span>Cobrança hoje</span>
@@ -329,7 +262,7 @@ export function SubscriptionCheckout({
             })
           }
           isLoading={isLoading}
-          submitLabel={`Assinar por R$ ${price.toFixed(2)}${billingCycle === "monthly" ? "/mês" : "/ano"}`}
+          submitLabel={`Assinar por R$ ${price.toFixed(2)}/mês`}
         />
 
         <div className="text-center text-xs text-muted-foreground max-w-md">

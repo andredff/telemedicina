@@ -1,8 +1,10 @@
 
+import { useContext } from "react";
 import { ShoppingCart, User, LogOut, Settings, CreditCard, HelpCircle, Package, X } from "lucide-react";
 import LogoNovita from "@/assets/logo-novita.png";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { PatientShellContext } from "@/components/layout/patientShell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -45,8 +47,12 @@ const Header = ({
 }: HeaderProps) => {
   const navigate = useNavigate();
   const cart = useCart();
+  const inPatientShell = useContext(PatientShellContext);
 
   const displayCartCount = cartItemsCount ?? cart.count;
+
+  // Inside the patient shell the layout already renders the top bar.
+  if (inPatientShell) return null;
 
   const handleLogout = async () => {
     await supabase.auth.signOut();

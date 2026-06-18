@@ -91,7 +91,7 @@ const HowItWorks = () => {
     {
       icon: CreditCard,
       title: "Pagamento Facilitado",
-      description: "Cartão de crédito com parcelamento ou PIX. Planos mensais ou anuais com desconto."
+      description: "Cartão de crédito ou PIX. Plano com vigência anual e cobrança mensal recorrente, sem juros."
     },
     {
       icon: MessageSquare,

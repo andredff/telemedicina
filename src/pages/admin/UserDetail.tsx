@@ -150,7 +150,7 @@ export default function AdminUserDetail() {
             </div>
             {plan && (
               <p className="text-xs text-muted-foreground mt-1">
-                {formatSubscriptionStatus(plan.status)} · {formatBillingCycle(plan.billing_cycle)}
+                {formatSubscriptionStatus(plan.status)} · Anual (cobrança mensal)
               </p>
             )}
           </CardContent>
@@ -203,7 +203,7 @@ export default function AdminUserDetail() {
               <div><b>Tipo:</b> {plan.plan?.type === 'monthly' ? 'Mensal' : 'Anual'}</div>
               <div><b>Status:</b> {formatSubscriptionStatus(plan.status)}</div>
               <div><b>Expira em:</b> {plan.expires_at ? new Date(plan.expires_at).toLocaleString('pt-BR') : 'N/A'}</div>
-              <div><b>Ciclo de cobrança:</b> {formatBillingCycle(plan.billing_cycle)}</div>
+              <div><b>Ciclo do plano:</b> Anual (cobrança mensal)</div>
             </div>
           ) : (
             <div className="text-gray-500">Nenhum plano ativo contratado</div>

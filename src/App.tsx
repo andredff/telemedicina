@@ -54,6 +54,8 @@ import Support from "./pages/Support";
 import PreparacaoConsulta from "./pages/consulta/PreparacaoConsulta";
 import ConsultaPage from "./pages/consulta/ConsultaPage";
 import ConsultaDetalhes from "./pages/consulta/ConsultaDetalhes";
+import Notificacoes from "./pages/Notificacoes";
+import PatientLayout from "@/components/layout/PatientLayout";
 import MedicoLayout from "./pages/medico/MedicoLayout";
 import MedicoDashboard from "./pages/medico/MedicoDashboard";
 import MedicoSalaEspera from "./pages/medico/MedicoSalaEspera";
@@ -63,11 +65,11 @@ import MedicoPacientes from "./pages/medico/MedicoPacientes";
 import MedicoPrescricoes from "./pages/medico/MedicoPrescricoes";
 import MedicoExames from "./pages/medico/MedicoExames";
 import MedicoAtestados from "./pages/medico/MedicoAtestados";
-import MedicoChat from "./pages/medico/MedicoChat";
 import MedicoDocumentos from "./pages/medico/MedicoDocumentos";
 import MedicoConfiguracoes from "./pages/medico/MedicoPerfil";
 import MedicoAgenda from "./pages/medico/MedicoAgenda";
 import MedicoSuporte from "./pages/medico/MedicoSuporte";
+import AtendenteTriagem from "./pages/atendente/AtendenteTriagem";
 
 const queryClient = new QueryClient();
 
@@ -106,32 +108,38 @@ const App = () => (
           <Route path="/blog" element={<Blog />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/perfil" element={<ProfileSettings />} />
-          <Route path="/meu-plano" element={<MyPlan />} />
-          <Route path="/meus-checkups" element={<MyCheckups />} />
+          {/* Área logada do paciente — layout com sidebar + topbar */}
+          <Route element={<PatientLayout />}>
+            <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/perfil" element={<ProfileSettings />} />
+            <Route path="/meu-plano" element={<MyPlan />} />
+            <Route path="/meus-checkups" element={<MyCheckups />} />
+            <Route path="/prescriptions" element={<Prescriptions />} />
+            <Route path="/prescription/:id" element={<PrescriptionDetail />} />
+            <Route path="/orders" element={<Orders />} />
+            <Route path="/order/:id" element={<OrderDetail />} />
+            <Route path="/cart" element={<Cart />} />
+            <Route path="/telemedicina" element={<Telemedicine />} />
+            <Route path="/teleconsultas" element={<Teleconsultas />} />
+            <Route path="/notificacoes" element={<Notificacoes />} />
+            <Route path="/consulta/:id/detalhes" element={<ConsultaDetalhes />} />
+            <Route path="/especialistas" element={<Especialistas />} />
+            <Route path="/farmacia" element={<Farmacia />} />
+            <Route path="/suporte" element={<Support />} />
+          </Route>
+
+          {/* Fluxos sem o layout (tela cheia / foco / outros papéis) */}
           <Route path="/laboratorio" element={<LabPanel />} />
-          <Route path="/prescriptions" element={<Prescriptions />} />
-          <Route path="/orders" element={<Orders />} />
-          <Route path="/order/:id" element={<OrderDetail />} />
           <Route path="/blog/:id" element={<BlogPost />} />
-          <Route path="/prescription/:id" element={<PrescriptionDetail />} />
-          <Route path="/cart" element={<Cart />} />
           <Route path="/checkout/subscription" element={<CheckoutSubscription />} />
           <Route path="/checkout/medication" element={<CheckoutMedication />} />
           <Route path="/checkout/consultation" element={<CheckoutConsultation />} />
-          <Route path="/telemedicina" element={<Telemedicine />} />
-          <Route path="/teleconsultas" element={<Teleconsultas />} />
           <Route path="/sala-espera/:id" element={<SalaEspera />} />
           <Route path="/consulta/:id/preparacao" element={<PreparacaoConsulta />} />
           <Route path="/consulta/:id/chamada" element={<ConsultaPage />} />
-          <Route path="/consulta/:id/detalhes" element={<ConsultaDetalhes />} />
-          <Route path="/especialistas" element={<Especialistas />} />
-          <Route path="/farmacia" element={<Farmacia />} />
           <Route path="/termos" element={<Terms />} />
           <Route path="/privacidade" element={<Privacy />} />
           <Route path="/cancelamento" element={<Cancellation />} />
-          <Route path="/suporte" element={<Support />} />
           <Route path="/docs" element={<StaticHtmlRedirect to="/docs/index.html" />} />
           <Route path="/compare" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
           <Route path="/compare/" element={<StaticHtmlRedirect to="/docs/compare/index.html" />} />
@@ -149,12 +157,14 @@ const App = () => (
             <Route path="prescricoes" element={<MedicoPrescricoes />} />
             <Route path="exames" element={<MedicoExames />} />
             <Route path="atestados" element={<MedicoAtestados />} />
-            <Route path="chat" element={<MedicoChat />} />
             <Route path="documentos" element={<MedicoDocumentos />} />
             <Route path="agenda" element={<MedicoAgenda />} />
             <Route path="configuracoes" element={<MedicoConfiguracoes />} />
             <Route path="suporte" element={<MedicoSuporte />} />
           </Route>
+
+          {/* Atendente (triagem) Route */}
+          <Route path="/atendente" element={<AtendenteTriagem />} />
 
           {/* Admin Routes */}
           <Route path="/admin" element={<AdminLayout />}>

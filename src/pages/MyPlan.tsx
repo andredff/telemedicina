@@ -52,8 +52,8 @@ import {
   formatPrice,
   getPlanColor,
   PlanData,
-  ANNUAL_DISCOUNT,
 } from "@/data/plansData";
+import { isPlanExpired } from "@/lib/subscription";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -348,17 +348,24 @@ const MyPlan = () => {
   const maxDependents = subscription?.plan?.max_dependents || 0;
   const canAddDependent = dependents.length < maxDependents;
 
+  // O `status` no banco continua "active" mesmo após o vencimento (nada o
+  // flipa para "expired"). A validade real depende de expires_at — por isso
+  // checamos aqui para não exibir "Ativo" e para liberar a renovação.
+  const planExpired = !!subscription?.expires_at && isPlanExpired(subscription.expires_at);
+
   // ── Planos ────────────────────────────────────────────────────────────────
 
   const getCurrentPlanType = (): string => {
     return subscription?.plan?.type || '';
   };
 
-  const getPlanRelation = (plan: PlanData): 'current' | 'upgrade' | 'downgrade' | 'same-category' => {
+  const getPlanRelation = (plan: PlanData): 'current' | 'renew' | 'upgrade' | 'downgrade' | 'same-category' => {
     const currentType = getCurrentPlanType();
     if (!currentType) return 'upgrade'; // Sem plano = qualquer um é "assinar"
-    
-    if (plan.type === currentType) return 'current';
+
+    // Plano vencido: o mesmo plano vira "renovar"; trocar de plano segue
+    // a lógica normal de upgrade/downgrade (também é uma recontratação).
+    if (plan.type === currentType) return planExpired ? 'renew' : 'current';
     
     const currentLevel = getPlanLevel(currentType);
     const targetLevel = getPlanLevel(plan.type);
@@ -383,9 +390,11 @@ const MyPlan = () => {
   const handlePlanSelect = (plan: PlanData) => {
     const relation = getPlanRelation(plan);
     if (relation === 'current') return;
-    
+
     setSelectedPlan(plan);
-    setPlanAction(relation === 'downgrade' ? 'downgrade' : 'upgrade');
+    setPlanAction(
+      relation === 'downgrade' ? 'downgrade' : relation === 'renew' ? 'subscribe' : 'upgrade'
+    );
     setShowConfirmDialog(true);
   };
 
@@ -406,6 +415,7 @@ const MyPlan = () => {
   const renderPlanCard = (plan: PlanData) => {
     const relation = getPlanRelation(plan);
     const isCurrent = relation === 'current';
+    const isRenew = relation === 'renew';
     const isUpgrade = relation === 'upgrade';
     const isDowngrade = relation === 'downgrade';
     const hasNoPlan = !subscription;
@@ -428,8 +438,16 @@ const MyPlan = () => {
             </Badge>
           </div>
         )}
-        
-        {plan.highlight && !isCurrent && (
+
+        {isRenew && (
+          <div className="absolute top-0 right-0">
+            <Badge className="rounded-none rounded-bl-lg bg-red-500">
+              Plano Vencido
+            </Badge>
+          </div>
+        )}
+
+        {plan.highlight && !isCurrent && !isRenew && (
           <div className="absolute top-0 right-0">
             <Badge className="rounded-none rounded-bl-lg bg-accent">
               Mais Popular
@@ -462,7 +480,7 @@ const MyPlan = () => {
               <span className="text-muted-foreground">/mês</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              ou R$ {formatPrice(plan.price_yearly)}/ano (10% off)
+              Plano anual · cobrança mensal recorrente
             </p>
           </div>
         </CardHeader>
@@ -481,6 +499,11 @@ const MyPlan = () => {
             <Button disabled className="w-full" variant="outline">
               <Check className="mr-2 h-4 w-4" />
               Plano Atual
+            </Button>
+          ) : isRenew ? (
+            <Button className="w-full gradient-hero text-white">
+              <Crown className="mr-2 h-4 w-4" />
+              Renovar Plano
             </Button>
           ) : isUpgrade ? (
             <Button className="w-full gradient-hero text-white">
@@ -536,8 +559,11 @@ const MyPlan = () => {
                     </CardDescription>
                   </div>
                 </div>
-                <Badge variant="secondary" className="bg-white/20 text-white border-0">
-                  {subscription.status === 'active' ? 'Ativo' : subscription.status}
+                <Badge
+                  variant="secondary"
+                  className={planExpired ? "bg-red-500/90 text-white border-0" : "bg-white/20 text-white border-0"}
+                >
+                  {planExpired ? 'Vencido' : subscription.status === 'active' ? 'Ativo' : subscription.status}
                 </Badge>
               </div>
             </CardHeader>
@@ -556,9 +582,8 @@ const MyPlan = () => {
                   <Calendar className="h-5 w-5 text-white/70" />
                   <div>
                     <p className="text-sm text-white/70">Ciclo</p>
-                    <p className="font-semibold capitalize">
-                      {subscription.billing_cycle === 'yearly' ? 'Anual' : 'Mensal'}
-                    </p>
+                    <p className="font-semibold">Anual</p>
+                    <p className="text-xs text-white/60">Cobrança mensal recorrente</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -684,10 +709,12 @@ const MyPlan = () => {
         {/* Page Title */}
         <div className="mb-8">
           <h1 className="text-2xl md:text-3xl font-heading font-bold text-primary mb-2">
-            {subscription?.plan ? 'Alterar Plano' : 'Escolha seu Plano'}
+            {planExpired ? 'Renovar Plano' : subscription?.plan ? 'Alterar Plano' : 'Escolha seu Plano'}
           </h1>
           <p className="text-muted-foreground">
-            {subscription?.plan 
+            {planExpired
+              ? 'Seu plano venceu. Renove o plano atual ou escolha outro para voltar a ter acesso.'
+              : subscription?.plan
               ? 'Compare os planos e faça upgrade ou downgrade conforme sua necessidade'
               : 'Selecione o plano ideal para você ou sua família'}
           </p>

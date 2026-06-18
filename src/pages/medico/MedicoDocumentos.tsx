@@ -22,6 +22,7 @@ interface Item {
   date: string;
   doctor_name: string;
   doctor_crm: string;
+  number?: number | null;
   draft: Draft;
 }
 
@@ -41,7 +42,7 @@ export default function MedicoDocumentos() {
     const load = async () => {
       const { data } = await supabase
         .from('consultations')
-        .select('id, patient_name, date, doctor_name, doctor_crm')
+        .select('id, patient_name, date, doctor_name, doctor_crm, number')
         .eq('status', 'completed')
         .order('updated_at', { ascending: false });
       const signed = (data ?? [])
@@ -134,7 +135,7 @@ export default function MedicoDocumentos() {
                       )}
                     </div>
 
-                    <p className="text-[11px] text-muted-foreground/60 mt-2 font-mono">#{item.id.slice(0, 8)}</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-2 font-mono">#{item.number ?? item.id.slice(0, 8)}</p>
                   </div>
                 </div>
               </CardContent>

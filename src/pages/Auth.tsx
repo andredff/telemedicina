@@ -140,6 +140,7 @@ const Auth = () => {
           checkUserRole(session.user.id).then(role => {
             if (role === 'admin') navigate('/admin');
             else if (role === 'lab') navigate('/laboratorio');
+            else if (role === 'attendant') navigate('/atendente');
           }).catch(() => {});
         }
       }
@@ -156,6 +157,8 @@ const Auth = () => {
         // Check admin role in background and redirect if needed
         checkUserRole(session.user.id).then(role => {
           if (role === 'admin') navigate('/admin');
+          else if (role === 'lab') navigate('/laboratorio');
+          else if (role === 'attendant') navigate('/atendente');
         }).catch(() => {});
       }
     });
@@ -271,6 +274,7 @@ const Auth = () => {
       checkUserRole(data.user.id).then(role => {
         if (role === 'admin') navigate('/admin');
         else if (role === 'lab') navigate('/laboratorio');
+        else if (role === 'attendant') navigate('/atendente');
       }).catch(() => {});
     } catch (error) {
       toast({

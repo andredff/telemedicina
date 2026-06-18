@@ -14,6 +14,9 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { createRingtone } from '@/lib/sound';
+import { logEvent } from '@/lib/audit';
+import { normalizeStatus } from '@/lib/consultationStatus';
+import { mediaErrorMessage, mediaErrorDetail } from '@/lib/mediaErrors';
 
 type CallState = 'setup' | 'waiting' | 'connecting' | 'in_call' | 'ended' | 'error';
 type Quality = 'good' | 'fair' | 'poor';
@@ -33,7 +36,13 @@ export default function ConsultaPage() {
 
   const [callState, setCallState] = useState<CallState>('setup');
   const [doctorName, setDoctorName] = useState('Médico');
+  // Who is on the other side right now: the attendant (first contact) or the doctor.
+  const [stage, setStage] = useState<'atendente' | 'medico'>('medico');
+  const isAttendantStage = stage === 'atendente';
+  const callerLabel = isAttendantStage ? 'Atendente' : doctorName;
+  const callerSubtitle = isAttendantStage ? 'Atendimento inicial' : 'Clínico Geral';
   const [doctorCrm, setDoctorCrm] = useState('');
+  const [consultaNumber, setConsultaNumber] = useState<number | null>(null);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [remoteAudio, setRemoteAudio] = useState(true);
@@ -42,6 +51,7 @@ export default function ConsultaPage() {
   const [, setTick] = useState(0);
   const [now, setNow] = useState(Date.now());
   const [cancellingConsulta, setCancellingConsulta] = useState(false);
+  const [errorDetail, setErrorDetail] = useState('');   // surfaced cause of a connection error (diagnostics)
   const [doctorCalling, setDoctorCalling] = useState(false); // doctor re-ringing after call ended
   const lastCallingRef = useRef<string | null>(null);
   const ringtoneRef = useRef(createRingtone());
@@ -56,6 +66,21 @@ export default function ConsultaPage() {
   sidePanelRef.current = sidePanel;
   const callStateRef = useRef<CallState>(callState);
   callStateRef.current = callState;
+  // The caller re-broadcasts its offer on every patient-ready heartbeat, so we
+  // dedupe by SDP: answer each DISTINCT offer exactly once (answering the same
+  // SDP twice runs concurrent setRemote/LocalDescription = glare and breaks
+  // media). A different SDP means a genuine renegotiation (the doctor's ICE
+  // restart after a 'failed' connection) and MUST be answered again to recover.
+  const answeredSdpRef = useRef<string | null>(null);
+  const answeringRef = useRef(false); // an answer is currently in flight
+  // The caller can send its offer before our async setup() has created the
+  // RTCPeerConnection (it acquires the camera first). Answering then would throw
+  // "No peer connection". So we gate answering on pcReady and buffer an early
+  // offer to process the moment the PC exists. This is the doctor-after-triage
+  // race: the patient is rung straight from the waiting room and may subscribe
+  // and receive the offer while getUserMedia is still pending.
+  const pcReadyRef = useRef(false);
+  const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
 
   // Two separate video refs for waiting-state PiP vs in-call PiP
   const localVideoWaitRef = useRef<HTMLVideoElement>(null);
@@ -83,26 +108,82 @@ export default function ConsultaPage() {
         setQuality('poor');
         toast({ title: 'Conexão instável', description: 'Tentando reconectar...' });
       }
-      if (state === 'failed' || state === 'closed') {
-        setCallState(prev => prev === 'in_call' ? 'ended' : prev);
-      }
+      // 'failed' is recoverable: the doctor (caller) drives an ICE restart and
+      // re-sends an offer we answer again, so we stay put instead of dropping.
+      // A real hangup arrives via the 'call-ended' signal; 'closed' is a local close.
+      if (state === 'failed') setQuality('poor');
+      if (state === 'closed') setCallState(prev => prev === 'in_call' ? 'ended' : prev);
     }, [toast]),
     onIceCandidate: useCallback((candidate: RTCIceCandidateInit) => {
       signalingRef.current.send('ice-candidate', candidate as Record<string, unknown>);
     }, []),
   });
 
-  // Sync streams to video elements when either the stream or the element becomes available
+  // Answer an incoming offer — buffered until the PeerConnection exists, and
+  // answered exactly once. Stored in a ref so the once-registered signaling
+  // handler and setup()'s flush both call the latest closure.
+  const processOfferRef = useRef<(p: RTCSessionDescriptionInit) => Promise<void>>();
+  processOfferRef.current = async (payload: RTCSessionDescriptionInit) => {
+    if (!pcReadyRef.current) { pendingOfferRef.current = payload; return; } // PC not ready yet → buffer
+    if (payload.sdp && payload.sdp === answeredSdpRef.current) return;       // same offer already answered
+    if (answeringRef.current) return;                                       // an answer is already in flight
+    answeringRef.current = true;
+    setCallState(prev => (prev === 'in_call' ? prev : 'connecting'));       // keep in_call during renegotiation
+    try {
+      const answer = await webrtc.createAnswer(payload);
+      answeredSdpRef.current = payload.sdp ?? null;
+      signalingRef.current.send('call-answer', answer as Record<string, unknown>);
+    } catch (err) {
+      const name = (err as Error)?.name || 'Erro';
+      const msg = (err as Error)?.message || '';
+      setErrorDetail(`negociação · ${name}${msg ? `: ${msg}` : ''}`);
+      // Don't blow away a live call on a renegotiation hiccup — only surface the
+      // error screen if we hadn't connected yet.
+      if (callStateRef.current !== 'in_call') {
+        toast({ title: 'Erro ao conectar', description: `${name}${msg ? `: ${msg}` : ''}`, variant: 'destructive' });
+        setCallState('error');
+      }
+    } finally {
+      answeringRef.current = false;
+    }
+  };
+
+  // Sync streams to video elements when either the stream or the element becomes
+  // available. The waiting-room preview and the in-call PiP are SEPARATE <video>
+  // elements that mount in different render branches, so we also depend on
+  // callState: when the call transitions to in_call the PiP element only just
+  // mounted, and without re-running here it would never receive the stream (black).
   useEffect(() => {
     if (!localStream) return;
     if (localVideoWaitRef.current) localVideoWaitRef.current.srcObject = localStream;
     if (localVideoPipRef.current) localVideoPipRef.current.srcObject = localStream;
-  }, [localStream]);
+  }, [localStream, callState]);
 
+  // Attach + play the doctor/attendant stream. The patient is usually navigated
+  // into the call by a realtime event (no user gesture), so the browser blocks
+  // autoplay of the unmuted remote video → black screen. We try to play; if it's
+  // blocked, we play muted (so the video at least renders) and restore audio on
+  // the first user interaction. Also depends on callState because the remote
+  // <video> only mounts in the in_call branch.
   useEffect(() => {
-    if (!remoteStream || !remoteVideoRef.current) return;
-    remoteVideoRef.current.srcObject = remoteStream;
-  }, [remoteStream]);
+    const el = remoteVideoRef.current;
+    if (!el || !remoteStream) return;
+    if (el.srcObject !== remoteStream) el.srcObject = remoteStream;
+
+    el.play().catch(() => {
+      // Autoplay blocked → render muted, then un-mute on first interaction.
+      el.muted = true;
+      el.play().catch(() => { /* ignore */ });
+      const resume = () => {
+        el.muted = false;
+        el.play().catch(() => { /* ignore */ });
+        window.removeEventListener('pointerdown', resume);
+        window.removeEventListener('keydown', resume);
+      };
+      window.addEventListener('pointerdown', resume, { once: true });
+      window.addEventListener('keydown', resume, { once: true });
+    });
+  }, [remoteStream, callState]);
 
   // Initial setup: acquire media + subscribe signaling + send patient-ready
   useEffect(() => {
@@ -113,30 +194,68 @@ export default function ConsultaPage() {
       try {
         const { data } = await supabase
           .from('consultations')
-          .select('doctor_name, doctor_crm, doctor_calling_at')
+          .select('status, doctor_name, doctor_crm, doctor_calling_at, number')
           .eq('id', id)
           .single();
+
+        // Room guard (CARD-05): only the owner (RLS) of an OPEN consultation
+        // may start media/signaling. Closed rooms redirect away.
+        if (!data) {
+          logEvent('access_denied', {
+            consultationId: id, status: 'error', errorCode: 'not_found_or_forbidden',
+            payload: { route: 'chamada' },
+          });
+          if (mounted) navigate('/teleconsultas', { replace: true });
+          return;
+        }
+        const consultaStatus = (data as { status?: string }).status;
+        if (consultaStatus === 'completed') {
+          if (mounted) navigate(`/consulta/${id}/detalhes`, { replace: true });
+          return;
+        }
+        if (consultaStatus === 'cancelled') {
+          if (mounted) navigate('/teleconsultas', { replace: true });
+          return;
+        }
+        const ns0 = normalizeStatus(consultaStatus);
+        if (mounted) setStage(ns0 === 'with_attendant' || ns0 === 'waiting_attendant' ? 'atendente' : 'medico');
+
         if (mounted && data?.doctor_name) setDoctorName(data.doctor_name);
         if (mounted && data?.doctor_crm) setDoctorCrm(data.doctor_crm);
+        const numero = (data as { number?: number | null } | null)?.number ?? null;
+        if (mounted && numero != null) setConsultaNumber(numero);
         lastCallingRef.current = (data as { doctor_calling_at?: string | null } | null)?.doctor_calling_at ?? null;
 
-        const stream = await webrtc.startMedia();
+        // Acquire a camera that is genuinely producing frames. In the triage flow
+        // the patient releases and re-acquires the device several times in quick
+        // succession (attendant call → waiting room → doctor call); acquireLiveCamera
+        // retries the transient "device busy" AND the "resolved but black" case.
+        const stream = await webrtc.acquireLiveCamera();
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
 
         setLocalStream(stream);
         webrtc.createPeerConnection();
+        pcReadyRef.current = true;
 
         // Track presence + signal readiness
         signaling.track({ role: 'patient', consultation_id: id });
         signaling.send('patient-ready', { consultation_id: id });
 
+        // If the caller's offer arrived before the PC existed, answer it now.
+        if (pendingOfferRef.current) {
+          const buffered = pendingOfferRef.current;
+          pendingOfferRef.current = null;
+          processOfferRef.current?.(buffered);
+        }
+
         setCallState('waiting');
         waitingSince.current = new Date();
-      } catch {
+      } catch (err) {
         if (!mounted) return;
+        setErrorDetail(mediaErrorDetail(err));
         toast({
           title: 'Não foi possível acessar a câmera',
-          description: 'Verifique as permissões do navegador e tente novamente.',
+          description: mediaErrorMessage(err),
           variant: 'destructive',
         });
         setCallState('error');
@@ -149,19 +268,18 @@ export default function ConsultaPage() {
 
   // Register signaling handlers (runs once)
   useEffect(() => {
-    signaling.on('call-offer', async (payload) => {
-      setCallState('connecting');
-      try {
-        const answer = await webrtc.createAnswer(payload as RTCSessionDescriptionInit);
-        signalingRef.current.send('call-answer', answer as Record<string, unknown>);
-      } catch {
-        toast({ title: 'Erro ao conectar', description: 'Falha na negociação da chamada.', variant: 'destructive' });
-        setCallState('error');
-      }
+    signaling.on('call-offer', (payload) => {
+      processOfferRef.current?.(payload as RTCSessionDescriptionInit);
     });
 
     signaling.on('ice-candidate', async (payload) => {
       await webrtc.addIceCandidate(payload as RTCIceCandidateInit);
+    });
+
+    // A caller (attendant or doctor) just announced presence — re-announce our
+    // readiness so they (re)send the offer, even if we were already in the room.
+    signaling.on('doctor-ready', () => {
+      signalingRef.current.send('patient-ready', { consultation_id: id });
     });
 
     signaling.on('call-ended', () => {
@@ -188,6 +306,19 @@ export default function ConsultaPage() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // While waiting, periodically re-announce readiness. A caller who joins the
+  // channel AFTER us (e.g. the attendant starting the call while the patient is
+  // already in the room) only (re)sends the offer when it receives patient-ready;
+  // our single on-entry announcement can be missed (or race the channel subscribe),
+  // leaving both sides stuck. The heartbeat guarantees the offer eventually lands.
+  useEffect(() => {
+    if (callState !== 'waiting') return;
+    const ping = setInterval(() => {
+      signalingRef.current.send('patient-ready', { consultation_id: id });
+    }, 2500);
+    return () => clearInterval(ping);
+  }, [callState, id]);
+
   // Watch for doctor accepting the consultation (updates doctor name & signals readiness)
   useEffect(() => {
     if (!id) return;
@@ -201,7 +332,19 @@ export default function ConsultaPage() {
           const updated = payload.new as {
             status: string; doctor_name?: string; doctor_crm?: string; doctor_calling_at?: string | null;
           };
-          if (updated.status === 'in_progress' && updated.doctor_name) {
+          const ns = normalizeStatus(updated.status);
+
+          // Attendant finished the first contact and routed to the doctor pool.
+          // Leave the attendant call and go back to the waiting room — a doctor
+          // will pick the patient up and ring them in again.
+          if (ns === 'waiting_doctor') {
+            webrtc.closeConnection();
+            navigate(`/consulta/${id}/preparacao`, { replace: true });
+            return;
+          }
+
+          setStage(ns === 'with_attendant' || ns === 'waiting_attendant' ? 'atendente' : 'medico');
+          if (ns === 'in_consultation' && updated.doctor_name) {
             setDoctorName(updated.doctor_name);
             if (updated.doctor_crm) setDoctorCrm(updated.doctor_crm);
           }
@@ -217,7 +360,7 @@ export default function ConsultaPage() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [id]);
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Ring (audio) when the doctor is calling to rejoin
   useEffect(() => {
@@ -226,6 +369,22 @@ export default function ConsultaPage() {
     else ringtone.stop();
     return () => ringtone.stop();
   }, [doctorCalling, callState]);
+
+  // Audit: call joined / left (once per session each)
+  const joinLoggedRef = useRef(false);
+  useEffect(() => {
+    if (callState === 'in_call' && !joinLoggedRef.current) {
+      joinLoggedRef.current = true;
+      logEvent('patient_call_joined', { consultationId: id });
+    }
+    if (callState === 'ended' && joinLoggedRef.current) {
+      joinLoggedRef.current = false;
+      logEvent('patient_call_left', {
+        consultationId: id,
+        payload: { duration_s: connectedAt ? Math.round((Date.now() - connectedAt.getTime()) / 1000) : 0 },
+      });
+    }
+  }, [callState, id, connectedAt]);
 
   // Tick every 30s to update elapsed time display (waiting room)
   useEffect(() => {
@@ -307,6 +466,11 @@ export default function ConsultaPage() {
           .update({ status: 'available', consultation_id: null, used_at: null })
           .eq('consultation_id', id)
           .eq('status', 'used');
+
+        logEvent('consultation_cancelled', {
+          consultationId: id,
+          payload: { cancelled_by: 'patient', from: 'waiting_room' },
+        });
       }
     } catch {
       // Silently ignore — navigation happens regardless
@@ -348,9 +512,11 @@ export default function ConsultaPage() {
             </span>
           </span>
           <div>
-            <h1 className="text-xl font-bold text-white">{doctorName} está chamando</h1>
+            <h1 className="text-xl font-bold text-white">{callerLabel} está chamando</h1>
             <p className="text-sm text-white/60 mt-1.5">
-              O médico quer retomar a consulta. Reentre na chamada para continuar o atendimento.
+              {isAttendantStage
+                ? 'O atendente quer falar com você. Entre na chamada para iniciar o atendimento.'
+                : 'O médico quer retomar a consulta. Reentre na chamada para continuar o atendimento.'}
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -416,6 +582,11 @@ export default function ConsultaPage() {
           <p className="text-sm text-muted-foreground">
             Verifique câmera e microfone e tente novamente.
           </p>
+          {errorDetail && (
+            <p className="text-xs text-muted-foreground/80 font-mono bg-muted/50 rounded-md px-2 py-1 break-words">
+              {errorDetail}
+            </p>
+          )}
           <div className="flex gap-2 justify-center">
             <Button variant="outline" onClick={() => navigate(`/consulta/${id}/preparacao`)}>
               Tentar novamente
@@ -441,9 +612,9 @@ export default function ConsultaPage() {
                 <Stethoscope className="h-4 w-4 text-primary/80" />
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-semibold text-white truncate leading-tight">{doctorName}</p>
+                <p className="text-sm font-semibold text-white truncate leading-tight">{callerLabel}</p>
                 <p className="text-[11px] text-white/50 leading-tight truncate">
-                  Clínico Geral{doctorCrm ? ` · ${doctorCrm}` : ''}
+                  {callerSubtitle}{!isAttendantStage && doctorCrm ? ` · ${doctorCrm}` : ''}
                 </p>
               </div>
             </div>
@@ -473,13 +644,13 @@ export default function ConsultaPage() {
                 <div className="w-24 h-24 rounded-full bg-primary/15 flex items-center justify-center">
                   <User className="h-12 w-12 text-primary/50" />
                 </div>
-                <p className="text-sm text-white/40">{doctorName} está com a câmera desligada</p>
+                <p className="text-sm text-white/40">{callerLabel} está com a câmera desligada</p>
               </div>
             )}
 
             {!remoteAudio && (
               <div className="absolute top-4 left-4 bg-black/50 backdrop-blur-sm rounded-full px-3 py-1.5 flex items-center gap-1.5 text-xs text-white">
-                <MicOff className="h-3.5 w-3.5 text-red-400" /> Médico sem áudio
+                <MicOff className="h-3.5 w-3.5 text-red-400" /> {callerLabel} sem áudio
               </div>
             )}
 
@@ -579,9 +750,11 @@ export default function ConsultaPage() {
 
               {sidePanel === 'info' ? (
                 <CallInfoPanel
-                  doctorName={doctorName}
-                  doctorCrm={doctorCrm}
+                  doctorName={callerLabel}
+                  roleSubtitle={callerSubtitle}
+                  doctorCrm={isAttendantStage ? '' : doctorCrm}
                   consultaId={id ?? ''}
+                  numero={consultaNumber}
                   connectedAt={connectedAt}
                   durationLabel={durationLabel}
                   quality={quality}
@@ -613,10 +786,12 @@ export default function ConsultaPage() {
 
         {/* State info */}
         <div>
-          <h1 className="text-lg font-bold text-white">{doctorName}</h1>
+          <h1 className="text-lg font-bold text-white">{callerLabel}</h1>
           <p className="text-sm text-white/50 mt-1">
-            {callState === 'setup' && 'Preparando sua consulta...'}
-            {callState === 'waiting' && 'Aguardando o médico iniciar a chamada...'}
+            {callState === 'setup' && 'Preparando seu atendimento...'}
+            {callState === 'waiting' && (isAttendantStage
+              ? 'Um atendente vai iniciar seu primeiro atendimento...'
+              : 'Aguardando o médico iniciar a chamada...')}
             {callState === 'connecting' && 'Conectando...'}
           </p>
         </div>
@@ -833,11 +1008,13 @@ function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 function CallInfoPanel({
-  doctorName, doctorCrm, consultaId, connectedAt, durationLabel, quality,
+  doctorName, roleSubtitle, doctorCrm, consultaId, numero, connectedAt, durationLabel, quality,
 }: {
   doctorName: string;
+  roleSubtitle: string;
   doctorCrm: string;
   consultaId: string;
+  numero: number | null;
   connectedAt: Date | null;
   durationLabel: string;
   quality: Quality;
@@ -851,7 +1028,7 @@ function CallInfoPanel({
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-white truncate">{doctorName}</p>
-          <p className="text-xs text-white/50 truncate">Clínico Geral{doctorCrm ? ` · ${doctorCrm}` : ''}</p>
+          <p className="text-xs text-white/50 truncate">{roleSubtitle}{doctorCrm ? ` · ${doctorCrm}` : ''}</p>
         </div>
       </div>
 
@@ -873,7 +1050,7 @@ function CallInfoPanel({
           value={connectedAt ? connectedAt.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : '—'}
         />
         <InfoRow label="Conexão" value={qualityLabel(quality)} />
-        <InfoRow label="ID" value={<span className="font-mono">#{consultaId.slice(0, 8)}</span>} />
+        <InfoRow label="Consulta" value={<span className="font-mono">#{numero ?? consultaId.slice(0, 8)}</span>} />
       </div>
 
       {/* Trust note */}

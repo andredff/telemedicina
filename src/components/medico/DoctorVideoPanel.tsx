@@ -4,14 +4,46 @@ import { useSignaling } from '@/hooks/useSignaling';
 import { useToast } from '@/hooks/use-toast';
 import {
   Mic, MicOff, Video, VideoOff, PhoneOff, Loader2,
-  User, Wifi, WifiOff, Minus, Maximize2, Minimize2, ChevronUp, Move,
+  User, WifiOff, Minus, Maximize2, Minimize2, ChevronUp, Move,
   MessageSquare, X, Send, Stethoscope, Activity, Pill, Paperclip, FileText,
+  SignalHigh, SignalMedium, SignalLow,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { IntakeData } from '@/lib/consultaDraft';
+import { openExamFile } from '@/lib/examFiles';
+import { logEvent } from '@/lib/audit';
+import { mediaErrorMessage, mediaErrorDetail } from '@/lib/mediaErrors';
 
 type PanelStage = 'starting' | 'calling' | 'in_call' | 'reconnecting' | 'error';
 type View = 'floating' | 'minimized' | 'maximized';
+type Quality = 'good' | 'fair' | 'poor';
+
+function qualityLabel(q: Quality) {
+  return q === 'good' ? 'Boa conexão' : q === 'fair' ? 'Conexão média' : 'Conexão fraca';
+}
+
+function fmtDuration(totalSeconds: number) {
+  const s = Math.max(0, totalSeconds);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  const mm = h > 0 ? String(m).padStart(2, '0') : String(m);
+  return (h > 0 ? `${h}:` : '') + `${mm}:${String(sec).padStart(2, '0')}`;
+}
+
+function QualityIndicator({ quality }: { quality: Quality }) {
+  const cfg = {
+    good: { Icon: SignalHigh, color: 'text-green-400' },
+    fair: { Icon: SignalMedium, color: 'text-amber-400' },
+    poor: { Icon: SignalLow, color: 'text-red-400' },
+  }[quality];
+  const { Icon, color } = cfg;
+  return (
+    <span className={color} title={qualityLabel(quality)}>
+      <Icon className="h-3 w-3" />
+    </span>
+  );
+}
 
 interface ChatMessage {
   id: string;
@@ -32,6 +64,11 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
   const { toast } = useToast();
 
   const [stage, setStage] = useState<PanelStage>('starting');
+  const [errorDetail, setErrorDetail] = useState(''); // surfaced cause of a media/connection error
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [quality, setQuality] = useState<Quality>('good');
+  const [connectedAt, setConnectedAt] = useState<number | null>(null);
+  const [callSeconds, setCallSeconds] = useState(0);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [patientAudio, setPatientAudio] = useState(true);
@@ -70,33 +107,81 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
   const signalingRef = useRef(signaling);
   signalingRef.current = signaling;
 
+  // The WebRTC offer is created exactly ONCE and re-broadcast unchanged on every
+  // patient-ready. Sending a fresh createOffer() each time mints a different SDP,
+  // and the patient ends up answering several offers → glare / concurrent
+  // renegotiation that breaks media one-way (the panel sees the patient but the
+  // patient never gets our stream). One stable offer keeps the handshake clean.
+  const offerRef = useRef<RTCSessionDescriptionInit | null>(null);
+  const connectedRef = useRef(false);
+
   const webrtc = useWebRTC({
     onRemoteStream: useCallback((stream: MediaStream) => {
+      connectedRef.current = true;
       setRemoteStream(stream);
       setStage('in_call');
     }, []),
     onConnectionStateChange: useCallback((state: RTCPeerConnectionState) => {
       if (state === 'disconnected') setStage('reconnecting');
-      if (state === 'connected') setStage('in_call');
-      if (state === 'failed' || state === 'closed') {
-        toast({ title: 'Chamada encerrada', description: 'A conexão com o paciente foi perdida.' });
-        onCallEnded();
-      }
-    }, [toast, onCallEnded]),
+      if (state === 'connected') { connectedRef.current = true; setStage('in_call'); }
+      // 'failed' no longer ends the call: the ICE-restart offer (onRenegotiationOffer)
+      // gets a chance to recover. Intentional hangups arrive via 'call-ended'; a
+      // local close() surfaces as 'closed'.
+      if (state === 'failed') setStage('reconnecting');
+      if (state === 'closed') onCallEnded();
+    }, [onCallEnded]),
     onIceCandidate: useCallback((candidate: RTCIceCandidateInit) => {
       signalingRef.current.send('ice-candidate', candidate as Record<string, unknown>);
     }, []),
+    // ICE failed → useWebRTC minted a fresh ICE-restart offer. Cache it as the
+    // current offer (so the patient-ready heartbeat re-sends the NEW one, never the
+    // stale pre-restart SDP) and re-signal it so the patient renegotiates.
+    onRenegotiationOffer: useCallback((offer: RTCSessionDescriptionInit) => {
+      offerRef.current = offer;
+      signalingRef.current.send('call-offer', offer as Record<string, unknown>);
+    }, []),
   });
 
-  // Attach streams to video elements
+  // Keep the latest streams in refs so the callback refs below can (re)attach the
+  // moment the <video> element (re)mounts — critically, after the panel is
+  // minimized (the whole subtree unmounts) and restored, which otherwise left the
+  // element with no srcObject = black. The effects handle the reverse case: the
+  // element is already mounted and the stream arrives later.
+  const localStreamRef = useRef<MediaStream | null>(null);
+  localStreamRef.current = localStream;
+  const remoteStreamRef = useRef<MediaStream | null>(null);
+  remoteStreamRef.current = remoteStream;
+
+  const attachLocal = useCallback((el: HTMLVideoElement | null) => {
+    localVideoRef.current = el;
+    if (el && localStreamRef.current && el.srcObject !== localStreamRef.current) {
+      el.srcObject = localStreamRef.current;
+      el.play().catch(() => { /* muted autoplay já cobre */ });
+    }
+  }, []);
+
+  const attachRemote = useCallback((el: HTMLVideoElement | null) => {
+    remoteVideoRef.current = el;
+    if (el && remoteStreamRef.current && el.srcObject !== remoteStreamRef.current) {
+      el.srcObject = remoteStreamRef.current;
+      el.play().catch(() => { /* o médico chegou via clique → unmuted ok */ });
+    }
+  }, []);
+
   useEffect(() => {
-    if (!localStream) return;
-    if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
+    const el = localVideoRef.current;
+    if (el && localStream && el.srcObject !== localStream) {
+      el.srcObject = localStream;
+      el.play().catch(() => { /* ignore */ });
+    }
   }, [localStream]);
 
   useEffect(() => {
-    if (!remoteStream || !remoteVideoRef.current) return;
-    remoteVideoRef.current.srcObject = remoteStream;
+    const el = remoteVideoRef.current;
+    if (el && remoteStream && el.srcObject !== remoteStream) {
+      el.srcObject = remoteStream;
+      el.play().catch(() => { /* ignore */ });
+    }
   }, [remoteStream]);
 
   // On mount: acquire media → create PC → send doctor-ready → create offer
@@ -105,7 +190,10 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
 
     const start = async () => {
       try {
-        const stream = await webrtc.startMedia();
+        // Acquire a camera that is genuinely producing frames. Handles permission/
+        // missing/busy AND the "resolved but black" case (track present but muted)
+        // that the attendant→doctor handoff triggers on shared hardware.
+        const stream = await webrtc.acquireLiveCamera();
         if (!mounted) { stream.getTracks().forEach(t => t.stop()); return; }
 
         setLocalStream(stream);
@@ -117,12 +205,15 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         setStage('calling');
 
         const offer = await webrtc.createOffer();
+        offerRef.current = offer;
         signalingRef.current.send('call-offer', offer as Record<string, unknown>);
-      } catch {
+        logEvent('doctor_started_call', { consultationId });
+      } catch (err) {
         if (!mounted) return;
+        setErrorDetail(mediaErrorDetail(err));
         toast({
           title: 'Erro ao acessar câmera',
-          description: 'Verifique as permissões do navegador.',
+          description: mediaErrorMessage(err),
           variant: 'destructive',
         });
         setStage('error');
@@ -166,20 +257,69 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
       if (!chatVisibleRef.current) setUnread(u => u + 1);
     });
 
-    // If patient sends patient-ready after we already started, resend offer
+    // If patient sends patient-ready after we already started, RE-SEND the same
+    // offer (never a fresh one — that would change the SDP mid-handshake). Once
+    // connected we stop, so a late heartbeat can't trigger a renegotiation.
     signaling.on('patient-ready', async () => {
-      if (stage !== 'in_call') {
-        try {
-          const offer = await webrtc.createOffer();
-          signalingRef.current.send('call-offer', offer as Record<string, unknown>);
-          setStage('calling');
-        } catch { /* ignore */ }
-      }
+      if (connectedRef.current) return;
+      try {
+        let offer = offerRef.current;
+        if (!offer) {
+          offer = await webrtc.createOffer();
+          offerRef.current = offer;
+        }
+        signalingRef.current.send('call-offer', offer as Record<string, unknown>);
+        setStage('calling');
+      } catch { /* ignore */ }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cleanup on unmount
   useEffect(() => () => webrtc.closeConnection(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Mark when the call actually connected (for the duration timer)
+  useEffect(() => {
+    if (stage === 'in_call' && connectedAt == null) setConnectedAt(Date.now());
+  }, [stage, connectedAt]);
+
+  // Tick the call-duration timer every second once connected
+  useEffect(() => {
+    if (connectedAt == null) return;
+    const t = setInterval(() => setCallSeconds(Math.floor((Date.now() - connectedAt) / 1000)), 1000);
+    return () => clearInterval(t);
+  }, [connectedAt]);
+
+  // Real connection-quality polling via WebRTC getStats (same thresholds as the
+  // patient side) — replaces the previously static green Wi-Fi icon.
+  useEffect(() => {
+    if (stage !== 'in_call') return;
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const stats = await webrtc.getStats();
+        if (!stats || cancelled) return;
+        let rtt = 0, received = 0, lost = 0;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        stats.forEach((r: any) => {
+          if (r.type === 'candidate-pair' && r.nominated && typeof r.currentRoundTripTime === 'number') {
+            rtt = r.currentRoundTripTime;
+          }
+          if (r.type === 'inbound-rtp' && (r.kind === 'video' || r.mediaType === 'video')) {
+            received = r.packetsReceived ?? 0;
+            lost = r.packetsLost ?? 0;
+          }
+        });
+        const lossRatio = received + lost > 0 ? lost / (received + lost) : 0;
+        let q: Quality = 'good';
+        if (rtt > 0.3 || lossRatio > 0.05) q = 'fair';
+        if (rtt > 0.6 || lossRatio > 0.12) q = 'poor';
+        if (!cancelled) setQuality(q);
+      } catch { /* ignore */ }
+    };
+    const t = setInterval(poll, 3000);
+    poll();
+    return () => { cancelled = true; clearInterval(t); };
+  }, [stage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-scroll chat (overlay in floating mode, side tab in fullscreen)
   useEffect(() => {
@@ -224,6 +364,7 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
 
   const handleEndCall = () => {
     signaling.send('call-ended', { initiated_by: 'doctor' });
+    logEvent('doctor_left_call', { consultationId, payload: { initiated_by: 'doctor' } });
     webrtc.closeConnection();
     onCallEnded();
   };
@@ -294,6 +435,12 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
             {stage === 'reconnecting' && 'Reconectando...'}
             {stage === 'error' && 'Erro na chamada'}
           </span>
+          {stage === 'in_call' && (
+            <span className="flex items-center gap-1.5 shrink-0 ml-1">
+              <QualityIndicator quality={quality} />
+              <span className="text-[11px] font-mono text-white/60 tabular-nums">{fmtDuration(callSeconds)}</span>
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-0.5 shrink-0" onPointerDown={(e) => e.stopPropagation()}>
           {/* Fullscreen / restore */}
@@ -302,6 +449,7 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
               onClick={() => setView(v => (v === 'maximized' ? 'floating' : 'maximized'))}
               className="text-white/40 hover:text-white transition-colors p-1"
               title={maximized ? 'Restaurar tamanho' : 'Tela cheia'}
+              aria-label={maximized ? 'Restaurar tamanho' : 'Tela cheia'}
             >
               {maximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
             </button>
@@ -312,15 +460,17 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
               onClick={() => setView(v => (v === 'minimized' ? 'floating' : 'minimized'))}
               className="text-white/40 hover:text-white transition-colors p-1"
               title={minimized ? 'Restaurar' : 'Minimizar'}
+              aria-label={minimized ? 'Restaurar janela' : 'Minimizar janela'}
             >
               {minimized ? <ChevronUp className="h-3.5 w-3.5" /> : <Minus className="h-3.5 w-3.5" />}
             </button>
           )}
-          {/* End call */}
+          {/* End call (asks for confirmation — easy to misclick this corner) */}
           <button
-            onClick={handleEndCall}
+            onClick={() => setConfirmEnd(true)}
             className="text-white/40 hover:text-red-400 transition-colors p-1"
             title="Encerrar chamada"
+            aria-label="Encerrar chamada"
           >
             <X className="h-4 w-4" />
           </button>
@@ -335,7 +485,7 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         <div className="flex-1 relative bg-slate-800 min-h-0">
         {/* Remote video */}
         <video
-          ref={remoteVideoRef}
+          ref={attachRemote}
           autoPlay
           playsInline
           className={`w-full h-full object-cover ${stage !== 'in_call' ? 'hidden' : ''}`}
@@ -371,9 +521,12 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         )}
 
         {stage === 'error' && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2">
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 px-4 text-center">
             <WifiOff className="h-6 w-6 text-red-400" />
             <p className="text-xs text-red-300">Falha na conexão</p>
+            {errorDetail && (
+              <p className="text-[10px] text-white/50 font-mono break-words max-w-full">{errorDetail}</p>
+            )}
             <Button
               size="sm"
               variant="outline"
@@ -395,7 +548,7 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
             )}
             {stage === 'in_call' && (
               <div className="absolute top-2 right-2 bg-black/40 rounded-full p-1">
-                <Wifi className="h-3 w-3 text-green-400" />
+                <QualityIndicator quality={quality} />
               </div>
             )}
           </>
@@ -404,7 +557,7 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         {/* Local video PiP */}
         <div className={`absolute bottom-2 right-2 rounded-lg overflow-hidden border border-white/20 shadow-md ${maximized ? 'w-48 h-32' : 'w-20 h-14'} ${stage === 'in_call' || stage === 'calling' || stage === 'starting' ? 'block' : 'hidden'}`}>
           <video
-            ref={localVideoRef}
+            ref={attachLocal}
             autoPlay
             muted
             playsInline
@@ -496,7 +649,8 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         <button
           onClick={handleChatButton}
           title="Chat"
-          className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+          aria-label={unread > 0 ? `Chat (${unread} não lidas)` : 'Chat'}
+          className={`relative w-10 h-10 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${
             chatVisible ? 'bg-primary hover:bg-primary/90' : 'bg-white/10 hover:bg-white/20'
           }`}
         >
@@ -508,9 +662,10 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
           )}
         </button>
         <button
-          onClick={handleEndCall}
+          onClick={() => setConfirmEnd(true)}
           title="Encerrar chamada"
-          className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all"
+          aria-label="Encerrar chamada"
+          className="w-10 h-10 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-red-300"
         >
           <PhoneOff className="h-4 w-4 text-white" />
         </button>
@@ -527,6 +682,38 @@ export function DoctorVideoPanel({ consultationId, patientName, onCallEnded, con
         </div>
       )}
       </>
+      )}
+
+      {/* End-call confirmation — clarifies that ending the call does NOT finish
+          the consultation (documents stay editable; use Finalizar to conclude). */}
+      {confirmEnd && (
+        <div className="absolute inset-0 z-50 bg-slate-900/95 flex flex-col items-center justify-center text-center p-5 rounded-2xl">
+          <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mb-3">
+            <PhoneOff className="h-6 w-6 text-red-400" />
+          </div>
+          <p className="text-sm font-semibold text-white">Encerrar a videochamada?</p>
+          <p className="text-xs text-white/60 mt-1.5 max-w-[260px]">
+            O atendimento continua aberto — você ainda pode emitir e assinar documentos.
+            Para concluir a consulta, use <span className="text-white/90 font-medium">Finalizar</span>.
+          </p>
+          <div className="flex items-center gap-2 mt-4">
+            <Button
+              size="sm"
+              variant="outline"
+              className="bg-transparent border-white/20 text-white hover:bg-white/10 hover:text-white"
+              onClick={() => setConfirmEnd(false)}
+            >
+              Continuar na chamada
+            </Button>
+            <Button
+              size="sm"
+              className="bg-red-500 hover:bg-red-600 text-white"
+              onClick={() => { setConfirmEnd(false); handleEndCall(); }}
+            >
+              Encerrar chamada
+            </Button>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -545,7 +732,9 @@ function PanelControlBtn({
     <button
       onClick={onClick}
       title={label}
-      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+      aria-label={label}
+      aria-pressed={!active}
+      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/70 ${
         active ? 'bg-white/10 hover:bg-white/20' : 'bg-red-500 hover:bg-red-600'
       }`}
     >
@@ -720,17 +909,16 @@ function ConsultaInfoColumn({
               </p>
               <div className="space-y-1.5">
                 {intake.exames.map((ex, i) => (
-                  <a
+                  <button
                     key={i}
-                    href={ex.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 p-2 rounded-lg border border-white/10 bg-white/5 hover:border-primary/40 hover:bg-white/10 transition-colors text-xs text-white/80"
+                    type="button"
+                    onClick={() => openExamFile(ex)}
+                    className="flex w-full items-center gap-2 p-2 rounded-lg border border-white/10 bg-white/5 hover:border-primary/40 hover:bg-white/10 transition-colors text-xs text-white/80 text-left"
                   >
                     <FileText className="h-3.5 w-3.5 text-primary shrink-0" />
                     <span className="flex-1 truncate">{ex.name}</span>
                     <span className="text-[10px] text-primary">Abrir</span>
-                  </a>
+                  </button>
                 ))}
               </div>
             </div>

@@ -273,8 +273,8 @@ export default function AdminSubscriptionDetail() {
               <p className="font-medium">{formatCurrency(sub.price_monthly)}</p>
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Recorrência</p>
-              <p className="font-medium">{sub.billing_cycle}</p>
+              <p className="text-xs text-muted-foreground">Ciclo</p>
+              <p className="font-medium">Anual (cobrança mensal)</p>
             </div>
           </CardContent>
         </Card>

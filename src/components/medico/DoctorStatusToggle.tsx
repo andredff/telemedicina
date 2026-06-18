@@ -3,8 +3,10 @@ import { useState, useEffect } from 'react';
 const STORAGE_KEY = 'novita_doctor_online';
 
 export function useDoctorStatus() {
+  // Default to online when the doctor hasn't chosen yet — opening the medical
+  // area means available; going offline is an explicit "Não disponível".
   const [online, setOnlineState] = useState(() => {
-    return localStorage.getItem(STORAGE_KEY) === 'true';
+    return localStorage.getItem(STORAGE_KEY) !== 'false';
   });
 
   const toggle = () => {

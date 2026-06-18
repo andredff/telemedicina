@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { isPlanExpired } from "@/lib/subscription";
 
 // ==========================================
 // TIPOS DO SERVIÇO
@@ -46,9 +47,8 @@ export async function checkSubscriptionStatus(
       };
     }
 
-    const now = new Date();
-    const expiresAt = subscription.expires_at ? new Date(subscription.expires_at) : null;
-    const isExpired = !expiresAt || expiresAt <= now;
+    // Plano vale até o fim do dia da expiração (ver src/lib/subscription.ts).
+    const isExpired = !subscription.expires_at || isPlanExpired(subscription.expires_at);
     const isWithinPeriod = !isExpired;
 
     const planData = subscription.subscription_plans as {
@@ -64,7 +64,7 @@ export async function checkSubscriptionStatus(
       isExpired,
       isWithinPeriod,
       planType: planData?.type,
-      now: now.toISOString(),
+      now: new Date().toISOString(),
     });
 
     return {
@@ -105,9 +105,7 @@ export async function canAccessTelemedicine(userId: string): Promise<{
   }
 
   if (!subscription.isActive) {
-    const now = new Date();
-    const expiresAt = subscription.expiresAt ? new Date(subscription.expiresAt) : null;
-    const isExpired = expiresAt && expiresAt <= now;
+    const isExpired = isPlanExpired(subscription.expiresAt);
 
     return {
       canAccess: false,

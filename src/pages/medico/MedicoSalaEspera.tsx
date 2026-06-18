@@ -1,18 +1,33 @@
-import { useEffect, useState, useCallback, useRef } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, Play, RefreshCw, AlertCircle, Users, Bell } from 'lucide-react';
+import { Clock, Play, RefreshCw, AlertCircle, Users, Bell, Activity } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { playNotificationSound } from '@/lib/sound';
+import { logEvent } from '@/lib/audit';
+import type { IntakeData } from '@/lib/consultaDraft';
 
 interface WaitingPatient {
   id: string;
   patient_name: string;
   created_at: string;
+  number?: number | null;
+  intake?: IntakeData | null;
+}
+
+// Prévia curta da queixa para triagem na fila (sem abrir o atendimento).
+function complaintPreview(intake?: IntakeData | null): string | null {
+  if (!intake) return null;
+  if (intake.sintomaPrincipal?.trim()) return intake.sintomaPrincipal.trim();
+  if (intake.sintomas?.length) return intake.sintomas.slice(0, 3).join(', ');
+  if (intake.descricao?.trim()) {
+    const d = intake.descricao.trim();
+    return d.length > 80 ? `${d.slice(0, 80)}…` : d;
+  }
+  return null;
 }
 
 interface DoctorProfile {
@@ -38,19 +53,25 @@ export default function MedicoSalaEspera() {
   const [starting, setStarting] = useState<string | null>(null);
   const [doctorProfile, setDoctorProfile] = useState<DoctorProfile | null>(null);
   const [, setTick] = useState(0);
-  const alertedIds = useRef<Set<string>>(new Set());
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from('consultations')
-      .select('id, patient_name, created_at')
-      .eq('status', 'pending')
+      .select('id, patient_name, created_at, number, intake_data')
+      .eq('status', 'waiting_doctor')
       .order('created_at', { ascending: true });
-    setQueue(data ?? []);
+    const rows = (data ?? []) as unknown as (WaitingPatient & { intake_data?: IntakeData | null })[];
+    setQueue(rows.map(r => ({
+      id: r.id, patient_name: r.patient_name, created_at: r.created_at,
+      number: r.number, intake: r.intake_data ?? null,
+    })));
     setLoading(false);
   }, []);
 
-  // Load doctor profile once for use when accepting a consultation
+  // Load doctor profile once for use when accepting a consultation.
+  // The CRM lives in auth user_metadata (saved in Configurações › CRM/RQE),
+  // not in the profiles table — read it here so accepted consultations carry
+  // the real CRM (required for valid prescriptions/certificates).
   useEffect(() => {
     const fetchProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -60,9 +81,11 @@ export default function MedicoSalaEspera() {
         .select('full_name')
         .eq('id', user.id)
         .single();
-      if (data) {
-        setDoctorProfile({ full_name: data.full_name ?? 'Médico Novità', crm: '' });
-      }
+      const meta = (user.user_metadata ?? {}) as { doctor_crm?: string; full_name?: string };
+      setDoctorProfile({
+        full_name: data?.full_name ?? meta.full_name ?? 'Médico Novità',
+        crm: meta.doctor_crm ?? '',
+      });
     };
     fetchProfile();
   }, []);
@@ -77,30 +100,32 @@ export default function MedicoSalaEspera() {
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'consultations' },
         (payload) => {
-          const p = payload.new as { id: string; patient_name: string; created_at: string; status: string };
-          if (p.status !== 'pending') return;
+          const p = payload.new as { id: string; patient_name: string; created_at: string; status: string; number?: number | null; intake_data?: IntakeData | null };
+          // New consultations now enter as 'waiting_attendant' (triage), so they
+          // only reach the doctor queue via the UPDATE handler below. Kept guarded
+          // in case a row is ever inserted already routed.
+          if (p.status !== 'waiting_doctor') return;
           setQueue(prev => {
             if (prev.some(x => x.id === p.id)) return prev;
-            const next = [...prev, { id: p.id, patient_name: p.patient_name, created_at: p.created_at }];
+            const next = [...prev, { id: p.id, patient_name: p.patient_name, created_at: p.created_at, number: p.number, intake: p.intake_data ?? null }];
             return next.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
           });
-          if (!alertedIds.current.has(p.id)) {
-            alertedIds.current.add(p.id);
-            playNotificationSound();
-            toast({
-              title: 'Novo paciente na fila',
-              description: `${p.patient_name} está aguardando atendimento.`,
-            });
-          }
         }
       )
       .on(
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'consultations' },
         (payload) => {
-          const p = payload.new as { id: string; status: string };
-          // Remove from queue when status changes away from 'pending'
-          if (p.status !== 'pending') {
+          const p = payload.new as { id: string; patient_name: string; created_at: string; status: string; number?: number | null; intake_data?: IntakeData | null };
+          if (p.status === 'waiting_doctor') {
+            // Attendant just routed this patient — add to the doctor queue.
+            setQueue(prev => {
+              if (prev.some(x => x.id === p.id)) return prev;
+              const next = [...prev, { id: p.id, patient_name: p.patient_name, created_at: p.created_at, number: p.number, intake: p.intake_data ?? null }];
+              return next.sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+            });
+          } else {
+            // Accepted by a doctor / cancelled / sent back — drop from the queue.
             setQueue(prev => prev.filter(x => x.id !== p.id));
           }
         }
@@ -118,21 +143,43 @@ export default function MedicoSalaEspera() {
 
   const startConsultation = async (patientId: string) => {
     if (starting) return;
+
+    // Read the doctor's identity fresh (avoids racing the async profile load)
+    // and block acceptance when the CRM is missing — a consultation accepted
+    // without a CRM would generate prescriptions/certificates with no legal validity.
+    const { data: { user } } = await supabase.auth.getUser();
+    const meta = (user?.user_metadata ?? {}) as { doctor_crm?: string; full_name?: string };
+    const doctorCrm  = (meta.doctor_crm ?? doctorProfile?.crm ?? '').trim();
+    const doctorName = doctorProfile?.full_name ?? meta.full_name ?? 'Médico Novità';
+
+    if (!doctorCrm) {
+      toast({
+        title: 'Cadastre seu CRM antes de atender',
+        description: 'O CRM é obrigatório para emitir receitas e atestados válidos. Conclua em Configurações › CRM/RQE.',
+        variant: 'destructive',
+      });
+      navigate('/medico/configuracoes?tab=crm');
+      return;
+    }
+
     setStarting(patientId);
     try {
-      const doctorName = doctorProfile?.full_name ?? 'Médico Novità';
-      const doctorCrm  = doctorProfile?.crm ?? '';
-
       const { error, data: updated } = await supabase
         .from('consultations')
         .update({
-          status: 'in_progress',
+          status: 'in_consultation',
+          doctor_id: user?.id,
           doctor_name: doctorName,
           doctor_crm: doctorCrm,
+          consultation_started_at: new Date().toISOString(), // legal start of the medical act
+          // NOTE: doctor_calling_at is intentionally NOT set here. The patient is
+          // rung by MedicoAtendimento once its video panel has acquired the camera,
+          // so the doctor's camera opens BEFORE the patient's — on a single shared
+          // webcam (same machine) simultaneous acquisition makes one side go dark.
           updated_at: new Date().toISOString(),
         })
         .eq('id', patientId)
-        .eq('status', 'pending') // race-condition guard: only accept if still pending
+        .eq('status', 'waiting_doctor') // race-condition guard: only one doctor wins
         .select();
 
       if (error) throw error;
@@ -142,6 +189,15 @@ export default function MedicoSalaEspera() {
         load(); // refresh queue
         return;
       }
+
+      const queued = queue.find(x => x.id === patientId);
+      logEvent('doctor_accepted_consultation', {
+        consultationId: patientId,
+        payload: {
+          wait_time_s: queued ? Math.max(0, Math.round((Date.now() - new Date(queued.created_at).getTime()) / 1000)) : null,
+          queue_size: queue.length,
+        },
+      });
 
       setQueue(prev => prev.filter(x => x.id !== patientId));
       // ?autostart=1 tells MedicoAtendimento to open the video panel immediately
@@ -244,9 +300,15 @@ export default function MedicoSalaEspera() {
                         Aguardando há {elapsed(patient.created_at)}
                       </span>
                       <span className="text-[11px] text-muted-foreground/60 font-mono">
-                        #{patient.id.slice(0, 8)}
+                        #{patient.number ?? patient.id.slice(0, 8)}
                       </span>
                     </div>
+                    {complaintPreview(patient.intake) && (
+                      <p className="text-xs text-foreground/70 flex items-start gap-1 mt-1.5">
+                        <Activity className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
+                        <span className="line-clamp-1">Queixa: {complaintPreview(patient.intake)}</span>
+                      </p>
+                    )}
                   </div>
 
                   {/* "Next" label for first patient */}

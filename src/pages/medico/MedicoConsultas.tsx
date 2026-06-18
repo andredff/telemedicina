@@ -4,10 +4,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useToast } from '@/hooks/use-toast';
 import {
-  Video, CheckCircle, XCircle, Search, User,
-  RefreshCw, Calendar, Plus, Play, FileText,
+  Video, CheckCircle, XCircle, Search,
+  RefreshCw, Calendar, FileText,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -21,6 +20,8 @@ interface Consultation {
   status: string;
   doctor_name: string;
   created_at: string;
+  updated_at?: string | null;
+  number?: number | null;
 }
 
 function formatDate(d: string) {
@@ -33,7 +34,7 @@ function getInitials(name: string) {
 
 const TAB_META: Record<TabKey, { label: string; status: string; icon: React.ElementType; color: string; emptyMsg: string }> = {
   andamento: {
-    label: 'Em andamento', status: 'in_progress', icon: Video,
+    label: 'Em andamento', status: 'in_consultation', icon: Video,
     color: 'text-blue-600', emptyMsg: 'Nenhuma consulta em andamento.',
   },
   finalizadas: {
@@ -46,12 +47,9 @@ const TAB_META: Record<TabKey, { label: string; status: string; icon: React.Elem
   },
 };
 
-const DEMO_PATIENTS = ['Ana Paula Ferreira', 'Carlos Eduardo Lima', 'Mariana Souza Costa', 'Pedro Alves Santos'];
-
 export default function MedicoConsultas() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toast } = useToast();
 
   const tab = (searchParams.get('tab') as TabKey) || 'andamento';
   const setTab = (t: TabKey) => setSearchParams(t === 'andamento' ? {} : { tab: t });
@@ -59,29 +57,16 @@ export default function MedicoConsultas() {
   const [all, setAll] = useState<Consultation[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
-  const [creating, setCreating] = useState(false);
-  const [doctorName, setDoctorName] = useState('Médico');
-  const [doctorCrm, setDoctorCrm] = useState('CRM/SP 12345');
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: profile } = await supabase.from('profiles').select('full_name').eq('id', user.id).single();
-      const name = profile?.full_name || user.email || 'Médico';
-      setDoctorName(name);
-
-      const meta = user.user_metadata?.doctor_profile as { crm?: string; crm_state?: string } | undefined;
-      if (meta?.crm) setDoctorCrm(`CRM/${meta.crm_state || 'SP'} ${meta.crm}`);
-
       const { data } = await supabase
         .from('consultations')
-        .select('id, patient_name, date, status, doctor_name, created_at')
-        .in('status', ['in_progress', 'completed', 'cancelled'])
+        .select('id, patient_name, date, status, doctor_name, created_at, updated_at, number')
+        .in('status', ['in_consultation', 'completed', 'cancelled'])
         .order('created_at', { ascending: false });
-      setAll(data ?? []);
+      setAll((data ?? []) as unknown as Consultation[]);
     } finally {
       setLoading(false);
     }
@@ -89,34 +74,13 @@ export default function MedicoConsultas() {
 
   useEffect(() => { load(); }, [load]);
 
-  const createDemo = async () => {
-    setCreating(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const name = DEMO_PATIENTS[Math.floor(Math.random() * DEMO_PATIENTS.length)];
-      const { error } = await supabase.from('consultations').insert({
-        patient_name: name,
-        doctor_name: doctorName, doctor_crm: doctorCrm,
-        date: new Date().toISOString(), status: 'pending', user_id: user.id,
-      });
-      if (error) throw error;
-      toast({ title: 'Paciente adicionado à fila', description: `${name} está na Sala de Espera.` });
-      navigate('/medico/sala-espera');
-    } catch {
-      toast({ title: 'Erro ao criar consulta demo', variant: 'destructive' });
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const meta = TAB_META[tab];
   const filtered = all
     .filter(c => c.status === meta.status)
     .filter(c => !search.trim() || c.patient_name.toLowerCase().includes(search.toLowerCase()));
 
   const counts: Record<TabKey, number> = {
-    andamento: all.filter(c => c.status === 'in_progress').length,
+    andamento: all.filter(c => c.status === 'in_consultation').length,
     finalizadas: all.filter(c => c.status === 'completed').length,
     canceladas: all.filter(c => c.status === 'cancelled').length,
   };
@@ -130,16 +94,10 @@ export default function MedicoConsultas() {
           <h1 className="text-xl font-bold text-foreground">Consultas</h1>
           <p className="text-sm text-muted-foreground mt-0.5">Histórico e consultas ativas</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={load} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-          <Button size="sm" onClick={createDemo} disabled={creating} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            {creating ? 'Criando...' : 'Demo'}
-          </Button>
-        </div>
+        <Button variant="outline" size="sm" onClick={load} disabled={loading}>
+          <RefreshCw className={`h-4 w-4 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
+          Atualizar
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -209,7 +167,12 @@ export default function MedicoConsultas() {
                       <Calendar className="h-3 w-3" />
                       {formatDate(c.date)}
                     </p>
-                    <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-mono">#{c.id.slice(0, 8)}</p>
+                    <p className="text-[11px] text-muted-foreground/60 mt-0.5 font-mono">#{c.number ?? c.id.slice(0, 8)}</p>
+                    {c.status === 'cancelled' && (
+                      <p className="text-[11px] text-red-500/80 mt-1">
+                        Cancelada pelo paciente{c.updated_at ? ` · ${formatDate(c.updated_at)}` : ''}
+                      </p>
+                    )}
                   </div>
                   <div className="shrink-0">
                     {tab === 'andamento' && (

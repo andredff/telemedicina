@@ -31,7 +31,7 @@ import {
   CardHeader,
   CardTitle
 } from '@/components/ui/card';
-import { Search, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Users, RefreshCw, KeyRound } from 'lucide-react';
+import { Search, Edit, Trash2, UserCheck, Shield, Stethoscope, Heart, Headset, Users, RefreshCw, KeyRound, UserPlus, Eye, EyeOff, Ban, Unlock } from 'lucide-react';
 import { toast } from '@/components/ui/use-toast';
 
 interface User {
@@ -41,6 +41,7 @@ interface User {
   role: string;
   created_at: string;
   last_login?: string;
+  blocked?: boolean;
 }
 
 export default function AdminUsers() {
@@ -51,6 +52,12 @@ export default function AdminUsers() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [blockingId, setBlockingId] = useState<string | null>(null);
+  const emptyNewUser = { full_name: '', email: '', password: '', role: 'patient' };
+  const [newUser, setNewUser] = useState(emptyNewUser);
 
   useEffect(() => {
     fetchUsers();
@@ -70,6 +77,7 @@ export default function AdminUsers() {
         role: (user.role as string) || 'patient',
         created_at: user.created_at as string,
         last_login: user.last_login as string | undefined,
+        blocked: (user.blocked as boolean) ?? false,
       }));
       
       setUsers(usersWithRoles);
@@ -132,6 +140,97 @@ export default function AdminUsers() {
     }
   };
 
+  const handleCreateUser = async () => {
+    const email = newUser.email.trim();
+    if (!email || !newUser.password) {
+      toast({ title: 'Campos obrigatórios', description: 'Informe e-mail e senha.', variant: 'destructive' });
+      return;
+    }
+    if (newUser.password.length < 6) {
+      toast({ title: 'Senha curta', description: 'A senha deve ter ao menos 6 caracteres.', variant: 'destructive' });
+      return;
+    }
+    setIsCreating(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({
+          email,
+          password: newUser.password,
+          full_name: newUser.full_name.trim() || email,
+          role: newUser.role,
+        }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg = result.error || (response.status === 502 || response.status === 503 || response.status === 500
+          ? 'Servidor backend indisponível. Execute: node server/cielo-server.js'
+          : 'Erro ao criar usuário');
+        throw new Error(msg);
+      }
+      toast({ title: 'Usuário criado', description: `${result.email} adicionado com sucesso` });
+      setIsCreateDialogOpen(false);
+      setNewUser(emptyNewUser);
+      fetchUsers();
+    } catch (error) {
+      logger.error('Error creating user:', error);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Falha ao criar usuário',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  const handleToggleBlock = async (user: User) => {
+    const willBlock = !user.blocked;
+    const confirmMsg = willBlock
+      ? `Bloquear o acesso de ${user.full_name}? O usuário não conseguirá fazer login.`
+      : `Desbloquear o acesso de ${user.full_name}?`;
+    if (!window.confirm(confirmMsg)) return;
+
+    setBlockingId(user.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(`/api/admin/users/${user.id}/block`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session?.access_token}`,
+        },
+        body: JSON.stringify({ blocked: willBlock }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        const msg = result.error || (response.status === 502 || response.status === 503 || response.status === 500
+          ? 'Servidor backend indisponível. Execute: node server/cielo-server.js'
+          : 'Erro ao alterar acesso');
+        throw new Error(msg);
+      }
+      toast({
+        title: willBlock ? 'Acesso bloqueado' : 'Acesso liberado',
+        description: `${user.full_name} foi ${willBlock ? 'bloqueado' : 'desbloqueado'} com sucesso`,
+      });
+      setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, blocked: willBlock } : u)));
+    } catch (error) {
+      logger.error('Error toggling user block:', error);
+      toast({
+        title: 'Erro',
+        description: error instanceof Error ? error.message : 'Falha ao alterar acesso',
+        variant: 'destructive',
+      });
+    } finally {
+      setBlockingId(null);
+    }
+  };
+
   const handleSaveUser = async () => {
     try {
       if (!editingUser) return;
@@ -176,6 +275,7 @@ export default function AdminUsers() {
     switch (role) {
       case 'admin': return <Shield className="h-4 w-4" />;
       case 'doctor': return <Stethoscope className="h-4 w-4" />;
+      case 'attendant': return <Headset className="h-4 w-4" />;
       case 'support': return <Heart className="h-4 w-4" />;
       default: return <UserCheck className="h-4 w-4" />;
     }
@@ -185,6 +285,7 @@ export default function AdminUsers() {
     switch (role) {
       case 'admin': return 'Administrador';
       case 'doctor': return 'Médico';
+      case 'attendant': return 'Atendente';
       case 'support': return 'Suporte';
       default: return 'Paciente';
     }
@@ -194,6 +295,7 @@ export default function AdminUsers() {
     switch (role) {
       case 'admin': return 'bg-red-100 text-red-800';
       case 'doctor': return 'bg-blue-100 text-blue-800';
+      case 'attendant': return 'bg-purple-100 text-purple-800';
       case 'support': return 'bg-green-100 text-green-800';
       default: return 'bg-gray-100 text-gray-800';
     }
@@ -226,6 +328,7 @@ export default function AdminUsers() {
             <SelectItem value="all">Todos os papéis</SelectItem>
             <SelectItem value="admin">Administradores</SelectItem>
             <SelectItem value="doctor">Médicos</SelectItem>
+            <SelectItem value="attendant">Atendentes</SelectItem>
             <SelectItem value="support">Suporte</SelectItem>
             <SelectItem value="patient">Pacientes</SelectItem>
           </SelectContent>
@@ -235,6 +338,95 @@ export default function AdminUsers() {
           <RefreshCw className="h-4 w-4" />
           Atualizar
         </Button>
+
+        <Button onClick={() => setIsCreateDialogOpen(true)} className="gap-2">
+          <UserPlus className="h-4 w-4" />
+          Adicionar Usuário
+        </Button>
+
+        {/* Dialog de criação de usuário */}
+        <Dialog
+          open={isCreateDialogOpen}
+          onOpenChange={(open) => {
+            setIsCreateDialogOpen(open);
+            if (!open) {
+              setNewUser(emptyNewUser);
+              setShowPassword(false);
+            }
+          }}
+        >
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Adicionar Usuário</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Nome</label>
+                <Input
+                  value={newUser.full_name}
+                  onChange={(e) => setNewUser({ ...newUser, full_name: e.target.value })}
+                  placeholder="Nome completo"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Email</label>
+                <Input
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="email@exemplo.com"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Senha</label>
+                <div className="relative">
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    value={newUser.password}
+                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    placeholder="Mínimo 6 caracteres"
+                    className="pr-10"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((v) => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    title={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
+                  >
+                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Papel</label>
+                <Select
+                  value={newUser.role}
+                  onValueChange={(value) => setNewUser({ ...newUser, role: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione um papel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="patient">Paciente</SelectItem>
+                    <SelectItem value="doctor">Médico</SelectItem>
+                    <SelectItem value="attendant">Atendente</SelectItem>
+                    <SelectItem value="support">Suporte</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button onClick={handleCreateUser} disabled={isCreating} className="flex-1">
+                  {isCreating ? 'Criando...' : 'Criar Usuário'}
+                </Button>
+                <Button variant="outline" onClick={() => setIsCreateDialogOpen(false)} disabled={isCreating}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         <Dialog
           open={isDialogOpen}
@@ -269,6 +461,7 @@ export default function AdminUsers() {
                     <SelectContent>
                       <SelectItem value="patient">Paciente</SelectItem>
                       <SelectItem value="doctor">Médico</SelectItem>
+                      <SelectItem value="attendant">Atendente</SelectItem>
                       <SelectItem value="support">Suporte</SelectItem>
                       <SelectItem value="admin">Administrador</SelectItem>
                     </SelectContent>
@@ -327,7 +520,15 @@ export default function AdminUsers() {
               filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>
-                    <div className="font-medium">{user.full_name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{user.full_name}</span>
+                      {user.blocked && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-800">
+                          <Ban className="h-3 w-3" />
+                          Bloqueado
+                        </span>
+                      )}
+                    </div>
                     <div className="text-sm text-gray-500">ID: {user.id.slice(0, 8)}...</div>
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
@@ -360,6 +561,16 @@ export default function AdminUsers() {
                         onClick={() => handleEditUser(user)}
                       >
                         <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={user.blocked ? 'text-green-600 hover:text-green-700' : 'text-amber-600 hover:text-amber-700'}
+                        onClick={() => handleToggleBlock(user)}
+                        disabled={blockingId === user.id}
+                        title={user.blocked ? 'Desbloquear acesso' : 'Bloquear acesso'}
+                      >
+                        {user.blocked ? <Unlock className="h-4 w-4" /> : <Ban className="h-4 w-4" />}
                       </Button>
                       <Button
                         variant="outline"

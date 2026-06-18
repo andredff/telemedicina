@@ -608,7 +608,7 @@ function Index(): JSX.Element {
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
             <div className="text-xs text-muted-foreground space-y-1">
-              <p>* Pagamentos mensais são cobrados em 12 parcelas do valor apresentado (vide política de cancelamento). Pagamento anual cobrado em parcela única com 10% de desconto.</p>
+              <p>* O plano tem vigência anual, com cobrança mensal recorrente: 12 parcelas iguais do valor apresentado, sem juros (vide política de cancelamento).</p>
               <p>** Consulta avulsa com médico especialista (R$ 149,90) disponível apenas para assinantes.</p>
             </div>
           </div>

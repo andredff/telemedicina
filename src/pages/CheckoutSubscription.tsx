@@ -10,6 +10,8 @@ import { logger } from "@/lib/logger";
 import { User, Session } from "@supabase/supabase-js";
 import type { CustomerData } from "@/services/paymentService";
 import { useToast } from "@/hooks/use-toast";
+import { createNotification } from "@/lib/notifications";
+import { isPlanValid } from "@/lib/subscription";
 
 interface Plan {
   id: string;
@@ -64,6 +66,7 @@ const CheckoutSubscription = () => {
           id,
           plan_id,
           status,
+          expires_at,
           subscription_plans (
             type
           )
@@ -71,6 +74,11 @@ const CheckoutSubscription = () => {
         .eq("user_id", userId)
         .eq("status", "active")
         .maybeSingle();
+
+      // Plano vencido não conta como "atual": permitimos renovar o mesmo plano.
+      if (subscription && !isPlanValid(subscription.expires_at)) {
+        return;
+      }
 
       if (subscription && subscription.subscription_plans) {
         const plans = subscription.subscription_plans as { type: string } | { type: string }[];
@@ -163,21 +171,24 @@ const CheckoutSubscription = () => {
   const handleSuccess = async (recurrentPaymentId: string, billingCycle: "monthly" | "yearly") => {
     // Salvar a assinatura no banco de dados
     if (user && plan) {
+      // Vigência anual: 12 meses a partir da adesão (contrato, Cláusula 2.1),
+      // independente de a cobrança ser mensal recorrente. A falta de pagamento
+      // é tratada à parte (suspensão/rescisão), não pelo expires_at.
       const expiresAt = new Date();
-      const cycleMonths = billingCycle === "yearly" ? 12 : 1;
-      expiresAt.setMonth(expiresAt.getMonth() + cycleMonths);
+      expiresAt.setMonth(expiresAt.getMonth() + 12);
 
       // Verificar se já existe uma assinatura ativa para o usuário
       const { data: existingSubscription } = await supabase
         .from("user_subscriptions")
-        .select("id, plan_id")
+        .select("id, plan_id, expires_at")
         .eq("user_id", user.id)
         .eq("status", "active")
         .maybeSingle();
 
       if (existingSubscription) {
-        // Verificar se não é o mesmo plano (validação adicional)
-        if (existingSubscription.plan_id === plan.id) {
+        // Bloquear só quando é o mesmo plano E ainda está válido. Se estiver
+        // vencido, seguimos para o update (renovação) que renova o expires_at.
+        if (existingSubscription.plan_id === plan.id && isPlanValid(existingSubscription.expires_at)) {
           toast({
             title: "Erro",
             description: "Você já possui este plano ativo.",
@@ -243,6 +254,18 @@ const CheckoutSubscription = () => {
           description: `Bem-vindo ao plano ${plan.name}!`,
         });
       }
+
+      // Notificação in-app de pagamento confirmado. O trigger no banco
+      // (notifications_after_insert) encerra automaticamente eventuais alertas
+      // de "plano vencendo/vencido" não lidos deste usuário.
+      void createNotification({
+        type: "payment_confirmed",
+        title: "Pagamento confirmado",
+        body: "Pagamento confirmado. Seu plano está ativo novamente.",
+        actionLabel: "Ver meu plano",
+        actionUrl: "/meu-plano",
+        dedupKey: recurrentPaymentId ? `payment_confirmed:${recurrentPaymentId}` : null,
+      });
 
       // Redirecionar para o dashboard após sucesso
       navigate("/dashboard");

@@ -49,13 +49,15 @@ function tone(ctx: AudioContext, freqs: number[], start: number, dur: number, ga
   });
 }
 
-/** Short rising two-note "ding" — e.g. a new patient joined the queue. */
+/**
+ * Soft, pleasant chime — a C-major chord (C5/E5/G5) with a slow decay.
+ * Used e.g. when a new patient joins the queue.
+ */
 export function playNotificationSound() {
   const ctx = getCtx();
   if (!ctx) return;
   const now = ctx.currentTime;
-  tone(ctx, [880], now, 0.12, 0.16);
-  tone(ctx, [1175], now + 0.14, 0.20, 0.16);
+  tone(ctx, [523.25, 659.25, 783.99], now, 0.9, 0.12);
 }
 
 /**

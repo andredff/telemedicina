@@ -5,8 +5,11 @@ import {
   Stethoscope, Plus, RefreshCw, Ban, ChevronRight, Star, CreditCard,
   Eye, FileText, FlaskConical, ClipboardCheck, PhoneCall, ShieldCheck, Sparkles,
 } from "lucide-react";
-import type { ConsultaDraft } from "@/lib/consultaDraft";
+import type { ConsultaDraft, IntakeExam } from "@/lib/consultaDraft";
 import { createRingtone } from "@/lib/sound";
+import { logEvent, recordConsent } from "@/lib/audit";
+import { normalizeStatus, isActive } from "@/lib/consultationStatus";
+import { TELEMED_TERM, telemedTermHash } from "@/data/telemedicineTerm";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
@@ -37,6 +40,7 @@ interface ConsultaRow {
   user_id: string;
   clinical_data?: ConsultaDraft | null;
   doctor_calling_at?: string | null;
+  number?: number | null;
 }
 
 interface CreditRow {
@@ -50,10 +54,11 @@ type ConsultaStatus = "AGUARDANDO" | "EM_ATENDIMENTO" | "CONCLUIDO" | "CANCELADO
 type FilterKey = "todos" | ConsultaStatus;
 
 function mapStatus(raw: string): ConsultaStatus {
-  if (raw === "in_progress") return "EM_ATENDIMENTO";
-  if (raw === "completed")   return "CONCLUIDO";
-  if (raw === "cancelled")   return "CANCELADO";
-  return "AGUARDANDO";
+  const s = normalizeStatus(raw);
+  if (s === "in_consultation") return "EM_ATENDIMENTO";
+  if (s === "completed")       return "CONCLUIDO";
+  if (s === "cancelled")       return "CANCELADO";
+  return "AGUARDANDO"; // waiting_attendant / with_attendant / waiting_doctor / routed_to_doctor
 }
 
 // ─── Status visual config ────────────────────────────────────────────────────
@@ -132,7 +137,7 @@ function ConsultationHistoryCard({
         <Stethoscope className="h-3.5 w-3.5 text-white shrink-0" />
         <span className="text-xs font-semibold text-white uppercase tracking-wide flex-1">{cfg.label}</span>
         <span className="text-[10px] text-white/70 font-mono truncate max-w-[80px]">
-          #{consulta.id.slice(0, 8)}
+          #{consulta.number ?? consulta.id.slice(0, 8)}
         </span>
       </div>
 
@@ -359,7 +364,7 @@ const Teleconsultas = () => {
   const [evaluatedIds, setEvaluatedIds] = useState<Set<string>>(new Set());
 
   // "Doctor is calling" ring (re-join an open consultation)
-  const [ringingConsulta, setRingingConsulta] = useState<{ id: string; doctorName: string } | null>(null);
+  const [ringingConsulta, setRingingConsulta] = useState<{ id: string; caller: "atendente" | "medico"; callerName: string } | null>(null);
   const lastRingRef = useRef<Record<string, string | null>>({});
   const ringtoneRef = useRef(createRingtone());
 
@@ -401,7 +406,7 @@ const Teleconsultas = () => {
     setIsLoadingConsultas(true);
     const { data } = await supabase
       .from("consultations")
-      .select("id, patient_name, doctor_name, doctor_crm, date, status, created_at, user_id, clinical_data, doctor_calling_at")
+      .select("id, patient_name, doctor_name, doctor_crm, date, status, created_at, user_id, clinical_data, doctor_calling_at, number")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false });
     const rows = (data as unknown as ConsultaRow[]) ?? [];
@@ -431,13 +436,20 @@ const Teleconsultas = () => {
 
           // Doctor is (re)calling: doctor_calling_at bumped on an open consultation
           const prevRing = lastRingRef.current[updated.id] ?? null;
+          const ns = normalizeStatus(updated.status);
+          const ringable = ns === "in_consultation" || ns === "with_attendant";
           if (
-            updated.status === "in_progress" &&
+            ringable &&
             updated.doctor_calling_at &&
             updated.doctor_calling_at !== prevRing
           ) {
             lastRingRef.current[updated.id] = updated.doctor_calling_at;
-            setRingingConsulta({ id: updated.id, doctorName: updated.doctor_name || "O médico" });
+            const isAtt = ns === "with_attendant";
+            setRingingConsulta({
+              id: updated.id,
+              caller: isAtt ? "atendente" : "medico",
+              callerName: isAtt ? "O atendente" : (updated.doctor_name || "O médico"),
+            });
           } else {
             lastRingRef.current[updated.id] = updated.doctor_calling_at ?? prevRing;
           }
@@ -499,7 +511,7 @@ const Teleconsultas = () => {
   // ── Start new consultation ────────────────────────────────────────────────
 
   const handleStartNewConsultation = () => {
-    const active = consultas.filter(c => c.status === "pending" || c.status === "in_progress");
+    const active = consultas.filter(c => isActive(c.status));
     if (active.length > 0) {
       toast({
         title: "Consulta em andamento",
@@ -537,24 +549,39 @@ const Teleconsultas = () => {
     const creditId = pendingCreditRef.current;
     pendingCreditRef.current = null;
 
-    // Patient pre-consultation intake (exam URLs filled after upload)
+    const termHash = await telemedTermHash();
+    const consentId = await recordConsent(TELEMED_TERM.id, TELEMED_TERM.version, termHash);
+    if (consentId) {
+      logEvent("patient_consent_accepted", {
+        payload: { term_id: TELEMED_TERM.id, term_version: TELEMED_TERM.version },
+      });
+    }
+
+    // Patient pre-consultation intake (exam paths filled after upload)
     const intakeData = {
       sintomas: intake.sintomas,
       sintomaPrincipal: intake.sintomaPrincipal,
+      descricao: intake.descricao,
+      duracao: intake.duracao,
+      intensidade: intake.intensidade,
       medicamentos: intake.medicamentos,
-      exames: [] as { name: string; url: string }[],
+      alergias: intake.alergias,
+      exames: [] as IntakeExam[],
       submittedAt: now,
     };
 
+    const insertPayload: Record<string, unknown> = {
+      patient_name: patientName || user.email?.split("@")[0] || "Paciente",
+      date: now,
+      status: "waiting_attendant",
+      user_id: user.id,
+      intake_data: intakeData,
+    };
+    if (consentId) insertPayload.consent_id = consentId;
+
     const { data: newConsulta, error } = await supabase
       .from("consultations")
-      .insert({
-        patient_name: patientName || user.email?.split("@")[0] || "Paciente",
-        date: now,
-        status: "pending",
-        user_id: user.id,
-        intake_data: intakeData,
-      })
+      .insert(insertPayload)
       .select("id")
       .single();
 
@@ -564,18 +591,20 @@ const Teleconsultas = () => {
     }
 
     const consultationId = (newConsulta as { id: string }).id;
+    logEvent("consultation_created", {
+      consultationId,
+      payload: { origin: creditId ? "credit" : "plan", has_intake: intake.sintomas.length > 0 || !!intake.descricao || !!intake.medicamentos || !!intake.alergias, exam_files: exames.length },
+    });
 
-    // Upload exam files to storage, then patch intake_data with their URLs
+    // Upload exam files to the PRIVATE bucket; store storage paths (signed URLs
+    // are generated on demand at display time — see src/lib/examFiles.ts).
     if (exames.length > 0) {
-      const uploaded: { name: string; url: string }[] = [];
+      const uploaded: IntakeExam[] = [];
       for (const file of exames) {
         const safeName = file.name.replace(/[^\w.-]/g, "_");
         const path = `${consultationId}/${Date.now()}-${safeName}`;
         const { error: upErr } = await supabase.storage.from("consulta-exames").upload(path, file);
-        if (!upErr) {
-          const { data: pub } = supabase.storage.from("consulta-exames").getPublicUrl(path);
-          uploaded.push({ name: file.name, url: pub.publicUrl });
-        }
+        if (!upErr) uploaded.push({ name: file.name, path });
       }
       if (uploaded.length > 0) {
         await supabase
@@ -639,6 +668,11 @@ const Teleconsultas = () => {
       const hadCredit = restoredCredits && restoredCredits.length > 0;
       if (hadCredit) loadCredits();
 
+      logEvent("consultation_cancelled", {
+        consultationId: cancelConfirmId,
+        payload: { cancelled_by: "patient", from: "list", credit_restored: !!hadCredit },
+      });
+
       toast({
         title: "Consulta cancelada",
         description: hadCredit
@@ -658,18 +692,11 @@ const Teleconsultas = () => {
 
   const filteredConsultas = (() => {
     if (consultaFilter === "todos") return consultas;
-    const map: Record<ConsultaStatus, string> = {
-      AGUARDANDO: "pending", EM_ATENDIMENTO: "in_progress", CONCLUIDO: "completed", CANCELADO: "cancelled",
-    };
-    return consultas.filter((c) => c.status === map[consultaFilter]);
+    return consultas.filter((c) => mapStatus(c.status) === consultaFilter);
   })();
 
-  const countByStatus = (s: ConsultaStatus) => {
-    const map: Record<ConsultaStatus, string> = {
-      AGUARDANDO: "pending", EM_ATENDIMENTO: "in_progress", CONCLUIDO: "completed", CANCELADO: "cancelled",
-    };
-    return consultas.filter((c) => c.status === map[s]).length;
-  };
+  const countByStatus = (s: ConsultaStatus) =>
+    consultas.filter((c) => mapStatus(c.status) === s).length;
 
   const filterTabs: { key: FilterKey; label: string; activeBg: string; ping?: boolean; pulse?: boolean }[] = [
     { key: "todos",          label: "Todos",          activeBg: "bg-gray-800" },
@@ -1018,10 +1045,12 @@ const Teleconsultas = () => {
                   <PhoneCall className="h-7 w-7 text-white" />
                 </span>
               </span>
-              O médico está chamando
+              {ringingConsulta?.caller === "atendente" ? "O atendente está chamando" : "O médico está chamando"}
             </DialogTitle>
             <DialogDescription className="text-center">
-              {ringingConsulta?.doctorName} está pronto para retomar sua consulta. Entre na chamada agora.
+              {ringingConsulta?.caller === "atendente"
+                ? `${ringingConsulta?.callerName} quer falar com você antes de encaminhar ao médico. Entre na chamada agora.`
+                : `${ringingConsulta?.callerName} está pronto para retomar sua consulta. Entre na chamada agora.`}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="flex-col gap-2 sm:flex-col">

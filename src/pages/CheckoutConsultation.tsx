@@ -30,13 +30,13 @@ const CONSULTATION_TYPES = {
     id: "clinico_geral",
     name: "Consulta Avulsa - Clínico Geral",
     description: "Consulta pontual com médico clínico geral, sem compromisso.",
-    price: 59.90,
+    price: 150.00,
   },
   especialista: {
     id: "especialista",
     name: "Consulta Avulsa - Especialista",
     description: "Consulta pontual com médico especialista.",
-    price: 119.90,
+    price: 500.00,
   },
 } as const;
 
